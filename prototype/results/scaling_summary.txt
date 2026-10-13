@@ -1,0 +1,88 @@
+87 rows; rows with fallbacks or slow PQ scans: 0
+append        n=    1000 steps/op=  68 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=0/38 g_bits=9/48 top_bits=11/40 fill=0.688 table=23
+append        n=   10000 steps/op=  77 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=0/44 g_bits=9/58 top_bits=19/40 fill=0.688 table=23
+append        n=  100000 steps/op=  93 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=0/53 g_bits=9/70 top_bits=19/40 fill=0.688 table=23
+append        n= 1000000 steps/op=  93 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=0/59 g_bits=10/78 top_bits=19/40 fill=0.688 table=23
+append        n= 3000000 steps/op=  93 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=0/63 g_bits=10/85 top_bits=19/40 fill=0.688 table=23
+chunk_end     n=    1000 steps/op=  67 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=18/38 g_bits=9/48 top_bits=11/40 fill=0.672 table=23
+chunk_end     n=   10000 steps/op=  83 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=27/46 g_bits=10/60 top_bits=19/40 fill=0.672 table=23
+chunk_end     n=  100000 steps/op= 100 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=33/53 g_bits=11/70 top_bits=19/40 fill=0.672 table=23
+chunk_end     n= 1000000 steps/op= 116 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=37/59 g_bits=11/78 top_bits=19/40 fill=0.672 table=23
+chunk_end     n= 3000000 steps/op= 116 chunk/T=0.72 group/G=1.00 pq=  4 e_bits=39/63 g_bits=12/85 top_bits=19/40 fill=0.672 table=23
+churn         n=    1000 steps/op=  49 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=23/36 g_bits=10/45 top_bits=11/40 fill=0.688 table=23
+churn         n=   10000 steps/op=  55 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=24/36 g_bits=12/45 top_bits=11/40 fill=0.688 table=23
+churn         n=  100000 steps/op=  73 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=26/36 g_bits=12/45 top_bits=11/40 fill=0.688 table=24
+churn         n= 1000000 steps/op=  95 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=30/42 g_bits=13/54 top_bits=12/40 fill=0.688 table=24
+churn         n= 3000000 steps/op= 101 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=32/42 g_bits=13/54 top_bits=16/40 fill=0.688 table=26
+delete_burst  n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+delete_burst  n=   10000 steps/op=  83 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=17/42 g_bits=11/54 top_bits=12/40 fill=0.672 table=24
+delete_burst  n=  100000 steps/op=  86 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=18/46 g_bits=11/60 top_bits=17/40 fill=0.672 table=24
+delete_burst  n= 1000000 steps/op= 100 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=18/40 g_bits=11/52 top_bits=19/40 fill=0.672 table=24
+delete_burst  n= 3000000 steps/op= 103 chunk/T=0.73 group/G=1.00 pq=  2 e_bits=19/44 g_bits=11/58 top_bits=19/40 fill=0.672 table=24
+front         n=    1000 steps/op=  77 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=22/38 g_bits=9/48 top_bits=11/40 fill=0.656 table=24
+front         n=   10000 steps/op=  86 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=26/46 g_bits=9/60 top_bits=15/40 fill=0.656 table=24
+front         n=  100000 steps/op= 101 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=31/53 g_bits=9/70 top_bits=16/40 fill=0.656 table=24
+front         n= 1000000 steps/op= 115 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=36/59 g_bits=10/78 top_bits=16/40 fill=0.656 table=24
+front         n= 3000000 steps/op= 116 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=37/63 g_bits=10/85 top_bits=16/40 fill=0.656 table=24
+group_end     n=    1000 steps/op=  82 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+group_end     n=   10000 steps/op=  83 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=17/46 g_bits=10/60 top_bits=19/40 fill=0.672 table=23
+group_end     n=  100000 steps/op= 109 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=23/53 g_bits=11/70 top_bits=19/40 fill=0.672 table=23
+group_end     n= 1000000 steps/op= 120 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=25/59 g_bits=11/78 top_bits=19/40 fill=0.672 table=23
+group_end     n= 3000000 steps/op= 120 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=27/63 g_bits=12/85 top_bits=19/40 fill=0.672 table=23
+hammer        n=    1000 steps/op=  74 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=21/38 g_bits=9/48 top_bits=11/40 fill=0.656 table=24
+hammer        n=   10000 steps/op=  84 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=25/46 g_bits=9/60 top_bits=15/40 fill=0.656 table=24
+hammer        n=  100000 steps/op= 107 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=30/53 g_bits=9/70 top_bits=16/40 fill=0.656 table=24
+hammer        n= 1000000 steps/op= 116 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=35/59 g_bits=10/78 top_bits=16/40 fill=0.656 table=24
+hammer        n= 3000000 steps/op= 116 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=36/63 g_bits=10/85 top_bits=16/40 fill=0.656 table=24
+harmonic      n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+harmonic      n=   10000 steps/op=  88 chunk/T=0.78 group/G=1.00 pq= 23 e_bits=27/46 g_bits=13/60 top_bits=19/40 fill=0.672 table=24
+harmonic      n=  100000 steps/op= 101 chunk/T=0.78 group/G=1.00 pq= 43 e_bits=33/53 g_bits=14/70 top_bits=19/40 fill=0.672 table=26
+harmonic      n= 1000000 steps/op= 116 chunk/T=0.83 group/G=1.00 pq=179 e_bits=37/59 g_bits=16/78 top_bits=19/40 fill=0.672 table=26
+harmonic_half n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+harmonic_half n=   10000 steps/op=  84 chunk/T=0.78 group/G=1.00 pq= 17 e_bits=27/46 g_bits=13/60 top_bits=19/40 fill=0.672 table=26
+harmonic_half n=  100000 steps/op= 102 chunk/T=0.79 group/G=1.00 pq= 44 e_bits=34/53 g_bits=14/70 top_bits=19/40 fill=0.672 table=26
+harmonic_half n= 1000000 steps/op= 110 chunk/T=0.80 group/G=1.00 pq=591 e_bits=40/59 g_bits=15/78 top_bits=19/40 fill=0.672 table=26
+insert_random n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+insert_random n=   10000 steps/op=  98 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=14/46 g_bits=11/60 top_bits=19/40 fill=0.672 table=23
+insert_random n=  100000 steps/op=  98 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=17/53 g_bits=11/70 top_bits=19/40 fill=0.672 table=23
+insert_random n= 1000000 steps/op= 113 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=19/59 g_bits=11/78 top_bits=19/40 fill=0.672 table=23
+insert_random n= 3000000 steps/op= 113 chunk/T=0.72 group/G=1.00 pq=  3 e_bits=19/63 g_bits=12/85 top_bits=19/40 fill=0.672 table=23
+narrow_gap    n=    1000 steps/op=  74 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=19/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+narrow_gap    n=   10000 steps/op=  84 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=22/46 g_bits=11/60 top_bits=19/40 fill=0.672 table=23
+narrow_gap    n=  100000 steps/op=  96 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=25/53 g_bits=12/70 top_bits=19/40 fill=0.672 table=23
+narrow_gap    n= 1000000 steps/op= 112 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=27/59 g_bits=12/78 top_bits=19/40 fill=0.672 table=23
+narrow_gap    n= 3000000 steps/op= 112 chunk/T=0.72 group/G=1.00 pq=  3 e_bits=28/63 g_bits=13/85 top_bits=19/40 fill=0.672 table=23
+random        n=    1000 steps/op=  71 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=13/38 g_bits=10/48 top_bits=9/40 fill=0.672 table=23
+random        n=   10000 steps/op=  76 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=14/46 g_bits=11/60 top_bits=16/40 fill=0.672 table=23
+random        n=  100000 steps/op= 109 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=16/53 g_bits=11/70 top_bits=19/40 fill=0.672 table=23
+random        n= 1000000 steps/op= 115 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=17/59 g_bits=11/78 top_bits=19/40 fill=0.672 table=23
+random        n= 3000000 steps/op= 115 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=18/63 g_bits=12/85 top_bits=19/40 fill=0.672 table=23
+spread1k      n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+spread1k      n=   10000 steps/op=  84 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=14/46 g_bits=11/60 top_bits=19/40 fill=0.672 table=23
+spread1k      n=  100000 steps/op=  97 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=33/53 g_bits=11/70 top_bits=19/40 fill=0.672 table=23
+spread1k      n= 1000000 steps/op= 117 chunk/T=0.72 group/G=1.00 pq=  3 e_bits=37/59 g_bits=14/78 top_bits=19/40 fill=0.672 table=23
+spread1k      n= 3000000 steps/op= 117 chunk/T=0.72 group/G=1.00 pq=  3 e_bits=39/63 g_bits=15/85 top_bits=19/40 fill=0.672 table=24
+spread64      n=    1000 steps/op=  67 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=16/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+spread64      n=   10000 steps/op=  81 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=27/46 g_bits=12/60 top_bits=19/40 fill=0.672 table=23
+spread64      n=  100000 steps/op= 107 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=33/53 g_bits=13/70 top_bits=19/40 fill=0.672 table=24
+spread64      n= 1000000 steps/op= 110 chunk/T=0.72 group/G=1.00 pq=  2 e_bits=38/59 g_bits=15/78 top_bits=19/40 fill=0.672 table=25
+spread64      n= 3000000 steps/op= 110 chunk/T=0.72 group/G=1.00 pq=  3 e_bits=39/63 g_bits=15/85 top_bits=20/40 fill=0.672 table=25
+starve        n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=13/38 g_bits=10/48 top_bits=11/40 fill=0.672 table=23
+starve        n=   10000 steps/op=  91 chunk/T=0.79 group/G=1.00 pq= 20 e_bits=27/46 g_bits=13/60 top_bits=19/40 fill=0.672 table=24
+starve        n=  100000 steps/op= 106 chunk/T=0.79 group/G=1.00 pq= 20 e_bits=33/53 g_bits=14/70 top_bits=19/40 fill=0.672 table=24
+starve        n= 1000000 steps/op= 116 chunk/T=0.79 group/G=1.00 pq= 20 e_bits=37/59 g_bits=15/78 top_bits=19/40 fill=0.672 table=26
+zigzag        n=    1000 steps/op=  66 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=21/38 g_bits=9/48 top_bits=10/40 fill=0.672 table=23
+zigzag        n=   10000 steps/op=  81 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=26/46 g_bits=9/60 top_bits=17/40 fill=0.672 table=24
+zigzag        n=  100000 steps/op= 104 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=31/53 g_bits=9/70 top_bits=17/40 fill=0.672 table=24
+zigzag        n= 1000000 steps/op= 117 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=36/59 g_bits=10/78 top_bits=17/40 fill=0.672 table=24
+zigzag        n= 3000000 steps/op= 117 chunk/T=0.72 group/G=1.00 pq=  1 e_bits=37/63 g_bits=10/85 top_bits=17/40 fill=0.672 table=24
+TOP hammer    m=    9999 job=46 fallbacks=0 table=26 gap_bits_left=29/40 ghosts=4
+TOP hammer    m=   99999 job=56 fallbacks=0 table=26 gap_bits_left=29/40 ghosts=5
+TOP hotspots  m=    9999 job=46 fallbacks=0 table=26 gap_bits_left=29/40 ghosts=4
+TOP hotspots  m=   99999 job=56 fallbacks=0 table=26 gap_bits_left=29/40 ghosts=67
+TOP leftward  m=    9999 job=46 fallbacks=0 table=24 gap_bits_left=24/40 ghosts=4
+TOP leftward  m=   99999 job=56 fallbacks=0 table=24 gap_bits_left=24/40 ghosts=5
+TOP newest    m=    9999 job=46 fallbacks=0 table=23 gap_bits_left=22/40 ghosts=4
+TOP newest    m=   99999 job=56 fallbacks=0 table=23 gap_bits_left=22/40 ghosts=5
+TOP random    m=    9999 job=46 fallbacks=0 table=26 gap_bits_left=30/40 ghosts=280
+TOP random    m=   99999 job=56 fallbacks=0 table=28 gap_bits_left=30/40 ghosts=2653

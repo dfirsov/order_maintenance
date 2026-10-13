@@ -1,0 +1,8 @@
+harmonic  n=1000000 K_R=2 c_T=1: {'fallbacks': 0, 'max_steps/op': 116, 'max_chunk/T': 0.8275, 'max_pq': 179, 'g_bits_used': 16, 'B_g_last': 78, 'max_fill': 0.672}
+harmonic  n=1000000 K_R=4 c_T=2: {'fallbacks': 0, 'max_steps/op': 139, 'max_chunk/T': 0.6929012345679012, 'max_pq': 21, 'g_bits_used': 21, 'B_g_last': 143, 'max_fill': 0.672}
+starve    n=1000000 K_R=2 c_T=1: {'fallbacks': 0, 'max_steps/op': 116, 'max_chunk/T': 0.7908163265306123, 'max_pq': 20, 'g_bits_used': 15, 'B_g_last': 78, 'max_fill': 0.672}
+starve    n=1000000 K_R=4 c_T=2: {'fallbacks': 0, 'max_steps/op': 139, 'max_chunk/T': 0.6944444444444444, 'max_pq': 20, 'g_bits_used': 21, 'B_g_last': 143, 'max_fill': 0.672}
+hammer    n=1000000 K_R=2 c_T=1: {'fallbacks': 0, 'max_steps/op': 116, 'max_chunk/T': 0.7222222222222222, 'max_pq': 1, 'g_bits_used': 10, 'B_g_last': 78, 'max_fill': 0.656}
+hammer    n=1000000 K_R=4 c_T=2: {'fallbacks': 0, 'max_steps/op': 132, 'max_chunk/T': 0.6836734693877551, 'max_pq': 1, 'g_bits_used': 11, 'B_g_last': 143, 'max_fill': 0.656}
+random    n=1000000 K_R=2 c_T=1: {'fallbacks': 0, 'max_steps/op': 115, 'max_chunk/T': 0.7222222222222222, 'max_pq': 2, 'g_bits_used': 11, 'B_g_last': 78, 'max_fill': 0.672}
+random    n=1000000 K_R=4 c_T=2: {'fallbacks': 0, 'max_steps/op': 128, 'max_chunk/T': 0.6836734693877551, 'max_pq': 2, 'g_bits_used': 12, 'B_g_last': 143, 'max_fill': 0.672}

@@ -1,6 +1,6 @@
 # Order Maintenance in O(1) Worst Case — Design Specification
 
-Status: **draft v0.2** (2026-10-13; §5.6 rewritten after prototyping). This is the pseudocode specification that the Lean
+Status: **draft v0.3** (2026-10-13; §5.6 rewritten after prototyping; §7.1–7.2 added from the testing campaign, see `docs/TESTING.md`). This is the pseudocode specification that the Lean
 implementation and proofs will follow. The Python prototype in `prototype/` implements all of it.
 
 ---
@@ -473,6 +473,39 @@ Here is what must hold in every reachable state for no guard to fail:
   constant factor of `n`.
 
 ---
+
+### 7.1 Empirical thresholds (from `docs/TESTING.md` §6)
+
+The parameter sweep pins down which numeric conditions the cost proof must establish. At
+default sizes, everything below the threshold fails, and everything at or above it never
+falls back.
+
+* **Group-split moves per insert:** `K_G ≥ 2`. Moves must outpace inserts into a splitting
+  group and its siblings (Dietz–Sleator's "k large enough").
+* **Top-level drain funding:** `s ≥ 4(1+ε)`. A drain moves about `2aʰ` chunks, and its
+  targets can absorb about `aʰ/2` jobs before they overflow. The prototype uses `s = 8`;
+  `s ≤ 5` fails.
+* **Reservation speed vs chunk capacity:** fullness above θ grows like
+  `(J/K_R)·(H_m+1)`, the zeroing game with rounds of `J/K_R` operations.
+  * With `J ≈ 6·log₈ m`, this is about `(1.4/K_R)·(log₂m)²`, the same order as
+    `T = c_T·L²`.
+  * So the bound fits the `T/3` slack for all n only if `c_T·K_R ≳ 4.2`.
+  * The defaults (`K_R = 2`, `c_T = 1`) are safe empirically: measured overshoot is about
+    60% of the bound. **Proof parameters: `K_R = 4`, `c_T = 2`.** *(Superseded by
+    `docs/PROOF.md` §2.9 and §4.4: with the provable job length `(s+3)H`, the condition
+    becomes `c_T·K_R ≳ 0.7(s+3)`; the proof uses `c_T = 3`, `K_R = 4`, `s = 11`.)*
+* **Rebuild copy speed:** `K_B ≥ 3` keeps the old core's fill ≤ 0.75 at the `N/2` trigger.
+
+### 7.2 Modelling requirements for the Lean port
+
+* **No O(log n) or O(N) step inside a single operation.** In particular:
+  * initialise a fresh core's top-level tree incrementally (done in the prototype);
+  * allocate arrays incrementally during the rebuild, or use constant-time-initializable
+    arrays. Lean's `Array.mkArray N` is O(N).
+* **Tags are `Hβ = O(log N)` bits.** Model them as `Nat` with a proved width bound, and
+  charge O(1) per comparison or addition (word RAM).
+* **Optional simplification:** the immediate split of a newly-quiet oversized group (mutant
+  M20) is redundant and can be dropped.
 
 ## 8. Lemmas to formalize
 

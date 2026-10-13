@@ -1,0 +1,19 @@
+round 0: best score so far 0.755
+round 1: best score so far 0.755
+round 2: best score so far 0.755
+round 3: best score so far 0.755
+top genomes at n = 30000
+  score=0.755 {'fallbacks': 0, 'max_chunk/T': 0.7551020408163265, 'max_group/G': 1.0, 'e_bits_used': 28, 'g_bits_used': 12, 'top_bits_used': 19, 'max_fill': 0.672, 'max_steps/op': 95}
+    genome: {'hotspot': 0.07, 'front': 0.03, 'group_end': 0.1, 'narrow_gap': 0.7, 'starve': 0.42} k 32 period 1000000000
+  score=0.740 {'fallbacks': 0, 'max_chunk/T': 0.74, 'max_group/G': 1.0, 'e_bits_used': 20, 'g_bits_used': 9, 'top_bits_used': 6, 'max_fill': 0.672, 'max_steps/op': 59}
+    genome: {'uniform': 0.01, 'hotspot': 0.03, 'front': 0.3, 'group_end': 0.01, 'narrow_gap': 0.02, 'delete': 0.6, 'delete_run': 0.0} k 2 period 5000
+  score=0.735 {'fallbacks': 0, 'max_chunk/T': 0.7346938775510204, 'max_group/G': 1.0, 'e_bits_used': 26, 'g_bits_used': 11, 'top_bits_used': 19, 'max_fill': 0.672, 'max_steps/op': 97}
+    genome: {'uniform': 0.78, 'sequential': 0.44, 'front': 0.07, 'group_end': 0.75, 'chunk_end': 0.04, 'narrow_gap': 0.22, 'delete_run': 0.0} k 8 period 20000
+  score=0.735 {'fallbacks': 0, 'max_chunk/T': 0.7346938775510204, 'max_group/G': 1.0, 'e_bits_used': 26, 'g_bits_used': 13, 'top_bits_used': 13, 'max_fill': 0.672, 'max_steps/op': 79}
+    genome: {'sequential': 0.45, 'group_end': 0.17, 'chunk_end': 0.35, 'narrow_gap': 0.0, 'delete': 0.3, 'delete_run': 0.0} k 5 period 5000
+  score=0.735 {'fallbacks': 0, 'max_chunk/T': 0.7346938775510204, 'max_group/G': 1.0, 'e_bits_used': 29, 'g_bits_used': 12, 'top_bits_used': 19, 'max_fill': 0.672, 'max_steps/op': 96}
+    genome: {'hotspot': 0.06, 'chunk_end': 0.38, 'narrow_gap': 0.71, 'starve': 0.24} k 1 period 5000
+best genomes re-run at n = 300000
+  score=0.722 {'fallbacks': 0, 'max_chunk/T': 0.7222222222222222, 'max_group/G': 1.0, 'e_bits_used': 34, 'g_bits_used': 14, 'top_bits_used': 19, 'max_fill': 0.672, 'max_steps/op': 106}
+  score=0.730 {'fallbacks': 0, 'max_chunk/T': 0.73, 'max_group/G': 1.0, 'e_bits_used': 20, 'g_bits_used': 10, 'top_bits_used': 6, 'max_fill': 0.672, 'max_steps/op': 66}
+  score=0.722 {'fallbacks': 0, 'max_chunk/T': 0.7222222222222222, 'max_group/G': 1.0, 'e_bits_used': 30, 'g_bits_used': 12, 'top_bits_used': 19, 'max_fill': 0.672, 'max_steps/op': 101}

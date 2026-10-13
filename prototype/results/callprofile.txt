@@ -1,0 +1,45 @@
+hammer: n=200000 observed max lines/op=2605  structural bound=5090  (12.1s)
+    WBBTTop._start_drain                          max lines/call  354  x  max calls/op   3  = 1062
+    Core._group_split_step                        max lines/call   30  x  max calls/op  24  = 720
+    Core._chunk_split_step                        max lines/call   28  x  max calls/op  15  = 420
+    WBBTTop._drain_step                           max lines/call   31  x  max calls/op  12  = 372
+    WBBTTop._finish_drain                         max lines/call  121  x  max calls/op   2  = 242
+    Core._reservation                             max lines/call   29  x  max calls/op   6  = 174
+    WBBTTop._start_drain.<locals>.<genexpr>       max lines/call    1  x  max calls/op 161  = 161
+    WBBTTop._start_drain.<locals>.<lambda>        max lines/call    1  x  max calls/op 149  = 149
+    Core._insert_elem                             max lines/call   24  x  max calls/op   6  = 144
+    WBBTTop._job                                  max lines/call   12  x  max calls/op  12  = 144
+    WBBTTop._in_tables                            max lines/call    1  x  max calls/op 102  = 102
+    Core._remove_group                            max lines/call   31  x  max calls/op   3  = 93
+    Core._start_group_split                       max lines/call   29  x  max calls/op   3  = 87
+    WBBTTop.init_steps                            max lines/call   21  x  max calls/op   4  = 84
+harmonic: n=200000 observed max lines/op=2522  structural bound=5264  (41.7s)
+    WBBTTop._start_drain                          max lines/call  380  x  max calls/op   3  = 1140
+    Core._group_split_step                        max lines/call   30  x  max calls/op  24  = 720
+    Core._chunk_split_step                        max lines/call   28  x  max calls/op  16  = 448
+    WBBTTop._drain_step                           max lines/call   31  x  max calls/op  11  = 341
+    WBBTTop._finish_drain                         max lines/call  129  x  max calls/op   2  = 258
+    Core._reservation                             max lines/call   29  x  max calls/op   6  = 174
+    WBBTTop._start_drain.<locals>.<genexpr>       max lines/call    1  x  max calls/op 161  = 161
+    WBBTTop._job                                  max lines/call   13  x  max calls/op  12  = 156
+    WBBTTop._start_drain.<locals>.<lambda>        max lines/call    1  x  max calls/op 149  = 149
+    Core._insert_elem                             max lines/call   24  x  max calls/op   6  = 144
+    BucketPQ.adjust                               max lines/call   10  x  max calls/op  12  = 120
+    Core._chunk_size                              max lines/call    6  x  max calls/op  18  = 108
+    WBBTTop._in_tables                            max lines/call    1  x  max calls/op 102  = 102
+    Core._remove_group                            max lines/call   31  x  max calls/op   3  = 93
+churn: n=200000 observed max lines/op=2447  structural bound=3780  (5.5s)
+    WBBTTop._start_drain                          max lines/call  313  x  max calls/op   2  = 626
+    Core._group_split_step                        max lines/call   30  x  max calls/op  20  = 600
+    Core._chunk_split_step                        max lines/call   28  x  max calls/op  12  = 336
+    WBBTTop._drain_step                           max lines/call   31  x  max calls/op   7  = 217
+    Core._reservation                             max lines/call   28  x  max calls/op   5  = 140
+    Core._insert_elem                             max lines/call   24  x  max calls/op   5  = 120
+    WBBTTop._job                                  max lines/call   12  x  max calls/op  10  = 120
+    WBBTTop._finish_drain                         max lines/call  116  x  max calls/op   1  = 116
+    WBBTTop._start_drain.<locals>.<genexpr>       max lines/call    1  x  max calls/op 113  = 113
+    WBBTTop._start_drain.<locals>.<lambda>        max lines/call    1  x  max calls/op 106  = 106
+    Core._chunk_size                              max lines/call    6  x  max calls/op  15  = 90
+    WBBTTop.init_steps                            max lines/call   21  x  max calls/op   4  = 84
+    WBBTTop.insert_around                         max lines/call   36  x  max calls/op   2  = 72
+    WBBTTop._in_tables                            max lines/call    1  x  max calls/op  70  = 70

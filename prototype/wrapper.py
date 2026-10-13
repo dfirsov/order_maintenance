@@ -22,6 +22,7 @@ class OrderMaintenance:
         self.nxt: Core | None = None
         self.nxt_idx: dict[int, int] = {}
         self.cursor = NIL
+        self.cursor_set = False   # copying starts only once nxt is fully initialized
         self.live = 0
         self.next_handle = 0
         self.rebuilds = 0
@@ -37,7 +38,7 @@ class OrderMaintenance:
 
     def delete(self, x: int) -> None:
         self.cur.mark_dead(self.cur_idx.pop(x))
-        if self.nxt is not None and x in self.nxt_idx:
+        if self.nxt is not None and x in self.nxt_idx:   # only copied elements
             self.nxt.mark_dead(self.nxt_idx.pop(x))
         self.live -= 1
         self._rebuild_step()
@@ -51,7 +52,7 @@ class OrderMaintenance:
         self.next_handle += 1
         xi = self.cur.HEAD if hx is None else self.cur_idx[hx]
         self.cur_idx[hy] = self.cur.insert_after(xi, hy)
-        if self.nxt is not None and (hx is None or hx in self.nxt_idx):
+        if self.nxt is not None and self.cursor_set and (hx is None or hx in self.nxt_idx):
             xn = self.nxt.HEAD if hx is None else self.nxt_idx[hx]
             self.nxt_idx[hy] = self.nxt.insert_after(xn, hy)
         self.live += 1
@@ -63,10 +64,18 @@ class OrderMaintenance:
         if self.nxt is None:
             N = self.cur.P.N
             if self.cur.count >= N // 2 or (N > N_MIN and self.live < N // 8):
-                self.nxt = Core(self.params(4 * max(self.live, 16)))
+                self.nxt = Core(self.params(4 * max(self.live, 16)), lazy=True)
                 self.nxt_idx = {}
-                self.cursor = self.cur.E[self.cur.HEAD].next
+                self.cursor_set = False
                 self.rebuilds += 1
+            return
+        if not self.cursor_set:
+            # build nxt's initial top structure incrementally, then start copying
+            for _ in range(self.K_B):
+                if self.nxt.prepare_step():
+                    self.cursor = self.cur.E[self.cur.HEAD].next
+                    self.cursor_set = True
+                    break
             return
         for _ in range(self.K_B):
             if self.cursor == NIL:
@@ -93,7 +102,7 @@ class OrderMaintenance:
         self.cur.check()
         live = [self.cur.E[e].h for e in self.cur.elements() if self.cur.E[e].live]
         assert len(live) == self.live == len(self.cur_idx)
-        if self.nxt is not None:
+        if self.nxt is not None and self.cursor_set:
             self.nxt.check()
             copied = [self.nxt.E[e].h for e in self.nxt.elements() if self.nxt.E[e].live]
             assert copied == live[:len(copied)], "nxt is not a prefix of cur"

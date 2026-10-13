@@ -22,6 +22,10 @@ class SimpleTop:
     def init_first(self, c: int) -> None:
         self.core.C[c].tag = 1 << (self.core.P.B_t - 1)
 
+    def init_steps(self, c: int):
+        self.init_first(c)
+        yield
+
     def _room(self, c: int) -> tuple[int, int]:
         C = self.core.C
         lo = C[C[c].prev].tag if C[c].prev != NIL else -1

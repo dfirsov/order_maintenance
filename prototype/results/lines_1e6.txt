@@ -1,0 +1,192 @@
+{'workload': 'starve', 'n': 1000000, 'top': 'wbbt', 'max': 2987, 'at_op': 261798, 'p50': 210, 'p99': 1295, 'p99.9': 1838, 'p99.99': 2162, 'mean': 326.4, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1667, '1e3': 2132, '1e4': 2639, '1e5': 2987, '1e6': 497}, 'fallbacks': 0, 'max_table': 26, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 491.4}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 339), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 74), ('Core._drive_group', 68)]
+    WBBTTop._start_drain                              0     0   298   649   652  1000     0
+    Core._group_split_step                            0   448   670   678   678   680   112
+    Core._chunk_split_step                            0   143   281   337   421   451     0
+    WBBTTop._drain_step                               0     0   217   319   330   335     0
+    WBBTTop._finish_drain                             0     0   112   121   238   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   106   100   149     0
+    Core._insert_elem                                24   143   143   144   144   144   119
+    WBBTTop._job                                      0    60    72   103    96   109     0
+    WBBTTop._in_tables                                0     0    34    70    68   102     0
+    Core._reservation                                 5    65    79    92    88    93    25
+{'workload': 'group_end', 'n': 1000000, 'top': 'wbbt', 'max': 3034, 'at_op': 277797, 'p50': 209, 'p99': 1239, 'p99.9': 1756, 'p99.99': 2123, 'mean': 303.3, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1851, '1e3': 2137, '1e4': 2747, '1e5': 3034, '1e6': 397}, 'fallbacks': 0, 'max_table': 23, 'max_children': 17, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 48.2}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 568), ('Core._chunk_split_step', 339), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 143), ('WBBTTop._in_tables', 102), ('Core._chunk_size', 76), ('WBBTTop._job', 74)]
+    WBBTTop._start_drain                              0     0   298   649  1000  1000     0
+    Core._group_split_step                            0   448   564   676   672   676     0
+    Core._chunk_split_step                            0   143   281   367   423   479     0
+    WBBTTop._drain_step                               0     0   217   278   330   330     0
+    WBBTTop._finish_drain                             0     0   112   217   217   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   149   149     0
+    Core._insert_elem                                24   143   144   144   144   144   120
+    WBBTTop._job                                      0    60    85    89    92   106    20
+    WBBTTop._in_tables                                0     0    34    68   102   102     0
+    Core._chunk_size                                  6    48    60    72   100    90    30
+{'workload': 'chunk_end', 'n': 1000000, 'top': 'wbbt', 'max': 2987, 'at_op': 277797, 'p50': 210, 'p99': 1263, 'p99.9': 1785, 'p99.99': 2174, 'mean': 313.2, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1864, '1e3': 2099, '1e4': 2378, '1e5': 2987, '1e6': 576}, 'fallbacks': 0, 'max_table': 23, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 50.9}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 339), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 143), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 74), ('Core._drive_group', 69)]
+    WBBTTop._start_drain                              0     0   298   649  1000  1000     0
+    Core._group_split_step                            0   556   564   678   678   680   112
+    Core._chunk_split_step                            0   143   199   365   423   479     0
+    WBBTTop._drain_step                               0     0   190   301   330   335    54
+    WBBTTop._finish_drain                             0     0   112   117   222   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   149   149     0
+    Core._insert_elem                                24   143   144   144   144   144   120
+    WBBTTop._job                                      0    60    83    84    92   108     6
+    WBBTTop._in_tables                                0     0    34    68   102   102     0
+    Core._remove_group                                0    30    60    60    90    90     0
+{'workload': 'narrow_gap', 'n': 1000000, 'top': 'wbbt', 'max': 2775, 'at_op': 261798, 'p50': 210, 'p99': 1258, 'p99.9': 1772, 'p99.99': 2155, 'mean': 319.0, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1754, '1e3': 2054, '1e4': 2472, '1e5': 2775, '1e6': 367}, 'fallbacks': 0, 'max_table': 23, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 78.0}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 229), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 119), ('WBBTTop._in_tables', 102), ('Core._drive_group', 64), ('WBBTTop._job', 58)]
+    WBBTTop._start_drain                              0     0   298   649   702  1000     0
+    Core._group_split_step                            0   556   668   676   678   680     0
+    Core._chunk_split_step                            0   143   309   365   423   479     0
+    WBBTTop._drain_step                               0     0   189   275   329   324     0
+    WBBTTop._finish_drain                             0     0   112   117   222   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   100   149     0
+    Core._insert_elem                                24   143   143   143   143   143   119
+    WBBTTop._job                                      0    50    89    84    97   106     0
+    WBBTTop._in_tables                                0     0    34    68    68   102     0
+    Core._chunk_size                                  6    69    74    88    87    81    30
+{'workload': 'zigzag', 'n': 1000000, 'top': 'wbbt', 'max': 2999, 'at_op': 299616, 'p50': 210, 'p99': 1328, 'p99.9': 1792, 'p99.99': 2213, 'mean': 331.2, 'max_by_decade': {'1e0': 80, '1e1': 1322, '1e2': 1757, '1e3': 2024, '1e4': 2538, '1e5': 2999, '1e6': 366}, 'fallbacks': 0, 'max_table': 24, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 47.0}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 676), ('Core._chunk_split_step', 229), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('Core._drive_group', 78), ('WBBTTop._job', 71)]
+    WBBTTop._start_drain                              0     0   313   649   950  1000     0
+    Core._group_split_step                            0   558   672   676   672   678     0
+    Core._chunk_split_step                            0   143   199   365   503   563     0
+    WBBTTop._drain_step                               0     0   217   301   335   330     0
+    WBBTTop._finish_drain                             0     0   112   121   222   234     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    55   100   151   149     0
+    Core._insert_elem                                24   143   142   142   142   142   120
+    WBBTTop._job                                      0    60    71    95   104   109     0
+    WBBTTop._in_tables                                0     0    36    68   102   102     0
+    Core._reservation                                 5    60    70    87    93    93    25
+{'workload': 'delete_burst', 'n': 1000000, 'top': 'wbbt', 'max': 2309, 'at_op': 619708, 'p50': 80, 'p99': 1295, 'p99.9': 1716, 'p99.99': 1894, 'mean': 239.8, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1667, '1e3': 1884, '1e4': 1979, '1e5': 2309, '1e6': 350}, 'fallbacks': 0, 'max_table': 24, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 200, 'log2N': 16, 'secs': 33.7}
+    worst op: [('WBBTTop._start_drain', 599), ('Core._group_split_step', 454), ('Core._chunk_split_step', 234), ('Core._insert_elem', 142), ('WBBTTop._start_drain.<locals>.<lambda>', 102), ('WBBTTop._job', 88), ('WBBTTop._in_tables', 68), ('Core._chunk_size', 63)]
+    Core._group_split_step                            0   448   670   672   676   676   112
+    WBBTTop._start_drain                              0     0   298   313   649   649     0
+    Core._chunk_split_step                            0   143   281   332   339   449     0
+    WBBTTop._drain_step                               0     0   217   241   300   330     0
+    WBBTTop._finish_drain                             0     0   112   116   121   229     0
+    Core._insert_elem                                24   143   143   144   144   144    23
+    WBBTTop._job                                      0    60    72    86   106   107     9
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51    55   102   106     0
+    Core._reservation                                 5    65    79    87    91    93    28
+    Core._remove_group                                0    60    60    61    90    90     0
+{'workload': 'harmonic', 'n': 1000000, 'top': 'wbbt', 'max': 2988, 'at_op': 277797, 'p50': 210, 'p99': 1296, 'p99.9': 1825, 'p99.99': 2203, 'mean': 326.3, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1667, '1e3': 2132, '1e4': 2522, '1e5': 2988, '1e6': 565}, 'fallbacks': 0, 'max_table': 26, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 502.7}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 339), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 74), ('Core._drive_group', 69)]
+    WBBTTop._start_drain                              0     0   298   649   652  1000     0
+    Core._group_split_step                            0   448   670   678   682   680   112
+    Core._chunk_split_step                            0   143   281   339   423   451     0
+    WBBTTop._drain_step                               0     0   217   303   330   331     0
+    WBBTTop._finish_drain                             0     0   112   121   222   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   106   100   149     0
+    Core._insert_elem                                24   143   143   144   144   144   142
+    WBBTTop._job                                      0    60    72   104   105   109     0
+    WBBTTop._in_tables                                0     0    34    70    68   102     0
+    Core._reservation                                 5    65    79    92    93    93    30
+{'workload': 'harmonic_half', 'n': 1000000, 'top': 'wbbt', 'max': 2722, 'at_op': 316672, 'p50': 210, 'p99': 1297, 'p99.9': 1814, 'p99.99': 2176, 'mean': 328.2, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1667, '1e3': 2085, '1e4': 2639, '1e5': 2722, '1e6': 367}, 'fallbacks': 0, 'max_table': 26, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 405.4}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 560), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('Core._chunk_split_step', 117), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 74), ('Core._drive_group', 69)]
+    WBBTTop._start_drain                              0     0   298   649   652  1000     0
+    Core._group_split_step                            0   448   670   678   678   680     0
+    Core._chunk_split_step                            0   143   281   332   423   451     0
+    WBBTTop._drain_step                               0     0   217   301   322   330     0
+    WBBTTop._finish_drain                             0     0   112   124   222   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   100   149     0
+    Core._insert_elem                                24   143   143   144   144   144   119
+    WBBTTop._job                                      0    60    72   104   100   109     0
+    WBBTTop._in_tables                                0     0    34    68    68   102     0
+    Core._reservation                                 5    65    79    92    87    93    25
+{'workload': 'random', 'n': 1000000, 'top': 'wbbt', 'max': 2833, 'at_op': 346164, 'p50': 80, 'p99': 1161, 'p99.9': 1671, 'p99.99': 2119, 'mean': 265.1, 'max_by_decade': {'1e0': 80, '1e1': 1140, '1e2': 1686, '1e3': 2058, '1e4': 2748, '1e5': 2833, '1e6': 210}, 'fallbacks': 0, 'max_table': 23, 'max_children': 17, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 21, 'secs': 56.0}
+    worst op: [('WBBTTop._start_drain', 947), ('Core._group_split_step', 452), ('Core._chunk_split_step', 339), ('WBBTTop._start_drain.<locals>.<lambda>', 151), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 92), ('Core._drive_group', 60)]
+    WBBTTop._start_drain                              0     0   298   351  1000  1000     0
+    Core._group_split_step                            0   446   564   649   676   672   112
+    Core._chunk_split_step                            0   143   311   339   423   451     0
+    WBBTTop._drain_step                               0     0   135   328   318   330     0
+    WBBTTop._finish_drain                             0     0   112   117   217   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51    51   149   151     0
+    Core._insert_elem                                24   143   143   144   144   144    23
+    WBBTTop._job                                      0    57    84    82    98   108     0
+    WBBTTop._in_tables                                0     0    34    34   102   102     0
+    Core._chunk_size                                  6    64    77    82    94    89     6
+{'workload': 'insert_random', 'n': 1000000, 'top': 'wbbt', 'max': 2865, 'at_op': 293796, 'p50': 210, 'p99': 1237, 'p99.9': 1753, 'p99.99': 2127, 'mean': 304.5, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1667, '1e3': 2082, '1e4': 2511, '1e5': 2865, '1e6': 367}, 'fallbacks': 0, 'max_table': 23, 'max_children': 17, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 65.5}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 229), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 144), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 71), ('Core._drive_group', 68)]
+    WBBTTop._start_drain                              0     0   298   649   702  1000     0
+    Core._group_split_step                            0   448   670   568   672   674     0
+    Core._chunk_split_step                            0   143   281   365   423   479     0
+    WBBTTop._drain_step                               0     0   217   275   325   335     0
+    WBBTTop._finish_drain                             0     0   112   200   217   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   100   149     0
+    Core._insert_elem                                24   143   143   144   144   144   119
+    WBBTTop._job                                      0    60    72   105    89   106     0
+    WBBTTop._in_tables                                0     0    34    68    68   102     0
+    Core._chunk_size                                  6    48    64    87   100    90    30
+{'workload': 'front', 'n': 1000000, 'top': 'wbbt', 'max': 2867, 'at_op': 274471, 'p50': 210, 'p99': 1368, 'p99.9': 1856, 'p99.99': 2266, 'mean': 326.9, 'max_by_decade': {'1e0': 80, '1e1': 1379, '1e2': 2126, '1e3': 1871, '1e4': 2416, '1e5': 2867, '1e6': 645}, 'fallbacks': 0, 'max_table': 24, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 61.8}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 229), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 71), ('Core._drive_group', 69)]
+    WBBTTop._start_drain                              0     0   313   649   652  1000     0
+    Core._group_split_step                            0   668   674   676   678   676   110
+    Core._chunk_split_step                            0   197   309   337   395   558     0
+    WBBTTop._drain_step                               0     0   205   328   335   335     0
+    WBBTTop._finish_drain                             0     0   116   121   222   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    55   100   106   155     0
+    Core._insert_elem                                24   143   143   143   143   143   142
+    WBBTTop._job                                      0    76    81    98   102   107    21
+    WBBTTop._in_tables                                0     0    36    68    70   104     0
+    Core._reservation                                 5    70    73    87    87    93    39
+{'workload': 'append', 'n': 1000000, 'top': 'wbbt', 'max': 2444, 'at_op': 268923, 'p50': 211, 'p99': 1253, 'p99.9': 1638, 'p99.99': 2082, 'mean': 337.5, 'max_by_decade': {'1e0': 79, '1e1': 1204, '1e2': 1901, '1e3': 2024, '1e4': 2240, '1e5': 2444, '1e6': 366}, 'fallbacks': 0, 'max_table': 23, 'max_children': 17, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 46.5}
+    worst op: [('WBBTTop._start_drain', 652), ('Core._group_split_step', 452), ('Core._chunk_split_step', 334), ('Core._insert_elem', 120), ('WBBTTop._start_drain.<locals>.<lambda>', 100), ('WBBTTop._job', 71), ('WBBTTop._in_tables', 68), ('Core._reservation', 63)]
+    WBBTTop._start_drain                              0     0   298   649  1000  1000     0
+    Core._group_split_step                            0   558   564   566   566   566     0
+    Core._chunk_split_step                            0   143   309   334   421   479     0
+    WBBTTop._drain_step                               0     0   210   301   277   300     0
+    WBBTTop._finish_drain                             0     0   112   117   229   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   149   149     0
+    Core._insert_elem                                24   120   120   120   120   120   120
+    WBBTTop._in_tables                                0     0    34    68   102   102     0
+    WBBTTop._job                                      0    61    74    86    88    92     0
+    Core._reservation                                 5    55    81    77    77    77    25
+{'workload': 'hammer', 'n': 1000000, 'top': 'wbbt', 'max': 2987, 'at_op': 306546, 'p50': 210, 'p99': 1337, 'p99.9': 1876, 'p99.99': 2250, 'mean': 326.9, 'max_by_decade': {'1e0': 80, '1e1': 1261, '1e2': 1994, '1e3': 2048, '1e4': 2605, '1e5': 2987, '1e6': 676}, 'fallbacks': 0, 'max_table': 24, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 58.0}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 564), ('Core._chunk_split_step', 339), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('WBBTTop._job', 74), ('Core._drive_group', 69)]
+    WBBTTop._start_drain                              0     0   313   649   652  1000     0
+    Core._group_split_step                            0   563   672   676   678   676   110
+    Core._chunk_split_step                            0   197   309   339   367   540     0
+    WBBTTop._drain_step                               0     0   217   304   330   335     0
+    WBBTTop._finish_drain                             0     0   116   121   213   238     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    55   100   106   149     0
+    Core._insert_elem                                24   143   144   144   144   144   142
+    WBBTTop._job                                      0    65    81    99   104   107    41
+    WBBTTop._in_tables                                0     0    36    68    70   102     0
+    Core._reservation                                 5    65    73    83    83    92    43
+{'workload': 'spread64', 'n': 1000000, 'top': 'wbbt', 'max': 2790, 'at_op': 276797, 'p50': 210, 'p99': 1317, 'p99.9': 1827, 'p99.99': 2249, 'mean': 334.6, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1802, '1e3': 2018, '1e4': 2678, '1e5': 2790, '1e6': 367}, 'fallbacks': 0, 'max_table': 25, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 49.0}
+    worst op: [('Core._group_split_step', 676), ('WBBTTop._start_drain', 652), ('Core._chunk_split_step', 339), ('Core._insert_elem', 142), ('WBBTTop._start_drain.<locals>.<lambda>', 100), ('WBBTTop._job', 82), ('WBBTTop._drain_step', 81), ('Core._drive_group', 76)]
+    WBBTTop._start_drain                              0     0   298   649   652   984     0
+    Core._group_split_step                            0   448   564   676   682   682     0
+    Core._chunk_split_step                            0   143   281   339   423   479     0
+    WBBTTop._finish_drain                             0     0   112   217   338   222     0
+    WBBTTop._drain_step                               0     0   217   295   330   335     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   100   145     0
+    Core._insert_elem                                24   143   144   144   144   144   119
+    WBBTTop._job                                      0    60    83   104    98   102     0
+    WBBTTop._in_tables                                0     0    34    68    68   100     0
+    Core._reservation                                 5    65    79    78    93    93    25
+{'workload': 'spread1k', 'n': 1000000, 'top': 'wbbt', 'max': 2998, 'at_op': 293797, 'p50': 210, 'p99': 1270, 'p99.9': 1789, 'p99.99': 2157, 'mean': 327.2, 'max_by_decade': {'1e0': 80, '1e1': 1359, '1e2': 1667, '1e3': 1987, '1e4': 2477, '1e5': 2998, '1e6': 367}, 'fallbacks': 0, 'max_table': 23, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 280, 'log2N': 22, 'secs': 68.2}
+    worst op: [('WBBTTop._start_drain', 1000), ('Core._group_split_step', 676), ('Core._chunk_split_step', 229), ('WBBTTop._start_drain.<locals>.<lambda>', 149), ('Core._insert_elem', 142), ('WBBTTop._in_tables', 102), ('Core._drive_group', 77), ('WBBTTop._job', 71)]
+    WBBTTop._start_drain                              0     0   298   649   702  1000     0
+    Core._group_split_step                            0   448   670   672   676   678     0
+    Core._chunk_split_step                            0   143   281   367   423   477     0
+    WBBTTop._drain_step                               0     0   217   271   330   330     0
+    WBBTTop._finish_drain                             0     0   112   117   222   222     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51   100   100   149     0
+    Core._insert_elem                                24   143   143   144   144   144   119
+    WBBTTop._job                                      0    60    72    89    92   105     0
+    WBBTTop._in_tables                                0     0    34    68    68   102     0
+    Core._remove_group                                0    60    60    61    61    91     0
+{'workload': 'churn', 'n': 1000000, 'top': 'wbbt', 'max': 2447, 'at_op': 143742, 'p50': 80, 'p99': 1041, 'p99.9': 1382, 'p99.99': 1688, 'mean': 158.3, 'max_by_decade': {'1e0': 79, '1e1': 1204, '1e2': 1404, '1e3': 1590, '1e4': 2006, '1e5': 2447, '1e6': 9}, 'fallbacks': 0, 'max_table': 24, 'max_children': 18, 'max_in_tables': 2, 'max_tag_bits': 160, 'log2N': 13, 'secs': 29.2}
+    worst op: [('WBBTTop._start_drain', 611), ('Core._group_split_step', 513), ('Core._chunk_split_step', 288), ('Core._insert_elem', 119), ('WBBTTop._start_drain.<locals>.<lambda>', 106), ('WBBTTop._in_tables', 70), ('Core._drive_group', 63), ('WBBTTop._job', 60)]
+    WBBTTop._start_drain                              0     0   298   298   313   611     0
+    Core._group_split_step                            0   558   558   562   564   566     0
+    Core._chunk_split_step                            0   143   309   309   309   311     0
+    WBBTTop._drain_step                               0     0    60    60   210   271     0
+    WBBTTop._finish_drain                             0     0   112   112   116   228     0
+    Core._insert_elem                                24   120   120   120   120   120     0
+    WBBTTop._start_drain.<locals>.<lambda>            0     0    51    51    55   106     0
+    WBBTTop._job                                      0    61    73    82    89    89     0
+    Core._chunk_size                                  6    59    58    58    82    84     0
+    Core._reservation                                 5    55    81    78    78    82     0

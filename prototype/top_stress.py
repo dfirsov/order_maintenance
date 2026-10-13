@@ -78,7 +78,7 @@ class FakeCore:
             c = self.C[c].next
             n += 1
         assert n == len(self.C)
-        self.top.check()
+        self.top.check(quiescent=True)
 
 
 def pick_random(rng, core, i, st):

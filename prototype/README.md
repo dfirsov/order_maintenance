@@ -15,6 +15,14 @@ Lean port is mechanical.
 | `test_om.py` | differential tests against `spec.py`, including forced fallbacks |
 | `stress.py` | adversarial workloads with instrumentation (`TOP=wbbt` selects the real top level) |
 | `top_stress.py` | the top level in isolation, up to 10⁶ chunks |
+| `fuzz.py` | random-parameter fuzzing with every invariant checked after every operation |
+| `battery.py`, `mutate.py` | quick pass/fail battery; mutation testing (are injected bugs caught?) |
+| `measure.py` | executed lines per operation (`sys.monitoring`), per-decade and per-function maxima |
+| `callprofile.py` | max lines per call × max calls per operation, giving a structural bound per operation |
+| `scaling.py`, `summarize_scaling.py` | headroom metrics vs n, up to 3·10⁶ |
+| `sweep.py`, `search.py` | parameter sensitivity; automated adversary search |
+| `rebuild_attack.py` | adversary for the rebuild sizing rule (`docs/PROOF.md` §6.1); breaks the O(1) bound at n = 2²⁰ |
+| `results/` | raw outputs of the campaign (see `docs/TESTING.md`) |
 
 ```
 python3 -m unittest test_om              # differential tests, both top levels
@@ -22,6 +30,9 @@ TOP=wbbt python3 stress.py 200000        # all workloads, full system
 TOP=wbbt python3 stress.py 200000 harmonic
 python3 top_stress.py 1000000            # top level alone
 ```
+
+The full testing campaign and its results are in `docs/TESTING.md` (reproduction commands
+in §7 there).
 
 Targets for `stress.py`:
 - `fallbacks=0` and `pq_scan=0`;

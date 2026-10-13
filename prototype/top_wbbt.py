@@ -72,6 +72,8 @@ class WBBTTop:
         self.min_gap = 1 << (self.beta + 1)   # smallest label gap ever split by averaging
         self.drains = 0
         self.max_job = 0           # longest job, in steps
+        self.max_children = 0      # longest live-children list (C-level list ops)
+        self.max_in_tables = 0     # longest "tables containing" list
         self.max_ghosts = 0        # most ghosts alive at once
         P = core.P
         m_max = 6 * P.N // max(P.theta, 1) + 16
@@ -135,7 +137,38 @@ class WBBTTop:
 
     # ------------------------------------------------------------ build
     def init_first(self, c: int) -> None:
-        self._build([c])
+        for _ in self.init_steps(c):
+            pass
+
+    def init_steps(self, c: int):
+        """Build the initial tree for a single chunk c: a chain of H nodes, one
+        node per step, so that creating a fresh core costs O(1) per operation."""
+        self._reset()
+        b = self.beta
+        center = 1 << (b - 1)
+        self.cin[c] = []
+        p = [NIL] * (self.H + 1)
+        below, tag = c, 0
+        for h in range(1, self.H + 1):
+            v = self._new_node(h)
+            V = self.nodes[v]
+            V.children = [below]
+            V.order = [below]
+            V.lab[below] = center
+            V.weight = 1
+            V.first = V.last = c
+            if h == 1:
+                self.cin[c] = [v]
+                self.lpar[c] = v
+            else:
+                self.nodes[below].in_tables = [v]
+                self.nodes[below].live_parent = v
+            p[h] = v
+            tag |= center << ((h - 1) * b)
+            below = v
+            yield
+        self.path[c] = p
+        self.core.C[c].tag = tag
 
     def relabel_all(self) -> None:
         """Fallback: rebuild the whole tree from the chunk list, all paths clean."""
@@ -219,6 +252,8 @@ class WBBTTop:
         lp = self.nodes[self.lpar[x]]
         i = lp.children.index(x)
         lp.children[i:i + 1] = [y, x, z]
+        self.max_children = max(self.max_children, len(lp.children))
+        self.max_in_tables = max(self.max_in_tables, len(tabs))
         self.core.C[y].tag = ty
         self.core.C[z].tag = tz
         self.top_steps += 1
@@ -351,6 +386,9 @@ class WBBTTop:
         par = self.nodes[V.live_parent]
         i = par.children.index(v)
         par.children[i:i + 1] = [v1, v2]
+        self.max_children = max(self.max_children, len(par.children), len(kids))
+        self.max_in_tables = max(self.max_in_tables, len(V.in_tables),
+                                 *(len(self._in_tables(e, h - 1)) for e in entries))
         V.draining, V.t1, V.t2, V.side = True, v1, v2, side
         self.ghosts = getattr(self, "ghosts", 0) + 1
         self.max_ghosts = max(self.max_ghosts, self.ghosts)
@@ -432,15 +470,109 @@ class WBBTTop:
         self.top_steps += len(V.order)
 
     # ------------------------------------------------------------ checks
-    def check(self) -> None:
-        """Structural sanity of the top structure (not needed for safety)."""
-        core = self.core
+    def check(self, quiescent: bool = True) -> None:
+        """Check the cost invariants W1-W4 of docs/SPEC.md §5.6 plus bookkeeping.
+
+        Not needed for safety (tags are guarded). `quiescent` means no job is in
+        progress, so weights must be exactly up to date.
+        """
+        core, H = self.core, self.H
+        chunks = []
         c = core.first_chunk
         while c != NIL:
-            if NIL in self.path[c][1:]:     # path still being copied by its job
-                c = core.C[c].next
-                continue
-            assert core.C[c].tag == self._tag_of(c), "cached tag != path tag"
-            for j in range(1, self.H + 1):
-                assert self.nodes[self.path[c][j]].alive
+            chunks.append(c)
             c = core.C[c].next
+        pos = {c: i for i, c in enumerate(chunks)}
+        pending = {c for c in chunks if NIL in self.path[c][1:]}
+        nodes = [i for i, V in enumerate(self.nodes) if V.alive]
+        # (W3) tables hold every path entry; cached tag == path tag
+        for c in chunks:
+            if c in pending:
+                continue
+            p = self.path[c]
+            below = c
+            for j in range(1, H + 1):
+                V = self.nodes[p[j]]
+                assert V.alive, "path through dead node"
+                assert V.height == j
+                assert below in V.lab, "W3: path entry missing from table"
+                below = p[j]
+            assert p[H] == self._root(), "path does not end at the root"
+            assert core.C[c].tag == self._tag_of(c), "cached tag != path tag"
+        # tables: sorted labels, in_tables is the exact inverse of membership
+        member = {}
+        for v in nodes:
+            V = self.nodes[v]
+            labs = [V.lab[e] for e in V.order]
+            assert set(V.order) == set(V.lab), "order/lab mismatch"
+            assert all(a < b for a, b in zip(labs, labs[1:])), "table labels unsorted"
+            assert all(0 <= x < (1 << self.beta) for x in labs)
+            for e in V.order:
+                member.setdefault((e, V.height - 1), set()).add(v)
+        for (e, h), tabs in member.items():
+            have = set(self.cin[e]) if h == 0 else set(self.nodes[e].in_tables)
+            assert have == tabs, f"in_tables mismatch for {(e, h)}"
+        # (W2) ranges are exactly the runs of chunks with p[h] = v. A chunk whose
+        # path is still being copied counts at level h only once p[h] is copied
+        # (that is when its job updates the range pointers of that level).
+        lvl = {h: [c for c in chunks if self.path[c][h] != NIL] for h in range(1, H + 1)}
+        lpos = {h: {c: i for i, c in enumerate(cs)} for h, cs in lvl.items()}
+        for v in nodes:
+            V = self.nodes[v]
+            h = V.height
+            run = [c for c in lvl[h] if self.path[c][h] == v]
+            if not run:
+                assert V.first == NIL and V.last == NIL, f"W2: empty range of {v} has pointers"
+                continue
+            idx = [lpos[h][c] for c in run]
+            assert idx == list(range(idx[0], idx[0] + len(idx))), f"W2: range of {v} not contiguous"
+            assert V.first == run[0] and V.last == run[-1], f"W2: range pointers of {v}"
+        for v in nodes:
+            V = self.nodes[v]
+            if not V.draining:
+                continue
+            h = V.height
+            # (W1) targets sit right around v in every table holding v
+            for T in V.in_tables:
+                o = self.nodes[T].order
+                i = o.index(v)
+                assert 0 < i < len(o) - 1 and o[i - 1] == V.t1 and o[i + 1] == V.t2, \
+                    "W1: drain targets not adjacent"
+            # (W2) LEFT chunks before RIGHT ones; target runs abut v's run
+            if V.first != NIL:
+                P = lpos[h]
+                run = lvl[h][P[V.first]:P[V.last] + 1]
+                sides = [V.side[c if h == 1 else self.path[c][h - 1]] for c in run
+                         if h == 1 or self.path[c][h - 1] != NIL]
+                assert sides == sorted(sides), "W2: LEFT/RIGHT interleaved"
+                T1, T2 = self.nodes[V.t1], self.nodes[V.t2]
+                if T1.last != NIL:
+                    assert P[T1.last] + 1 == P[V.first], "W2: left target not abutting"
+                if T2.first != NIL:
+                    assert P[V.last] + 1 == P[T2.first], "W2: right target not abutting"
+            for t in (V.t1, V.t2):
+                assert self.nodes[t].alive and self.nodes[t].overflow_of == v
+        # live tree: parent pointers, children, weights
+        for v in nodes:
+            V = self.nodes[v]
+            if V.draining:
+                assert not V.children and V.live_parent == NIL
+                continue
+            for e in V.children:
+                if V.height == 1:
+                    assert self.lpar[e] == v, "chunk live parent"
+                else:
+                    E = self.nodes[e]
+                    assert E.alive and not E.draining and E.live_parent == v
+            if quiescent:
+                w = len(V.children) if V.height == 1 else sum(self.nodes[e].weight for e in V.children)
+                assert V.weight == w, f"weight of {v}: {V.weight} != {w}"
+        live_chunks = [c for v in nodes if not self.nodes[v].draining and self.nodes[v].height == 1
+                       for c in self.nodes[v].children]
+        assert sorted(live_chunks) == sorted(chunks), "live tree leaves != chunk list"
+
+    def _root(self) -> int:
+        for i, V in enumerate(self.nodes):
+            if V.alive and V.height == self.H:
+                return i
+        return NIL

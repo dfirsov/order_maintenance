@@ -83,6 +83,9 @@ class Params:
     K_R: int                  # reservation/top steps per operation
     J: int                    # simulated length of one top insertion job (simple top)
     top: str = "simple"       # "simple" or "wbbt"
+    top_a: int = 8            # WBBT branching parameter
+    top_s: int = 8            # WBBT sweep steps per insertion per drain
+    top_beta: int | None = None   # WBBT label bits per level (None: 4a + 8)
 
     @staticmethod
     def for_capacity(N: int, *, c_G: int = 2, c_T: int = 1, K_G: int = 4,
@@ -114,12 +117,18 @@ class Stats:
     max_chunk: int = 0
     max_lab_e: int = 0
     max_lab_g: int = 0
+    min_lab_e: int = 1 << 4096   # "infinity" (labels are far narrower)
+    min_lab_g: int = 1 << 4096
+    min_gap_e: int = 1 << 4096    # smallest gap ever split by averaging
+    min_gap_g: int = 1 << 4096
     max_pq: int = 0           # max number of chunks waiting in the PQ
     reservations: int = 0
 
 
 class Core:
-    def __init__(self, P: Params) -> None:
+    def __init__(self, P: Params, lazy: bool = False) -> None:
+        """lazy=True defers building the top structure: call prepare_step()
+        until it returns True before using the core (O(1) work per call)."""
         self.P = P
         self.E: list[Elem] = []
         self.Gs: list[Group] = []
@@ -129,12 +138,18 @@ class Core:
         self.stats = Stats()
         self.count = 0
         self.pq = BucketPQ(self)
-        self.top = WBBTTop(self) if P.top == "wbbt" else SimpleTop(self)
+        self.top = (WBBTTop(self, a=P.top_a, s=P.top_s, beta=P.top_beta)
+                    if P.top == "wbbt" else SimpleTop(self))
         self.res_job = None       # None = reservation idle
         # sentinel H = element 0, alone in group 0, in chunk 0
         c = self._new_chunk()
         g = self._new_group(c)
-        self.top.init_first(c)
+        if lazy:
+            self._prep = self.top.init_steps(c)
+            self.ready = False
+        else:
+            self.top.init_first(c)
+            self.ready = True
         self.Gs[g].lab = 1 << (P.B_g - 1)
         self.C[c].first = self.C[c].last = g
         self.HEAD = self._new_elem(g, 1 << (P.B_e - 1), -1)
@@ -146,6 +161,16 @@ class Core:
         self.first_chunk = c
         self.tail = self.HEAD
         self.count = 1
+
+    def prepare_step(self) -> bool:
+        """One step of deferred initialization; True once the core is ready."""
+        if not self.ready:
+            self.stats.steps += 1
+            try:
+                next(self._prep)
+            except StopIteration:
+                self.ready = True
+        return self.ready
 
     # ------------------------------------------------------------------ alloc
     def _new_elem(self, g: int, lab: int, h: int) -> int:
@@ -171,22 +196,26 @@ class Core:
         return i
 
     # ------------------------------------------------------- label primitives
-    @staticmethod
-    def _between(a: int, b: int, why: str) -> int:
+    def _between(self, a: int, b: int, why: str) -> int:
         if a + 1 >= b:
             raise GuardFailure(why)
+        st = self.stats
+        if why[0] == "e":
+            st.min_gap_e = min(st.min_gap_e, b - a)
+        else:
+            st.min_gap_g = min(st.min_gap_g, b - a)
         return (a + b) // 2
 
     @staticmethod
     def _after(a: int, D: int, B: int, why: str) -> int:
         v = a + D
-        if v >= (1 << B):
+        if v >= (1 << B) or v <= a:
             raise GuardFailure(why)
         return v
 
     @staticmethod
     def _before(b: int, D: int, why: str) -> int:
-        if b < D:
+        if b < D or D <= 0:
             raise GuardFailure(why)
         return b - D
 
@@ -242,6 +271,7 @@ class Core:
         self._chunk_size(G.chk, +1)
         self.stats.max_group = max(self.stats.max_group, G.size)
         self.stats.max_lab_e = max(self.stats.max_lab_e, lab)
+        self.stats.min_lab_e = min(self.stats.min_lab_e, lab)
         return y
 
     def _background(self, y: int) -> None:
@@ -302,6 +332,7 @@ class Core:
             C.last = gr
         G.st, G.l, G.r = SPLITTING, gl, gr
         self.stats.max_lab_g = max(self.stats.max_lab_g, lab_r)
+        self.stats.min_lab_g = min(self.stats.min_lab_g, lab_l)
 
     def _drive_group(self, g: int) -> None:
         G = self.Gs[g]
@@ -366,6 +397,7 @@ class Core:
             self._chunk_size(G.chk, -1)
         self.stats.max_group = max(self.stats.max_group, D.size)
         self.stats.max_lab_e = max(self.stats.max_lab_e, lab)
+        self.stats.min_lab_e = min(self.stats.min_lab_e, lab)
         return True
 
     def _remove_group(self, g: int) -> None:
@@ -457,6 +489,7 @@ class Core:
         self.C[dst].size += s
         self.stats.max_chunk = max(self.stats.max_chunk, self.C[dst].size)
         self.stats.max_lab_g = max(self.stats.max_lab_g, lab)
+        self.stats.min_lab_g = min(self.stats.min_lab_g, lab)
         return True
 
     def _remove_chunk(self, x: int) -> None:
@@ -667,4 +700,4 @@ class Core:
         want = {c for c in chunks if self.C[c].st == QUIET and self.C[c].size > P.theta}
         self.pq.check(want)
         if hasattr(self.top, "check"):
-            self.top.check()
+            self.top.check(quiescent=self.res_job is None)

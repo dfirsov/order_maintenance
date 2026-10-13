@@ -1,0 +1,2018 @@
+[
+ {
+  "setting": {
+   "top_a": 5
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 10,
+  "pq_scan": 0,
+  "max_table": 16
+ },
+ {
+  "setting": {
+   "top_a": 5
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.8724489795918368,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 12,
+  "pq_scan": 0,
+  "max_table": 18
+ },
+ {
+  "setting": {
+   "top_a": 5
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 89,
+  "max_chunk/T": 0.8367346938775511,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 12,
+  "pq_scan": 0,
+  "max_table": 18
+ },
+ {
+  "setting": {
+   "top_a": 5
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 79,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 12,
+  "pq_scan": 0,
+  "max_table": 18
+ },
+ {
+  "setting": {
+   "top_a": 5
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 87,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 10,
+  "pq_scan": 0,
+  "max_table": 18
+ },
+ {
+  "setting": {
+   "top_a": 5
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 87,
+  "max_chunk/T": 0.7253086419753086,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 11,
+  "pq_scan": 0,
+  "max_table": 16
+ },
+ {
+  "setting": {
+   "top_a": 6
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 12,
+  "pq_scan": 0,
+  "max_table": 21
+ },
+ {
+  "setting": {
+   "top_a": 6
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 102,
+  "max_chunk/T": 0.8311111111111111,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 14,
+  "pq_scan": 0,
+  "max_table": 20
+ },
+ {
+  "setting": {
+   "top_a": 6
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 94,
+  "max_chunk/T": 0.8311111111111111,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 14,
+  "pq_scan": 0,
+  "max_table": 20
+ },
+ {
+  "setting": {
+   "top_a": 6
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 100,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 14,
+  "pq_scan": 0,
+  "max_table": 19
+ },
+ {
+  "setting": {
+   "top_a": 6
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 90,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 14,
+  "pq_scan": 0,
+  "max_table": 21
+ },
+ {
+  "setting": {
+   "top_a": 6
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 108,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.688,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 13,
+  "pq_scan": 0,
+  "max_table": 21
+ },
+ {
+  "setting": {
+   "top_a": 8
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "top_a": 8
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.78125,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "top_a": 8
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "top_a": 8
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 109,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "top_a": 8
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "top_a": 8
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "top_a": 12
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 24,
+  "pq_scan": 0,
+  "max_table": 34
+ },
+ {
+  "setting": {
+   "top_a": 12
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 112,
+  "max_chunk/T": 0.78515625,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 29,
+  "pq_scan": 0,
+  "max_table": 36
+ },
+ {
+  "setting": {
+   "top_a": 12
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 114,
+  "max_chunk/T": 0.77734375,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 29,
+  "pq_scan": 0,
+  "max_table": 36
+ },
+ {
+  "setting": {
+   "top_a": 12
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 105,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 29,
+  "pq_scan": 0,
+  "max_table": 33
+ },
+ {
+  "setting": {
+   "top_a": 12
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 113,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 34
+ },
+ {
+  "setting": {
+   "top_a": 12
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 120,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 27,
+  "pq_scan": 0,
+  "max_table": 34
+ },
+ {
+  "setting": {
+   "top_a": 16
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 127,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 32,
+  "pq_scan": 0,
+  "max_table": 44
+ },
+ {
+  "setting": {
+   "top_a": 16
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 134,
+  "max_chunk/T": 0.75,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 13,
+  "top_bits_used": 39,
+  "pq_scan": 0,
+  "max_table": 46
+ },
+ {
+  "setting": {
+   "top_a": 16
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 116,
+  "max_chunk/T": 0.75,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 34,
+  "g_bits_used": 14,
+  "top_bits_used": 39,
+  "pq_scan": 0,
+  "max_table": 46
+ },
+ {
+  "setting": {
+   "top_a": 16
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 123,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 40,
+  "pq_scan": 0,
+  "max_table": 45
+ },
+ {
+  "setting": {
+   "top_a": 16
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 143,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 21,
+  "pq_scan": 0,
+  "max_table": 45
+ },
+ {
+  "setting": {
+   "top_a": 16
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 131,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 35,
+  "pq_scan": 0,
+  "max_table": 44
+ },
+ {
+  "setting": {
+   "c_T": 1
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 1
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.78125,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "c_T": 1
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 1
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 109,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "c_T": 1
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 1
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 2
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.6836734693877551,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 10,
+  "top_bits_used": 15,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 2
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 105,
+  "max_chunk/T": 0.7179930795847751,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 19,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 2
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7110726643598616,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 19,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 2
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.6836734693877551,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 12,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "c_T": 2
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 89,
+  "max_chunk/T": 0.6836734693877551,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 12,
+  "top_bits_used": 11,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_T": 2
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.6836734693877551,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 10,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 1
+  },
+  "workload": "hammer",
+  "fallbacks": 967,
+  "max_steps/op": 620,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 2.0,
+  "max_fill": 0.656,
+  "e_bits_used": 52,
+  "g_bits_used": 11,
+  "top_bits_used": 9,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 1
+  },
+  "workload": "harmonic",
+  "fallbacks": 17,
+  "max_steps/op": 615,
+  "max_chunk/T": 1.0703125,
+  "max_group/G": 8.277777777777779,
+  "max_fill": 0.672,
+  "e_bits_used": 52,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 57946,
+  "max_table": 27
+ },
+ {
+  "setting": {
+   "K_G": 1
+  },
+  "workload": "starve",
+  "fallbacks": 18,
+  "max_steps/op": 607,
+  "max_chunk/T": 1.03515625,
+  "max_group/G": 8.264705882352942,
+  "max_fill": 0.672,
+  "e_bits_used": 52,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 55663,
+  "max_table": 27
+ },
+ {
+  "setting": {
+   "K_G": 1
+  },
+  "workload": "random",
+  "fallbacks": 4,
+  "max_steps/op": 482,
+  "max_chunk/T": 1.0,
+  "max_group/G": 8.294117647058824,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 122587,
+  "max_table": 28
+ },
+ {
+  "setting": {
+   "K_G": 1
+  },
+  "workload": "delete_burst",
+  "fallbacks": 45,
+  "max_steps/op": 144,
+  "max_chunk/T": 0.7911111111111111,
+  "max_group/G": 5.7,
+  "max_fill": 0.672,
+  "e_bits_used": 45,
+  "g_bits_used": 10,
+  "top_bits_used": 16,
+  "pq_scan": 346,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_G": 1
+  },
+  "workload": "zigzag",
+  "fallbacks": 323,
+  "max_steps/op": 618,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 2.923076923076923,
+  "max_fill": 0.672,
+  "e_bits_used": 52,
+  "g_bits_used": 11,
+  "top_bits_used": 12,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 2
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 95,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 35,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 2
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 88,
+  "max_chunk/T": 0.8367346938775511,
+  "max_group/G": 1.0384615384615385,
+  "max_fill": 0.672,
+  "e_bits_used": 43,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_G": 2
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 88,
+  "max_chunk/T": 0.8367346938775511,
+  "max_group/G": 1.0384615384615385,
+  "max_fill": 0.672,
+  "e_bits_used": 43,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_G": 2
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 87,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_G": 2
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 93,
+  "max_chunk/T": 0.743801652892562,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 20,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 2
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 100,
+  "max_chunk/T": 0.7407407407407407,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 34,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 3
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 115,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 3
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.834319526627219,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 35,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_G": 3
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.834319526627219,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 35,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_G": 3
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 91,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_G": 3
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 92,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 3
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 102,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 32,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 4
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 4
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.78125,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_G": 4
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 4
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 109,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_G": 4
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_G": 4
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 1
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 93,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 1
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 94,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_C": 1
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 96,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_C": 1
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 100,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_C": 1
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 80,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 1
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 98,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 2
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 97,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 2
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 105,
+  "max_chunk/T": 0.7959183673469388,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_C": 2
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 99,
+  "max_chunk/T": 0.7959183673469388,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_C": 2
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_C": 2
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 84,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 2
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 102,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 4
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 4
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.78125,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_C": 4
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 4
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 109,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_C": 4
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_C": 4
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 2
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 90,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.812,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 15,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 2
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 88,
+  "max_chunk/T": 0.80078125,
+  "max_group/G": 1.0,
+  "max_fill": 0.891,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_B": 2
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 82,
+  "max_chunk/T": 0.7993079584775087,
+  "max_group/G": 1.0,
+  "max_fill": 0.891,
+  "e_bits_used": 33,
+  "g_bits_used": 15,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_B": 2
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 71,
+  "max_chunk/T": 0.7551020408163265,
+  "max_group/G": 1.0,
+  "max_fill": 0.844,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_B": 2
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 77,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.891,
+  "e_bits_used": 19,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 2
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 95,
+  "max_chunk/T": 0.75,
+  "max_group/G": 1.0,
+  "max_fill": 0.891,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 3
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 95,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.719,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 15,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 3
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.8418367346938775,
+  "max_group/G": 1.0,
+  "max_fill": 0.75,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_B": 3
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 93,
+  "max_chunk/T": 0.8418367346938775,
+  "max_group/G": 1.0,
+  "max_fill": 0.75,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_B": 3
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 96,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.734,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_B": 3
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 76,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.75,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 3
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 99,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.75,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 4
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 4
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.78125,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_B": 4
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 4
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 109,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_B": 4
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 4
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 8
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 130,
+  "max_chunk/T": 0.7272727272727273,
+  "max_group/G": 1.0,
+  "max_fill": 0.594,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 8
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 129,
+  "max_chunk/T": 0.7923875432525952,
+  "max_group/G": 1.0,
+  "max_fill": 0.594,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "K_B": 8
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 146,
+  "max_chunk/T": 0.8133333333333334,
+  "max_group/G": 1.0,
+  "max_fill": 0.594,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 8
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 134,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.594,
+  "e_bits_used": 17,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "K_B": 8
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 133,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.594,
+  "e_bits_used": 17,
+  "g_bits_used": 10,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "K_B": 8
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 136,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.594,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 18,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 1
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 121,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 18,
+  "g_bits_used": 10,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 1
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 108,
+  "max_chunk/T": 0.8284023668639053,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 19,
+  "g_bits_used": 21,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "c_G": 1
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 105,
+  "max_chunk/T": 0.8284023668639053,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 19,
+  "g_bits_used": 20,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "c_G": 1
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 14,
+  "g_bits_used": 13,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "c_G": 1
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 93,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 12,
+  "g_bits_used": 12,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 1
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 19,
+  "g_bits_used": 10,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 2
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 107,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 30,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 2
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 101,
+  "max_chunk/T": 0.78125,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "c_G": 2
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7908163265306123,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 33,
+  "g_bits_used": 14,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 2
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 109,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 11,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "c_G": 2
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 86,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 18,
+  "g_bits_used": 11,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 2
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 31,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 3
+  },
+  "workload": "hammer",
+  "fallbacks": 0,
+  "max_steps/op": 98,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.656,
+  "e_bits_used": 41,
+  "g_bits_used": 9,
+  "top_bits_used": 16,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 3
+  },
+  "workload": "harmonic",
+  "fallbacks": 0,
+  "max_steps/op": 100,
+  "max_chunk/T": 0.7734375,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 45,
+  "g_bits_used": 12,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "c_G": 3
+  },
+  "workload": "starve",
+  "fallbacks": 0,
+  "max_steps/op": 96,
+  "max_chunk/T": 0.7681660899653979,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 45,
+  "g_bits_used": 12,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 26
+ },
+ {
+  "setting": {
+   "c_G": 3
+  },
+  "workload": "random",
+  "fallbacks": 0,
+  "max_steps/op": 106,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 16,
+  "g_bits_used": 10,
+  "top_bits_used": 19,
+  "pq_scan": 0,
+  "max_table": 23
+ },
+ {
+  "setting": {
+   "c_G": 3
+  },
+  "workload": "delete_burst",
+  "fallbacks": 0,
+  "max_steps/op": 85,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 24,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ },
+ {
+  "setting": {
+   "c_G": 3
+  },
+  "workload": "zigzag",
+  "fallbacks": 0,
+  "max_steps/op": 104,
+  "max_chunk/T": 0.7222222222222222,
+  "max_group/G": 1.0,
+  "max_fill": 0.672,
+  "e_bits_used": 42,
+  "g_bits_used": 9,
+  "top_bits_used": 17,
+  "pq_scan": 0,
+  "max_table": 24
+ }
+]

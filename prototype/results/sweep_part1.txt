@@ -1,0 +1,144 @@
+K_R=1             hammer        fallbacks=0  max_steps/op=78  max_chunk/T=0.76  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+K_R=1             harmonic      fallbacks=0  max_steps/op=87  max_chunk/T=1.06  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=16  top_bits_used=19  pq_scan=0  max_table=26  <-- margin exceeded
+K_R=1             starve        fallbacks=0  max_steps/op=90  max_chunk/T=1.03  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=15  top_bits_used=19  pq_scan=0  max_table=26  <-- margin exceeded
+K_R=1             random        fallbacks=0  max_steps/op=75  max_chunk/T=0.75  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+K_R=1             delete_burst  fallbacks=0  max_steps/op=74  max_chunk/T=0.73  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+K_R=1             zigzag        fallbacks=0  max_steps/op=79  max_chunk/T=0.76  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+K_R=2   (default) hammer        fallbacks=0  max_steps/op=107  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+K_R=2   (default) harmonic      fallbacks=0  max_steps/op=101  max_chunk/T=0.78  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=26
+K_R=2   (default) starve        fallbacks=0  max_steps/op=106  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=24
+K_R=2   (default) random        fallbacks=0  max_steps/op=109  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+K_R=2   (default) delete_burst  fallbacks=0  max_steps/op=86  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+K_R=2   (default) zigzag        fallbacks=0  max_steps/op=104  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+K_R=3             hammer        fallbacks=0  max_steps/op=117  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+K_R=3             harmonic      fallbacks=0  max_steps/op=121  max_chunk/T=0.73  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=13  top_bits_used=19  pq_scan=0  max_table=26
+K_R=3             starve        fallbacks=0  max_steps/op=119  max_chunk/T=0.73  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=26
+K_R=3             random        fallbacks=0  max_steps/op=118  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+K_R=3             delete_burst  fallbacks=0  max_steps/op=107  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+K_R=3             zigzag        fallbacks=0  max_steps/op=105  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+K_R=4             hammer        fallbacks=0  max_steps/op=120  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+K_R=4             harmonic      fallbacks=0  max_steps/op=134  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=13  top_bits_used=19  pq_scan=0  max_table=26
+K_R=4             starve        fallbacks=0  max_steps/op=134  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=13  top_bits_used=19  pq_scan=0  max_table=26
+K_R=4             random        fallbacks=0  max_steps/op=119  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+K_R=4             delete_burst  fallbacks=0  max_steps/op=111  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+K_R=4             zigzag        fallbacks=0  max_steps/op=121  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+top_s=3             hammer        fallbacks=26  max_steps/op=619  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=39  pq_scan=0  max_table=93  <-- margin exceeded
+top_s=3             harmonic      fallbacks=18  max_steps/op=493  max_chunk/T=0.81  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=14  top_bits_used=39  pq_scan=0  max_table=131  <-- margin exceeded
+top_s=3             starve        fallbacks=17  max_steps/op=497  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=14  top_bits_used=39  pq_scan=0  max_table=144  <-- margin exceeded
+top_s=3             random        fallbacks=18  max_steps/op=493  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=39  pq_scan=0  max_table=125  <-- margin exceeded
+top_s=3             delete_burst  fallbacks=5  max_steps/op=127  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=39  pq_scan=0  max_table=90  <-- margin exceeded
+top_s=3             zigzag        fallbacks=25  max_steps/op=540  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=39  pq_scan=0  max_table=93  <-- margin exceeded
+top_s=4             hammer        fallbacks=15  max_steps/op=597  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=39  pq_scan=0  max_table=101  <-- margin exceeded
+top_s=4             harmonic      fallbacks=12  max_steps/op=467  max_chunk/T=0.80  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=14  top_bits_used=39  pq_scan=0  max_table=100  <-- margin exceeded
+top_s=4             starve        fallbacks=12  max_steps/op=457  max_chunk/T=0.78  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=13  top_bits_used=39  pq_scan=0  max_table=100  <-- margin exceeded
+top_s=4             random        fallbacks=11  max_steps/op=477  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=17  g_bits_used=11  top_bits_used=39  pq_scan=0  max_table=106  <-- margin exceeded
+top_s=4             delete_burst  fallbacks=2  max_steps/op=125  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=39  pq_scan=0  max_table=96  <-- margin exceeded
+top_s=4             zigzag        fallbacks=17  max_steps/op=520  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=39  pq_scan=0  max_table=98  <-- margin exceeded
+top_s=5             hammer        fallbacks=3  max_steps/op=414  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=39  pq_scan=0  max_table=104  <-- margin exceeded
+top_s=5             harmonic      fallbacks=3  max_steps/op=388  max_chunk/T=0.80  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=14  top_bits_used=39  pq_scan=0  max_table=107  <-- margin exceeded
+top_s=5             starve        fallbacks=3  max_steps/op=350  max_chunk/T=0.80  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=14  top_bits_used=39  pq_scan=0  max_table=106  <-- margin exceeded
+top_s=5             random        fallbacks=3  max_steps/op=371  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=39  pq_scan=0  max_table=104  <-- margin exceeded
+top_s=5             delete_burst  fallbacks=0  max_steps/op=118  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=28  pq_scan=0  max_table=69
+top_s=5             zigzag        fallbacks=6  max_steps/op=554  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=39  pq_scan=0  max_table=104  <-- margin exceeded
+top_s=6             hammer        fallbacks=0  max_steps/op=106  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=18  pq_scan=0  max_table=40
+top_s=6             harmonic      fallbacks=0  max_steps/op=124  max_chunk/T=0.80  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=21  pq_scan=0  max_table=40
+top_s=6             starve        fallbacks=0  max_steps/op=108  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=21  pq_scan=0  max_table=42
+top_s=6             random        fallbacks=0  max_steps/op=122  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=21  pq_scan=0  max_table=42
+top_s=6             delete_burst  fallbacks=0  max_steps/op=107  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=16  pq_scan=0  max_table=40
+top_s=6             zigzag        fallbacks=0  max_steps/op=100  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=21  pq_scan=0  max_table=40
+top_s=8   (default) hammer        fallbacks=0  max_steps/op=107  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+top_s=8   (default) harmonic      fallbacks=0  max_steps/op=101  max_chunk/T=0.78  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=26
+top_s=8   (default) starve        fallbacks=0  max_steps/op=106  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=24
+top_s=8   (default) random        fallbacks=0  max_steps/op=109  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+top_s=8   (default) delete_burst  fallbacks=0  max_steps/op=86  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+top_s=8   (default) zigzag        fallbacks=0  max_steps/op=104  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+top_s=12            hammer        fallbacks=0  max_steps/op=101  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=15  pq_scan=0  max_table=22
+top_s=12            harmonic      fallbacks=0  max_steps/op=100  max_chunk/T=0.82  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=18  pq_scan=0  max_table=22
+top_s=12            starve        fallbacks=0  max_steps/op=106  max_chunk/T=0.82  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=18  pq_scan=0  max_table=22
+top_s=12            random        fallbacks=0  max_steps/op=109  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=18  pq_scan=0  max_table=21
+top_s=12            delete_burst  fallbacks=0  max_steps/op=99  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=15  pq_scan=0  max_table=22
+top_s=12            zigzag        fallbacks=0  max_steps/op=103  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=22
+top_a=5             hammer        fallbacks=0  max_steps/op=86  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=30  g_bits_used=9  top_bits_used=10  pq_scan=0  max_table=16
+top_a=5             harmonic      fallbacks=0  max_steps/op=86  max_chunk/T=0.87  max_group/G=1.00  max_fill=0.69  e_bits_used=33  g_bits_used=14  top_bits_used=12  pq_scan=0  max_table=18
+top_a=5             starve        fallbacks=0  max_steps/op=89  max_chunk/T=0.84  max_group/G=1.00  max_fill=0.69  e_bits_used=33  g_bits_used=14  top_bits_used=12  pq_scan=0  max_table=18
+top_a=5             random        fallbacks=0  max_steps/op=79  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.69  e_bits_used=16  g_bits_used=11  top_bits_used=12  pq_scan=0  max_table=18
+top_a=5             delete_burst  fallbacks=0  max_steps/op=87  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.69  e_bits_used=18  g_bits_used=11  top_bits_used=10  pq_scan=0  max_table=18
+top_a=5             zigzag        fallbacks=0  max_steps/op=87  max_chunk/T=0.73  max_group/G=1.00  max_fill=0.69  e_bits_used=31  g_bits_used=9  top_bits_used=11  pq_scan=0  max_table=16
+top_a=6             hammer        fallbacks=0  max_steps/op=101  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=30  g_bits_used=9  top_bits_used=12  pq_scan=0  max_table=21
+top_a=6             harmonic      fallbacks=0  max_steps/op=102  max_chunk/T=0.83  max_group/G=1.00  max_fill=0.69  e_bits_used=33  g_bits_used=14  top_bits_used=14  pq_scan=0  max_table=20
+top_a=6             starve        fallbacks=0  max_steps/op=94  max_chunk/T=0.83  max_group/G=1.00  max_fill=0.69  e_bits_used=33  g_bits_used=14  top_bits_used=14  pq_scan=0  max_table=20
+top_a=6             random        fallbacks=0  max_steps/op=100  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.69  e_bits_used=16  g_bits_used=11  top_bits_used=14  pq_scan=0  max_table=19
+top_a=6             delete_burst  fallbacks=0  max_steps/op=90  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.69  e_bits_used=18  g_bits_used=11  top_bits_used=14  pq_scan=0  max_table=21
+top_a=6             zigzag        fallbacks=0  max_steps/op=108  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.69  e_bits_used=31  g_bits_used=9  top_bits_used=13  pq_scan=0  max_table=21
+top_a=8   (default) hammer        fallbacks=0  max_steps/op=107  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+top_a=8   (default) harmonic      fallbacks=0  max_steps/op=101  max_chunk/T=0.78  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=26
+top_a=8   (default) starve        fallbacks=0  max_steps/op=106  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=24
+top_a=8   (default) random        fallbacks=0  max_steps/op=109  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+top_a=8   (default) delete_burst  fallbacks=0  max_steps/op=86  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+top_a=8   (default) zigzag        fallbacks=0  max_steps/op=104  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+top_a=12            hammer        fallbacks=0  max_steps/op=106  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=24  pq_scan=0  max_table=34
+top_a=12            harmonic      fallbacks=0  max_steps/op=112  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=29  pq_scan=0  max_table=36
+top_a=12            starve        fallbacks=0  max_steps/op=114  max_chunk/T=0.78  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=29  pq_scan=0  max_table=36
+top_a=12            random        fallbacks=0  max_steps/op=105  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=29  pq_scan=0  max_table=33
+top_a=12            delete_burst  fallbacks=0  max_steps/op=113  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=16  pq_scan=0  max_table=34
+top_a=12            zigzag        fallbacks=0  max_steps/op=120  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=27  pq_scan=0  max_table=34
+top_a=16            hammer        fallbacks=0  max_steps/op=127  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=32  pq_scan=0  max_table=44
+top_a=16            harmonic      fallbacks=0  max_steps/op=134  max_chunk/T=0.75  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=13  top_bits_used=39  pq_scan=0  max_table=46
+top_a=16            starve        fallbacks=0  max_steps/op=116  max_chunk/T=0.75  max_group/G=1.00  max_fill=0.67  e_bits_used=34  g_bits_used=14  top_bits_used=39  pq_scan=0  max_table=46
+top_a=16            random        fallbacks=0  max_steps/op=123  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=40  pq_scan=0  max_table=45
+top_a=16            delete_burst  fallbacks=0  max_steps/op=143  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=21  pq_scan=0  max_table=45
+top_a=16            zigzag        fallbacks=0  max_steps/op=131  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=35  pq_scan=0  max_table=44
+c_T=1   (default) hammer        fallbacks=0  max_steps/op=107  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=9  top_bits_used=16  pq_scan=0  max_table=24
+c_T=1   (default) harmonic      fallbacks=0  max_steps/op=101  max_chunk/T=0.78  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=26
+c_T=1   (default) starve        fallbacks=0  max_steps/op=106  max_chunk/T=0.79  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=14  top_bits_used=19  pq_scan=0  max_table=24
+c_T=1   (default) random        fallbacks=0  max_steps/op=109  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=11  top_bits_used=19  pq_scan=0  max_table=23
+c_T=1   (default) delete_burst  fallbacks=0  max_steps/op=86  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=11  top_bits_used=17  pq_scan=0  max_table=24
+c_T=1   (default) zigzag        fallbacks=0  max_steps/op=104  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=9  top_bits_used=17  pq_scan=0  max_table=24
+c_T=2             hammer        fallbacks=0  max_steps/op=104  max_chunk/T=0.68  max_group/G=1.00  max_fill=0.66  e_bits_used=30  g_bits_used=10  top_bits_used=15  pq_scan=0  max_table=24
+c_T=2             harmonic      fallbacks=0  max_steps/op=105  max_chunk/T=0.72  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=19  top_bits_used=19  pq_scan=0  max_table=24
+c_T=2             starve        fallbacks=0  max_steps/op=106  max_chunk/T=0.71  max_group/G=1.00  max_fill=0.67  e_bits_used=33  g_bits_used=19  top_bits_used=19  pq_scan=0  max_table=24
+c_T=2             random        fallbacks=0  max_steps/op=106  max_chunk/T=0.68  max_group/G=1.00  max_fill=0.67  e_bits_used=16  g_bits_used=12  top_bits_used=19  pq_scan=0  max_table=23
+c_T=2             delete_burst  fallbacks=0  max_steps/op=89  max_chunk/T=0.68  max_group/G=1.00  max_fill=0.67  e_bits_used=18  g_bits_used=12  top_bits_used=11  pq_scan=0  max_table=24
+c_T=2             zigzag        fallbacks=0  max_steps/op=107  max_chunk/T=0.68  max_group/G=1.00  max_fill=0.67  e_bits_used=31  g_bits_used=10  top_bits_used=17  pq_scan=0  max_table=24
+K_G=1             hammer        fallbacks=967  max_steps/op=620  max_chunk/T=0.72  max_group/G=2.00  max_fill=0.66  e_bits_used=52  g_bits_used=11  top_bits_used=9  pq_scan=0  max_table=24  <-- margin exceeded
+concurrent.futures.process._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/concurrent/futures/process.py", line 263, in _process_worker
+    r = call_item.fn(*call_item.args, **call_item.kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/process.py", line 212, in _process_chunk
+    return [fn(*args) for args in chunk]
+            ^^^^^^^^^
+  File "/home/aneto/repos/order_maintenance/prototype/sweep.py", line 42, in one
+    r = stress.run(wl, n, params=params, K_B=cfg["K_B"])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aneto/repos/order_maintenance/prototype/stress.py", line 394, in run
+    wl(rng, om, live, i)
+  File "/home/aneto/repos/order_maintenance/prototype/stress.py", line 110, in wl
+    if core.C[c].alive and core.C[c].st == QUIET and core.Gs[core.E[e].grp].chk == c:
+       ~~~~~~^^^
+IndexError: list index out of range
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/aneto/repos/order_maintenance/prototype/sweep.py", line 64, in <module>
+    main()
+  File "/home/aneto/repos/order_maintenance/prototype/sweep.py", line 52, in main
+    for setting, wl, r in ex.map(one, tasks):
+  File "/usr/lib/python3.12/concurrent/futures/process.py", line 642, in _chain_from_iterable_of_lists
+    for element in iterable:
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+IndexError: list index out of range
