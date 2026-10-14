@@ -814,3 +814,145 @@ theorem cinv_ins {s s2 : Core} {A : Abs} {δ δu s₀ : Nat → Nat} {ex x lab h
     · rw [Function.update_of_ne hdc]; exact this
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- **The chunk invariant at the pop**: C1 starts for the new family of `x`, with `s₀ x` the size
+of `x`. -/
+theorem cinv_pop {s s' : Core} {A : Abs} {s₀ : Nat → Nat} {x : Nat} (hI : INV s A)
+    (R : ResSpec s s' x) (hE : s'.E = s.E) (hC : CInv s A.elist (fun _ => 0) (fun _ => 0) s₀)
+    (hxL : LiveC s x) (hxq : cSt s x = .quiet) (hT : cSz s x ≤ s.P.T)
+    (hun : units s x ≤ unitsOf s.P (cSz s x)) :
+    CInv s' A.elist (fun _ => 0) (fun _ => 0) (Function.update s₀ x (cSz s x)) := by
+  have hg : ∀ g, s'.Gs.getX g = s.Gs.getX g := fun g => by rw [R.Gs]
+  have hLv := liveG_of_Gs R.Gs
+  have eC : ∀ g, gC s' g = gC s g := fun g => by simp only [gC, hg]
+  have eG' : ∀ e, eG s' e = eG s e := fun e => by simp only [eG, hE]
+  have hcg : ∀ g, LiveG s g → gC s g < s.C.size := fun g hg' => (hC.gchk g hg').1.2
+  have hxA : x ∈ A.chunks := (hI.cAlloc x).mpr hxL
+  have hLC : ∀ c, LiveC s' c ↔ LiveC s c ∨ c = s.C.size ∨ c = s.C.size + 1 := by
+    intro c; simp only [LiveC, R.Csize]
+    constructor
+    · rintro ⟨h1, h2⟩
+      by_cases h3 : c < s.C.size
+      · exact Or.inl ⟨h1, h3⟩
+      · right; omega
+    · rintro (⟨h1, h2⟩ | h | h)
+      · exact ⟨h1, by omega⟩
+      · subst h; exact ⟨hxL.1.trans (Nat.le_of_lt hxL.2), by omega⟩
+      · subst h; exact ⟨by omega, by omega⟩
+  -- an old splitting chunk's family avoids `x` and the predecessor of `x`
+  have hfam : ∀ y, LiveC s y → cSt s y = .splitting →
+      y ≠ x ∧ cLl s y ≠ x ∧ cRr s y ≠ x ∧ cLl s y ≠ cP s x ∧ y ≠ cP s x := by
+    intro y hy hys
+    have F := hC.cfam y hy hys
+    have h1 : y ≠ x := by rintro rfl; rw [hxq] at hys; cases hys
+    have h2 : cLl s y ≠ x := by intro e; have := F.lSt; rw [e, hxq] at this; cases this
+    have h3 : cRr s y ≠ x := by intro e; have := F.rSt; rw [e, hxq] at this; cases this
+    refine ⟨h1, h2, h3, ?_, ?_⟩
+    · intro e
+      have hp0 : cP s x ≠ NIL := by rw [← e]; unfold NIL; have := F.lLive.1; omega
+      have := hI.cN_cP hxA hp0
+      rw [← e, F.lAdj] at this; exact h1 this
+    · intro e
+      have hp0 : cP s x ≠ NIL := by rw [← e]; unfold NIL; have := hy.1; omega
+      have := hI.cN_cP hxA hp0
+      rw [← e, F.rAdj] at this; exact h3 this
+  have hunits : ∀ c, units s' c = units s c := units_of_Gs R.Gs
+  refine ⟨?_, ?_, ?_, ?_, ?_, fun _ => le_rfl⟩
+  · -- sizes
+    intro d hd
+    unfold celts
+    have hf : A.elist.filter (fun e => decide (gC s' (eG s' e) = d)) =
+        A.elist.filter (fun e => decide (gC s (eG s e) = d)) := by
+      congr 1; funext e; rw [eC, eG']
+    rw [hf]
+    rcases (hLC d).mp hd with hd | hdn
+    · have hcs : cSz s' d = cSz s d := by
+        by_cases hdx : d = x
+        · rw [hdx]; exact R.xs.1
+        · exact (R.old d hd.2 hdx).1
+      rw [hcs]; exact hC.csz d hd
+    · rw [(R.new d hdn).1]
+      symm; apply List.length_eq_zero_iff.mpr
+      apply List.filter_eq_nil_iff.mpr
+      intro e he
+      have hl := hI.mem_glist_iff.mp (hI.eG_mem he)
+      have := hcg _ hl
+      simp only [decide_eq_true_eq]; rcases hdn with rfl | rfl <;> omega
+  · -- families
+    intro y hy hys
+    rcases (hLC y).mp hy with hy | hyn
+    · by_cases hyx : y = x
+      · subst hyx
+        have hNL : LiveC s' s.C.size := (hLC _).mpr (Or.inr (Or.inl rfl))
+        have hNR : LiveC s' (s.C.size + 1) := (hLC _).mpr (Or.inr (Or.inr rfl))
+        obtain ⟨-, -, -, hl, hr⟩ := R.xs
+        refine ⟨by rw [hl]; exact hNL, by rw [hr]; exact hNR, by rw [hl, R.ylink], by rw [hr, R.xlink],
+          by rw [hl]; exact (R.new _ (Or.inl rfl)).2.2.1, by rw [hl]; exact (R.new _ (Or.inl rfl)).2.2.2,
+          by rw [hr]; exact (R.new _ (Or.inr rfl)).2.2.1, by rw [hr]; exact (R.new _ (Or.inr rfl)).2.2.2⟩
+      · have o := R.old y hy.2 hyx
+        rw [o.2.2.1] at hys
+        have F := hC.cfam y hy hys
+        obtain ⟨-, h2, h3, h4, h5⟩ := hfam y hy hys
+        have ol := R.old _ F.lLive.2 h2
+        have or' := R.old _ F.rLive.2 h3
+        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+        · rw [o.2.2.2.2.1, hLC]; exact Or.inl F.lLive
+        · rw [o.2.2.2.2.2, hLC]; exact Or.inl F.rLive
+        · rw [o.2.2.2.2.1, R.next _ F.lLive.2 h2 h4]; exact F.lAdj
+        · rw [R.next _ hy.2 hyx h5, o.2.2.2.2.2]; exact F.rAdj
+        · rw [o.2.2.2.2.1, ol.2.2.1]; exact F.lSt
+        · rw [o.2.2.2.2.1, ol.2.2.2.1]; exact F.lSrc
+        · rw [o.2.2.2.2.2, or'.2.2.1]; exact F.rSt
+        · rw [o.2.2.2.2.2, or'.2.2.2.1]; exact F.rSrc
+    · rw [(R.new y hyn).2.2.1] at hys; cases hys
+  · -- overflow chunks
+    intro d hd hds
+    rcases (hLC d).mp hd with hd | hdn
+    · have hdx : d ≠ x := by intro e; rw [e, R.xs.2.2.1] at hds; cases hds
+      have o := R.old d hd.2 hdx
+      rw [o.2.2.1] at hds
+      obtain ⟨p1, p2, p3⟩ := hC.covf d hd hds
+      have hsx := (hfam _ p1 p2).1
+      have os := R.old _ p1.2 hsx
+      rw [o.2.2.2.1, hLC, os.2.2.1, os.2.2.2.2.1, os.2.2.2.2.2]
+      exact ⟨Or.inl p1, p2, p3⟩
+    · rw [(R.new d hdn).2.2.2, hLC, R.xs.2.2.1, R.xs.2.2.2.1, R.xs.2.2.2.2]
+      exact ⟨Or.inl hxL, rfl, by rcases hdn with rfl | rfl; exact Or.inl rfl; exact Or.inr rfl⟩
+  · -- groups
+    intro g hg'
+    rw [hLv] at hg'
+    rw [eC, hLC]
+    obtain ⟨g1, g2⟩ := hC.gchk g hg'
+    refine ⟨Or.inl g1, ?_⟩
+    by_cases hgx : gC s g = x
+    · rw [hgx, R.xs.2.2.1]; simp
+    · rw [(R.old _ g1.2 hgx).2.2.1]; exact g2
+  · -- C1
+    intro y hy hys _
+    rcases (hLC y).mp hy with hy | hyn
+    · by_cases hyx : y = x
+      · subst hyx
+        unfold C1
+        obtain ⟨hsz, -, -, hl, hr⟩ := R.xs
+        rw [hl, hr, hsz, (R.new _ (Or.inl rfl)).1, (R.new _ (Or.inr rfl)).1, Function.update_self,
+          hunits, R.P]
+        simp only [Nat.sub_zero, Nat.zero_add, Nat.add_zero, Nat.sub_self, Nat.mul_zero]
+        exact ⟨hT, le_rfl, hun, Nat.zero_le _, Nat.zero_le _⟩
+      · have o := R.old y hy.2 hyx
+        rw [o.2.2.1] at hys
+        have h := hC.c1 y hy hys (by unfold NIL; have := hy.1; omega)
+        obtain ⟨-, h2, h3, -, -⟩ := hfam y hy hys
+        have F := hC.cfam y hy hys
+        unfold C1 at h ⊢
+        rw [o.2.2.2.2.1, o.2.2.2.2.2, (R.old _ F.lLive.2 h2).1, o.1, (R.old _ F.rLive.2 h3).1,
+          Function.update_of_ne hyx, hunits, R.P]
+        exact h
+    · rw [(R.new y hyn).2.2.1] at hys; cases hys
+
+end OM.Proof
