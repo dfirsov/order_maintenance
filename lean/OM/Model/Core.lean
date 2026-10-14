@@ -426,52 +426,67 @@ def reservation (k : Nat) : CM Unit := do
 /-- The element list, from the sentinel. -/
 def elements : CM (List Nat) := do
   let s ← get
-  let mut out : Array Nat := #[]
-  let mut e := s.head
-  for _ in List.range (s.E.size) do
-    if e == NIL then break
-    out := out.push e
-    e := (s.E.getX e).next
-  return out.toList
+  return walkList (fun e => (s.E.getX e).next) s.E.size s.head
+
+/-! FALLBACK's layout, in closed form: the element list cut into groups of `⌊G/2⌋`, the groups
+cut into chunks of `⌊⌊T/2⌋/⌊G/2⌋⌋`; group `k` (0-based) gets index `k + 1` and lies in chunk
+`⌊k / gpc⌋ + 1`; labels are evenly spaced at every level. -/
+
+def fbGS (P : Params) : Nat := max 1 (P.G / 2)
+def fbGPC (P : Params) : Nat := max 1 ((P.T / 2) / fbGS P)
+
+/-- The number of groups in FALLBACK's chunk `c` (0-based), out of `m`. -/
+def fbChunkLen (P : Params) (m c : Nat) : Nat := min (fbGPC P) (m - c * fbGPC P)
+
+/-- The number of chunks for `m` groups. -/
+def fbNC (P : Params) (m : Nat) : Nat := (m + fbGPC P - 1) / fbGPC P
+
+def fbGroup (P : Params) (groups : List (List Nat)) (k : Nat) : Group :=
+  let m := groups.length
+  let elems := groups.getD k []
+  let c := k / fbGPC P
+  { next := if k + 1 < m then k + 2 else NIL
+    prev := if k = 0 then NIL else k
+    first := elems.headD NIL
+    last := elems.getLastD NIL
+    chk := c + 1
+    lab := (k % fbGPC P + 1) * ((1 <<< P.B_g) / (fbChunkLen P m c + 1))
+    size := elems.length }
+
+def fbChunk (P : Params) (groups : List (List Nat)) (c : Nat) : Chunk :=
+  let m := groups.length
+  let len := fbChunkLen P m c
+  { next := if c + 1 < fbNC P m then c + 2 else NIL
+    prev := if c = 0 then NIL else c
+    first := c * fbGPC P + 1
+    last := c * fbGPC P + len
+    size := ((groups.drop (c * fbGPC P)).take len).foldl (fun a g => a + g.length) 0 }
+
+/-- Element `i` of group `k` gets group `k + 1` and label `(i + 1)·step`. -/
+def fbElems (P : Params) (groups : List (List Nat)) (E : Array Elem) : Array Elem :=
+  groups.zipIdx.foldl (fun E p =>
+    let step := (1 <<< P.B_e) / (p.1.length + 1)
+    p.1.zipIdx.foldl (fun E q =>
+      E.modify q.1 fun e => { e with grp := p.2 + 1, lab := (q.2 + 1) * step }) E) E
+
+/-- The state after FALLBACK's layout (tags are set by `relabelAll`). -/
+def fbLayout (P : Params) (seq : List Nat) (s : Core) : Core :=
+  let groups := chunksOf (fbGS P) seq
+  { s with
+    E := fbElems P groups s.E
+    Gs := (default :: (List.range groups.length).map (fbGroup P groups)).toArray
+    C := (default :: (List.range (fbNC P groups.length)).map (fbChunk P groups)).toArray
+    freeG := []
+    pqHead := #[], pqNext := #[], pqPrev := #[], pqWhere := #[], nbNext := #[], nbPrev := #[]
+    pqHi := 0, pqLo := 0, resJob := none
+    firstChunk := 1, firstGroup := 1 }
 
 /-- Synchronous rebuild of groups, chunks and tags from the element list. -/
 def fallback : CM Unit := do
   let P ← getP
   modify fun s => { s with fallbacks := s.fallbacks + 1 }
   let seq ← elements
-  modify fun s => { s with
-    Gs := #[default], C := #[default], freeG := [],
-    pqHead := #[], pqNext := #[], pqPrev := #[], pqWhere := #[], nbNext := #[], nbPrev := #[],
-    pqHi := 0, pqLo := 0, resJob := none }
-  let gs := max 1 (P.G / 2)
-  let gpc := max 1 ((P.T / 2) / gs)
-  let chunks := chunksOf gpc (chunksOf gs seq)
-  let mut prevC := NIL
-  let mut prevG := NIL
-  for cgroups in chunks do
-    let c ← newChunk
-    modC c fun C => { C with prev := prevC }
-    if prevC != NIL then modC prevC fun C => { C with next := c }
-    let stepG := (1 <<< P.B_g) / (cgroups.length + 1)
-    let mut j := 0
-    for elems in cgroups do
-      let g ← newGroup c
-      modG g fun G => { G with lab := (j + 1) * stepG, prev := prevG }
-      if prevG != NIL then modG prevG fun G => { G with next := g }
-      let stepE := (1 <<< P.B_e) / (elems.length + 1)
-      let mut k := 0
-      for el in elems do
-        modE el fun e => { e with grp := g, lab := (k + 1) * stepE }
-        k := k + 1
-      modG g fun G => { G with
-        first := elems.headD NIL, last := elems.getLastD NIL,
-        size := elems.length }
-      if j == 0 then modC c fun C => { C with first := g }
-      modC c fun C => { C with last := g, size := C.size + elems.length }
-      prevG := g
-      j := j + 1
-    prevC := c
-  modify fun s => { s with firstChunk := 1, firstGroup := 1 }
+  modify (fbLayout P seq)
   relabelAll
 
 /-! ### Insertion with background work -/

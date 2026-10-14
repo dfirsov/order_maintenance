@@ -168,6 +168,15 @@ def build (chunks : List Nat) : CM Unit := do
     let t ← tagOf c
     modC c fun C => { C with tag := t }
 
+/-- The linked list from `x` along `nxt`, at most `fuel` long. -/
+def walkList (nxt : Nat → Nat) : Nat → Nat → List Nat
+  | 0, _ => []
+  | fuel + 1, x => if x = NIL then [] else x :: walkList nxt fuel (nxt x)
+
+/-- Number the chunks of `l` as `1, 2, 3, …`. -/
+def renumber (l : List Nat) (C : Array Chunk) : Array Chunk :=
+  (l.zipIdx 1).foldl (fun C q => C.modify q.1 fun x => { x with tag := q.2 }) C
+
 /-- Strictly increasing? -/
 def increasing : List Nat → Bool
   | a :: b :: t => a < b && increasing (b :: t)
@@ -178,19 +187,11 @@ list. If they do not (label width too small, `docs/PROOF.md` §3.4), number the 
 `1, 2, 3, …` instead: correctness then needs no condition on `β`. -/
 def relabelAll : CM Unit := do
   let s ← get
-  let mut chunks : Array Nat := #[]
-  let mut c := s.firstChunk
-  for _ in List.range s.C.size do
-    if c == NIL then break
-    chunks := chunks.push c
-    c := (s.C.getX c).next
-  build chunks.toList
+  let chunks := walkList (fun c => (s.C.getX c).next) s.C.size s.firstChunk
+  tryCatch (build chunks) fun _ => pure ()
   let s ← get
-  if !increasing (chunks.toList.map fun c => (s.C.getX c).tag) then
-    let mut i := 1
-    for ch in chunks do
-      modC ch fun C => { C with tag := i }
-      i := i + 1
+  if !increasing (chunks.map fun c => (s.C.getX c).tag) then
+    modify fun s => { s with C := renumber chunks s.C }
 
 /-! ### Drains -/
 
