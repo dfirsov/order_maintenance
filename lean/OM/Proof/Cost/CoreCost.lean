@@ -62,3 +62,47 @@ theorem insertAfter_cost {TI : Core → Prop} {μ : Job → Nat} {J cap n R : Na
     rfl
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+/-- **Deletion** (a tombstone) keeps the cost invariant. -/
+theorem markDead_cost {TI : Core → Prop} {μ : Job → Nat} {J cap n R : Nat} {L : List Nat}
+    {s : Core} (hTC : TopContract TI μ J cap) (hC : CostInv TI μ J n R L s) (x : Nat) :
+    ∃ s', (markDead x).run s = .ok () s' ∧ CostInv TI μ J n R L s' := by
+  refine ⟨_, markDead_run s x, ?_⟩
+  set s' : Core := { s with E := s.E.modify x fun e => { e with live := false } } with hs'
+  have hE : ∀ e, eG s' e = eG s e ∧ eL s' e = eL s e := by
+    intro e; simp only [hs', eG, eL, Array.getX_modify]; split <;> exact ⟨rfl, rfl⟩
+  have hGS : GSame s s' := ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl,
+    fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun e => (hE e).1, fun e => (hE e).2,
+    rfl, rfl⟩
+  obtain ⟨A, hI, hel⟩ := hC.low.inv
+  obtain ⟨gh, hG⟩ := hC.low.ginv
+  obtain ⟨s₀, hCi, ⟨lg, hL⟩, hLP, hGP⟩ := hC.low.cinv
+  obtain ⟨e, pops, hN⟩ := hC.low.cnt
+  have hCS : CSame s s' := ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl,
+    fun _ => rfl, fun _ => rfl, rfl⟩
+  have hLS : LSame s s' := ⟨rfl, rfl, rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl,
+    fun _ => rfl, fun _ => rfl⟩
+  have hQS : QSame s s' := ⟨rfl, rfl, fun _ _ => Iff.rfl, fun _ _ _ => rfl⟩
+  have hPS : PQSame s s' := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hTS : TopSame s s' :=
+    ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, fun _ => ⟨rfl, rfl, rfl⟩, rfl⟩
+  refine ⟨⟨⟨A, markDead_inv hI x, hel⟩, ⟨gh, hG.of_gsame hGS⟩, ⟨s₀, ?_, ⟨lg, hL.transfer hLS⟩, hLP,
+    hGP⟩, hC.low.pq.qsame hPS hQS, ⟨e, pops, hN.frame hQS rfl⟩, hC.low.cp⟩,
+    hTC.frame _ _ hTS hC.ti, ?_⟩
+  swap
+  · obtain ⟨y, i, a, ip, js, hGm, hRO⟩ := hC.game
+    exact ⟨y, i, a, ip, js, hGm.mono (fun j => le_of_eq (by rw [hQS.gvec])), hRO⟩
+  refine hCi.transfer hCS (fun c => ?_) (fun c => rfl) hCi.δu (fun g hg => hCi.gchk g hg)
+  unfold celts; congr 1; funext z; rw [(hE z).1]
+
+/-- **Order queries** change nothing. -/
+theorem order_cost (s : Core) (x y : Nat) : ∃ b, (order x y).run s = .ok b s :=
+  ⟨_, order_run s x y⟩
+
+end OM.Proof
