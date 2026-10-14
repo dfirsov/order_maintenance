@@ -367,9 +367,10 @@ All run with 0 fallbacks and 0 slow PQ scans, under both presets, with full inva
 checks. Executed lines per operation at 2·10⁵ ops (`results/lines_new_2e5.txt`): at most
 2,934, within the campaign's previous maximum (3,034), and flat across decades.
 
-The `t3` adversary is the strongest found against drain timing. With `s = 8` it pushes
-blocked targets to 1.125 × `W_h` and drain starts to 1.25 × `W_h`, against 1.06 for the
-other workloads. With `s = 11` the worst is 0.94, so Lemma T3 holds.
+With `s = 8`, the `t3` adversary pushes blocked targets to 1.125 × `W_h` and drain starts to
+1.25 × `W_h` already at 3·10⁴ chunks. The other workloads stay at 1.06 there, and only
+`random` also reaches 1.125, at 3·10⁵ chunks. With `s = 11` the worst over all 10 runs is
+0.94 at both sizes, so Lemma T3 holds. Jobs stay within `(s+3)H` (71 ≤ 112 at 3·10⁵ chunks).
 
 ### Fuzzing and mutation testing after the fixes
 
