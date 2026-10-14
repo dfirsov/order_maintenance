@@ -1136,3 +1136,186 @@ theorem linv_remove {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ 
     rw [R.l, R.r]; exact hL.famChild z hz.1 hzs
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Across an insertion -/
+
+/-- What an insertion into group `g` changes for the label invariant (the element link and the
+chunk-size update): the sizes of `g` and of its chunk. -/
+structure InsSpec (s s' : Core) (g : Nat) : Prop where
+  live : ∀ z, LiveG s' z ↔ LiveG s z
+  lab : ∀ z, gL s' z = gL s z
+  next : ∀ z, gN s' z = gN s z
+  chk : ∀ z, gC s' z = gC s z
+  st : ∀ z, gSt s' z = gSt s z
+  l : ∀ z, gLl s' z = gLl s z
+  r : ∀ z, gRr s' z = gRr s z
+  sz : ∀ z, gSz s' z = gSz s z + if z = g then 1 else 0
+  Csize : s'.C.size = s.C.size
+  cst : ∀ d, cSt s' d = cSt s d
+  csrc : ∀ d, cSrc s' d = cSrc s d
+  cl : ∀ d, cLl s' d = cLl s d
+  cr : ∀ d, cRr s' d = cRr s d
+  clast : ∀ d, cLs s' d = cLs s d
+  csz : ∀ d, cSz s' d = cSz s d + if d = gC s g then 1 else 0
+  P : s'.P = s.P
+
+/-- The group whose charge an insertion into `g` may raise: `g`, or its family's source. -/
+def insOwner (s : Core) (g : Nat) : Nat := if gSt s g = .overflow then gSrc s g else g
+
+/-- One charge term grows, by at most one. -/
+theorem chTerm_ins {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg : Nat → Nat} {ex : Nat}
+    {g : Nat} (hI : INV s A) (hG : GInvE s L gh δg ex) (S : InsSpec s s' g) (lg : LGh) {z : Nat}
+    (hz : LiveG s z) :
+    chTerm s' lg z ≤ chTerm s lg z + if z = insOwner s g then 1 else 0 := by
+  have hfam : famT s' z = famT s z + ((if gLl s z = g then 1 else 0) + (if z = g then 1 else 0) +
+      (if gRr s z = g then 1 else 0)) := by
+    unfold famT; rw [S.l, S.r, S.sz, S.sz, S.sz]; omega
+  unfold chTerm
+  rw [S.st, S.l, S.sz, S.P, hfam]
+  by_cases h1 : gSt s z = .splitting ∧ lg.child (gLl s z) = true
+  · rw [if_pos h1, if_pos h1]
+    have F := hG.fam z hz h1.1
+    have hk : (if gLl s z = g then 1 else 0) + (if z = g then 1 else 0) +
+        (if gRr s z = g then 1 else 0) ≤ (if z = insOwner s g then 1 else 0) := by
+      unfold insOwner
+      by_cases hzg : z = g
+      · subst hzg
+        have hno : gSt s z ≠ .overflow := by rw [h1.1]; simp
+        rw [if_neg (F.lp hI hz), if_neg (F.rp hI hz), if_neg hno]; simp
+      · by_cases hl : gLl s z = g
+        · have ho : gSt s g = .overflow := hl ▸ F.lSt
+          have hsrc : gSrc s g = z := hl ▸ F.lSrc
+          have hr : gRr s z ≠ g := fun e => F.lr hI hz (hl.trans e.symm)
+          rw [if_pos hl, if_neg hzg, if_neg hr, if_pos ho, hsrc]; simp
+        · by_cases hr : gRr s z = g
+          · have ho : gSt s g = .overflow := hr ▸ F.rSt
+            have hsrc : gSrc s g = z := hr ▸ F.rSrc
+            rw [if_neg hl, if_neg hzg, if_pos hr, if_pos ho, hsrc]; simp
+          · rw [if_neg hl, if_neg hzg, if_neg hr]; omega
+    omega
+  · rw [if_neg h1, if_neg h1]
+    by_cases h2 : gSt s z = .quiet ∧ lg.child z = true
+    · rw [if_pos h2, if_pos h2]
+      have hk : (if z = g then 1 else 0) ≤ (if z = insOwner s g then 1 else 0) := by
+        unfold insOwner
+        by_cases hzg : z = g
+        · subst hzg
+          have hno : gSt s z ≠ .overflow := by rw [h2.1]; simp
+          rw [if_neg hno]
+        · rw [if_neg hzg]; omega
+      omega
+    · rw [if_neg h2, if_neg h2]; omega
+
+/-- A chunk's charge grows by at most one, and only in the inserted group's chunk. -/
+theorem charge_ins {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg : Nat → Nat} {ex : Nat}
+    {g : Nat} (hI : INV s A) (hG : GInvE s L gh δg ex) (S : InsSpec s s' g) (hg : LiveG s g)
+    (lg : LGh) (d : Nat) : charge s' lg d ≤ charge s lg d + if d = gC s g then 1 else 0 := by
+  have hown : ∀ d, insOwner s g ∈ GrpsC s d → d = gC s g := by
+    intro d hd
+    have h := (mem_GrpsC.mp hd).2
+    unfold insOwner at h
+    split at h
+    · next ho =>
+      obtain ⟨hsL, hss, hlr⟩ := hG.ovf g hg ho
+      have F := hG.fam _ hsL hss
+      rcases hlr with e | e
+      · rw [← h, ← F.lC, e]
+      · rw [← h, ← F.rC, e]
+    · exact h.symm
+  have hgr : GrpsC s' d = GrpsC s d := by
+    ext z; simp only [mem_GrpsC, S.live, S.chk]
+  rw [charge_eq, charge_eq, hgr]
+  calc ∑ z ∈ GrpsC s d, chTerm s' lg z
+      ≤ ∑ z ∈ GrpsC s d, (chTerm s lg z + if z = insOwner s g then 1 else 0) :=
+        Finset.sum_le_sum fun z hz => chTerm_ins hI hG S lg (mem_GrpsC.mp hz).1
+    _ = ∑ z ∈ GrpsC s d, chTerm s lg z + ∑ z ∈ GrpsC s d, (if z = insOwner s g then 1 else 0) :=
+        Finset.sum_add_distrib
+    _ ≤ _ := by
+        rw [Finset.sum_ite_eq']
+        split
+        · next hm => rw [if_pos (hown d hm)]
+        · omega
+
+/-- **The group-label invariant across an insertion**: the chunk's insertion count grows with its
+size and its charge. -/
+theorem linv_ins {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ δu : Nat → Nat}
+    {ex : Nat} {lg : LGh} {g : Nat} (hI : INV s A) (hG : GInvE s L gh δg ex)
+    (hL : LInv s lg s₀ δ δu) (S : InsSpec s s' g) (hg : LiveG s g)
+    (hcov : cSt s (gC s g) = .overflow →
+      cLl s (cSrc s (gC s g)) = gC s g ∨ cRr s (cSrc s (gC s g)) = gC s g) :
+    LInv s' { lg with ins := Function.update lg.ins (gC s g) (lg.ins (gC s g) + 1) } s₀
+      (Function.update δ (gC s g) (δ (gC s g) + 1)) δu := by
+  have hch := charge_ins hI hG S hg lg
+  have hcsz : ∀ d, cSz s' d = cSz s d + if d = gC s g then 1 else 0 := S.csz
+  generalize gC s g = c at hch hcsz hcov ⊢
+  have hLC : ∀ d, LiveC s' d ↔ LiveC s d := by intro d; simp only [LiveC, S.Csize]
+  have hgr : ∀ d, GrpsC s' d = GrpsC s d := by
+    intro d; ext z; simp only [mem_GrpsC, S.live, S.chk]
+  have hunits : ∀ d, units s' d = units s d := fun d =>
+    units_congr fun z => by unfold UnitG; rw [S.live, S.chk, S.st]
+  have hcd : ∀ d, cSz s' d - Function.update δ c (δ c + 1) d = cSz s d - δ d := by
+    intro d; rw [hcsz]
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self, if_pos rfl]; omega
+    · rw [Function.update_of_ne hdc, if_neg hdc]; omega
+  refine
+    { gaps := ?_, range := ?_, hv := hL.hv, pb := hL.pb, pf := hL.pf, roots := ?_, claim2 := ?_,
+      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_, famChild := ?_ }
+  · intro h hh hl
+    simp only [S.live] at hh; simp only [S.chk, S.clast] at hl
+    simp only [S.lab, S.next, S.chk, S.P]; exact hL.gaps h hh hl
+  · intro h hh; simp only [S.live] at hh; simp only [S.chk, S.lab, S.P]; exact hL.range h hh
+  · intro d hd; rw [hLC] at hd
+    show lg.rs d + pending s' lg d ≤ lg.arB d + lg.arF d + 1
+    have : pending s' lg d = pending s lg d := by
+      unfold pending; rw [hgr]; congr 1; apply Finset.filter_congr; intro z _; rw [S.st]
+    rw [this]; exact hL.roots d hd
+  · intro d hd; rw [hLC] at hd
+    show lg.cs d * gmin s'.P + charge s' lg d ≤ Function.update lg.ins c (lg.ins c + 1) d
+    have h1 := hL.claim2 d hd
+    have h2 := hch d
+    rw [S.P]
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self]; rw [if_pos rfl] at h2; omega
+    · rw [Function.update_of_ne hdc]; rw [if_neg hdc] at h2; omega
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds
+    show Function.update lg.ins c (lg.ins c + 1) d + lg.e0 d ≤ cSz s' d + kC s'.P s'.P.T
+    have h1 := hL.insQ d hd hds
+    rw [hcsz, S.P]
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self, if_pos rfl]; omega
+    · rw [Function.update_of_ne hdc, if_neg hdc]; omega
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds
+    show Function.update lg.ins c (lg.ins c + 1) d + s₀ (cSrc s' d) ≤ famC s' (cSrc s' d)
+    have h1 := hL.insO d hd hds
+    unfold famC at h1 ⊢
+    rw [S.csrc, S.cl, S.cr]; simp only [hcsz]
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self]
+      rcases hcov hds with h | h
+      · rw [if_pos h]; omega
+      · rw [if_pos h]; omega
+    · rw [Function.update_of_ne hdc]; omega
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds
+    show Function.update lg.ins c (lg.ins c + 1) d ≤ famC s' d + kC s'.P s'.P.T
+    have h1 := hL.insS d hd hds
+    unfold famC at h1 ⊢
+    rw [S.cl, S.cr, S.P]; simp only [hcsz]
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self, if_pos (rfl : d = d)]; omega
+    · rw [Function.update_of_ne hdc]; omega
+  · intro x hx hxs; rw [hLC] at hx; rw [S.cst] at hxs
+    rw [S.cl, S.cr, S.P, hunits, hcd, hcd, hcd]; exact hL.arrS x hx hxs
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [S.P]; exact hL.arrN d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [hcsz]
+    exact le_trans (hL.e0 d hd hds) (Nat.le_add_right _ _)
+  · intro p hp hps; rw [S.live] at hp; rw [S.st] at hps; rw [S.l, S.r]
+    exact hL.famChild p hp hps
+
+end OM.Proof
