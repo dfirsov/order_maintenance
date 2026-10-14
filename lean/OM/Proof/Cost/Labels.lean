@@ -1164,6 +1164,7 @@ structure InsSpec (s s' : Core) (g : Nat) : Prop where
   clast : ∀ d, cLs s' d = cLs s d
   csz : ∀ d, cSz s' d = cSz s d + if d = gC s g then 1 else 0
   P : s'.P = s.P
+  cnext : ∀ d, cN s' d = cN s d
 
 /-- The group whose charge an insertion into `g` may raise: `g`, or its family's source. -/
 def insOwner (s : Core) (g : Nat) : Nat := if gSt s g = .overflow then gSrc s g else g

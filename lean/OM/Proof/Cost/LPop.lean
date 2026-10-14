@@ -627,15 +627,16 @@ theorem insSpec_link {s s2 : Core} {x lab hh : Nat} (hg : eG s x < s.Gs.size)
       gLl s2 b = gLl s b ∧ gRr s2 b = gRr s b ∧ gA s2 b = gA s b := by
     intro b; simp only [gL, gN, gC, gSt, gLl, gRr, gA, hG b, linkElem_Gs]; split <;> simp
   have cfl : ∀ d, cSt s2 d = cSt s d ∧ cSrc s2 d = cSrc s d ∧ cLl s2 d = cLl s d ∧
-      cRr s2 d = cRr s d ∧ cLs s2 d = cLs s d := by
-    intro d; simp only [cSt, cSrc, cLl, cRr, cLs, hCx d]; split <;> simp
+      cRr s2 d = cRr s d ∧ cLs s2 d = cLs s d ∧ cN s2 d = cN s d := by
+    intro d; simp only [cSt, cSrc, cLl, cRr, cLs, cN, hCx d]; split <;> simp
   have hGsz : s2.Gs.size = s.Gs.size := by rw [hGs]; simp [linkElem]
   refine
     { live := fun z => ?_, lab := fun z => (fld z).1, next := fun z => (fld z).2.1,
       chk := fun z => (fld z).2.2.1, st := fun z => (fld z).2.2.2.1, l := fun z => (fld z).2.2.2.2.1,
       r := fun z => (fld z).2.2.2.2.2.1, sz := fun z => ?_, Csize := ?_,
       cst := fun d => (cfl d).1, csrc := fun d => (cfl d).2.1, cl := fun d => (cfl d).2.2.1,
-      cr := fun d => (cfl d).2.2.2.1, clast := fun d => (cfl d).2.2.2.2, csz := fun d => ?_, P := hP }
+      cr := fun d => (cfl d).2.2.2.1, clast := fun d => (cfl d).2.2.2.2.1, csz := fun d => ?_,
+      P := hP, cnext := fun d => (cfl d).2.2.2.2.2 }
   · simp only [LiveG, hGsz, (fld z).2.2.2.2.2.2]
   · have : gSz s2 z = gSz (linkElem s x s.E.size lab hh) z := by simp only [gSz, hGs]
     rw [this, linkElem_gSz s x lab hh z hg]
@@ -645,5 +646,90 @@ theorem insSpec_link {s s2 : Core} {x lab hh : Nat} (hg : eG s x < s.Gs.size)
     by_cases h : d = gC s (eG s x)
     · subst h; simp [hcs]
     · simp [h, Ne.symm h]
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem length_insertAfterL {x y : Nat} {l : List Nat} (hx : x ∈ l) :
+    (OM.Spec.insertAfterL x y l).length = l.length + 1 := by
+  induction l with
+  | nil => simp at hx
+  | cons a t ih =>
+    simp only [OM.Spec.insertAfterL]
+    by_cases hax : a = x
+    · simp [hax]
+    · have : x ∈ t := by simp at hx; rcases hx with h | h; exact absurd h.symm hax; exact h
+      simp [hax, ih this]
+
+/-- **The chunk invariant across an insertion**: the chunk's size grows with one more undriven
+insertion. -/
+theorem cinv_ins {s s2 : Core} {A : Abs} {δ δu s₀ : Nat → Nat} {ex x lab hh : Nat}
+    (hI : INV s A) (hC : CInvE s A.elist δ δu s₀ ex) (hx : x ∈ A.elist)
+    (S : InsSpec s s2 (eG s x)) (hE : ∀ e, eG s2 e = eG (linkElem s x s.E.size lab hh) e) :
+    CInvE s2 (OM.Spec.insertAfterL x s.E.size A.elist)
+      (Function.update δ (gC s (eG s x)) (δ (gC s (eG s x)) + 1)) δu s₀ ex := by
+  have hy : s.E.size ∉ A.elist := fun h => by have := ((hI.eAlloc _).mp h).2; omega
+  have hxy : x ≠ s.E.size := fun e => hy (e ▸ hx)
+  have hcsz := S.csz
+  generalize hc : gC s (eG s x) = c at hcsz ⊢
+  have hLC : ∀ d, LiveC s2 d ↔ LiveC s d := fun d => by simp only [LiveC, S.Csize]
+  have hcd : ∀ d, cSz s2 d - Function.update δ c (δ c + 1) d = cSz s d - δ d := by
+    intro d; rw [hcsz]
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self, if_pos rfl]; omega
+    · rw [Function.update_of_ne hdc, if_neg hdc]; omega
+  have hun : ∀ d, units s2 d = units s d := fun d =>
+    units_congr fun z => by unfold UnitG; rw [S.live, S.chk, S.st]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · intro d hd
+    rw [hLC] at hd
+    unfold celts
+    have e1 : (OM.Spec.insertAfterL x s.E.size A.elist).filter
+        (fun e => decide (gC s2 (eG s2 e) = d)) =
+        (OM.Spec.insertAfterL x s.E.size A.elist).filter
+          (fun e => decide (gC s (eG (linkElem s x s.E.size lab hh) e) = d)) := by
+      congr 1; funext e; rw [S.chk, hE]
+    rw [e1, filter_insertAfterL _ _ _ _ (by rw [linkElem_eG, linkElem_eG, if_neg hxy, if_pos rfl])]
+    have e2 : A.elist.filter (fun e => decide (gC s (eG (linkElem s x s.E.size lab hh) e) = d)) =
+        celts s A.elist d := by
+      unfold celts
+      refine List.filter_congr fun e he => ?_
+      have : e ≠ s.E.size := fun h => hy (h ▸ he)
+      rw [linkElem_eG, if_neg this]
+    rw [linkElem_eG, if_neg hxy, hc, e2, hcsz, hC.csz d hd]
+    by_cases hdc : c = d
+    · subst hdc
+      rw [if_pos rfl, if_pos (show decide (c = c) = true by simp), length_insertAfterL]
+      unfold celts; simp only [List.mem_filter, decide_eq_true_eq]; exact ⟨hx, hc⟩
+    · rw [if_neg (Ne.symm hdc), if_neg (show ¬ decide (c = d) = true by simpa using hdc)]; rfl
+  · intro y hy hys
+    rw [hLC] at hy; rw [S.cst] at hys
+    have F := hC.cfam y hy hys
+    exact ⟨by rw [hLC, S.cl]; exact F.lLive, by rw [hLC, S.cr]; exact F.rLive,
+      by rw [S.cl, S.cnext]; exact F.lAdj, by rw [S.cnext, S.cr]; exact F.rAdj,
+      by rw [S.cl, S.cst]; exact F.lSt, by rw [S.cl, S.csrc]; exact F.lSrc,
+      by rw [S.cr, S.cst]; exact F.rSt, by rw [S.cr, S.csrc]; exact F.rSrc⟩
+  · intro d hd hds
+    rw [hLC] at hd; rw [S.cst] at hds
+    obtain ⟨p1, p2, p3⟩ := hC.covf d hd hds
+    rw [S.csrc, hLC, S.cst, S.cl, S.cr]; exact ⟨p1, p2, p3⟩
+  · intro g hg
+    rw [S.live] at hg
+    rw [S.chk, hLC, S.cst]; exact hC.gchk g hg
+  · intro y hy hys hyx
+    rw [hLC] at hy; rw [S.cst] at hys
+    have := hC.c1 y hy hys hyx
+    unfold C1 at this ⊢
+    rw [S.cl, S.cr, hcd, hcd, hcd, hun, S.P]; exact this
+  · intro d
+    have := hC.δu d
+    by_cases hdc : d = c
+    · subst hdc; rw [Function.update_self]; omega
+    · rw [Function.update_of_ne hdc]; exact this
 
 end OM.Proof
