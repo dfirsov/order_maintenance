@@ -63,6 +63,6 @@ structure TopContract (TI : Core → Prop) (μ : Job → Nat) (J cap : Nat) : Pr
       1 ≤ μ job ∧ μ job ≤ J ∧ TI (markState s2 x s.C.size (s.C.size + 1) job)
   step : ∀ s A job, INV s A → TI s → s.resJob = some job →
     ∃ r s', (jobStep job).run s = .ok r s' ∧ TI { s' with resJob := r } ∧
-      ∀ j', r = some j' → μ j' < μ job
+      ∀ j', r = some j' → 1 ≤ μ j' ∧ μ j' < μ job
 
 end OM.Proof
