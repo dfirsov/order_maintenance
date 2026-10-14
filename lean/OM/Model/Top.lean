@@ -1,0 +1,413 @@
+import OM.Model.PQ
+
+/-!
+# Level F: the top structure (`prototype/top_wbbt.py`)
+
+A weight-balanced tree over the chunks with immutable label tables, stored paths and ghost
+drains. A chunk's tag is the concatenation of the labels along its path `p[1..H]`, with
+`F_j = lab_{p[j]}(p[j-1])` in bits `[(j-1)β, jβ)`.
+-/
+
+namespace OM.Model
+
+/-- `(n, l)` with `l` placed after the existing entries, or replacing the entry for `n`. -/
+def assocSet {β : Type} (l : List (Nat × β)) (k : Nat) (v : β) : List (Nat × β) :=
+  if l.any (·.1 == k) then l.map (fun p => if p.1 == k then (k, v) else p) else l ++ [(k, v)]
+
+def assocErase {β : Type} (l : List (Nat × β)) (k : Nat) : List (Nat × β) :=
+  l.filter (·.1 != k)
+
+/-- Split a list into pieces of length `n` (the last may be shorter). -/
+def chunksOf {α : Type} (n : Nat) : List α → List (List α)
+  | [] => []
+  | x :: xs => ((x :: xs).take (max n 1)) :: chunksOf n ((x :: xs).drop (max n 1))
+termination_by l => l.length
+decreasing_by simp; omega
+
+/-! ### Utilities -/
+
+def resetTop : CM Unit :=
+  modify fun s => { s with nodes := #[default], path := #[], cin := #[], lpar := #[] }
+
+def newNode (h : Nat) : CM Nat := do
+  let s ← get
+  let i := s.nodes.size
+  set { s with nodes := s.nodes.push { height := h } }
+  return i
+
+def getPath (c : Nat) : CM (Array Nat) := return (← get).path.getX c
+def setPath (c : Nat) (p : Array Nat) : CM Unit :=
+  modify fun s => { s with path := s.path.setX c p }
+def setPathAt (c j v : Nat) : CM Unit :=
+  modify fun s => { s with path := s.path.setX c ((s.path.getX c).setX j v) }
+def getLpar (c : Nat) : CM Nat := return (← get).lpar.getX c
+def setLpar (c v : Nat) : CM Unit := modify fun s => { s with lpar := s.lpar.setX c v }
+
+/-- Tables containing entry `e`, which lives at height `h` (0 = chunk). -/
+def inTablesOf (e h : Nat) : CM (List Nat) := do
+  if h == 0 then return (← get).cin.getX e else return (← getN e).inTables
+
+def setInTables (e h : Nat) (l : List Nat) : CM Unit := do
+  if h == 0 then modify fun s => { s with cin := s.cin.setX e l }
+  else modN e fun n => { n with inTables := l }
+
+def tagOf (c : Nat) : CM Nat := do
+  let P ← getP
+  let p ← getPath c
+  let mut t := 0
+  let mut below := c
+  for j in [1:P.H + 1] do
+    let some l := (← getN (p.getX j)).lab? below | bug "tag_of: missing label"
+    t := t ||| (l <<< ((j - 1) * P.beta))
+    below := p.getX j
+  return t
+
+def guardTag (c t : Nat) : CM Unit := do
+  let C ← getC c
+  if C.prev != NIL && !((← getC C.prev).tag < t) then guard "top: tag not above predecessor"
+  if C.next != NIL && !(t < (← getC C.next).tag) then guard "top: tag not below successor"
+
+/-- A label for a new entry right before/after `e` in the table of node `t` (averaging). -/
+def roomNextTo (t e : Nat) (before : Bool) : CM Nat := do
+  let P ← getP
+  let tab := (← getN t).table
+  let some i := tab.findIdx? (·.1 == e) | bug "room_next_to: entry not in table"
+  let labAt (k : Nat) : Nat := (tab.getD k (0, 0)).2
+  -- `lo1` is the lower neighbour's label plus one (the prototype's `lo = -1` becomes 0)
+  let (lo1, hi) :=
+    if before then ((if i > 0 then labAt (i - 1) + 1 else 0), labAt i)
+    else (labAt i + 1, if i + 1 < tab.length then labAt (i + 1) else 1 <<< P.beta)
+  if lo1 ≥ hi then guard "top: table full"
+  return (lo1 + hi - 1) / 2
+
+def tableInsert (t e new : Nat) (before : Bool) (lab : Nat) : CM Unit := do
+  let T ← getN t
+  let some i := T.table.findIdx? (·.1 == e) | bug "table_insert: entry not in table"
+  let table := T.table.insertIdx (if before then i else i + 1) (new, lab)
+  let side ← if T.draining then
+      match lookup T.side e with
+      | some sd => pure (assocSet T.side new sd)
+      | none => bug "table_insert: entry has no side"
+    else pure T.side
+  modN t fun n => { n with table := table, side := side }
+
+/-! ### Construction -/
+
+/-- One step of `init_steps`: build the chain node of height `prep.h`, or finish. Returns
+`true` once the structure is complete. -/
+def initStep : CM Bool := do
+  let P ← getP
+  let some pr := (← get).prep | bug "init_step: nothing to prepare"
+  let c := pr.chunk
+  if pr.h == 1 then
+    resetTop
+    setInTables c 0 []
+  if pr.h ≤ P.H then
+    let h := pr.h
+    let center := 1 <<< (P.beta - 1)
+    let v ← newNode h
+    modN v fun n => { n with
+      children := [pr.below], table := [(pr.below, center)], weight := 1,
+      first := c, last := c }
+    if h == 1 then
+      setInTables c 0 [v]
+      setLpar c v
+    else
+      modN pr.below fun n => { n with inTables := [v], livePar := v }
+    modify fun s => { s with prep := some { pr with
+      h := h + 1, below := v, tag := pr.tag ||| (center <<< ((h - 1) * P.beta)),
+      path := pr.path.setX h v } }
+    return false
+  else
+    setPath c pr.path
+    modC c fun C => { C with tag := pr.tag }
+    modify fun s => { s with prep := none }
+    return true
+
+def build (chunks : List Nat) : CM Unit := do
+  resetTop
+  let P ← getP
+  let mut level := chunks
+  for h in [1:P.H + 1] do
+    let groups := if h < P.H then chunksOf P.a level else [level]
+    let mut nxt : Array Nat := #[]
+    for grp in groups do
+      let v ← newNode h
+      let gap := (1 <<< P.beta) / (grp.length + 1)
+      let mut table : Array (Nat × Nat) := #[]
+      let mut weight := 0
+      let mut i := 0
+      for e in grp do
+        table := table.push (e, (i + 1) * gap)
+        i := i + 1
+        if h == 1 then
+          setInTables e 0 [v]
+          setLpar e v
+          weight := weight + 1
+        else
+          modN e fun n => { n with inTables := [v], livePar := v }
+          weight := weight + (← getN e).weight
+      modN v fun n => { n with children := grp, table := table.toList, weight := weight }
+      nxt := nxt.push v
+    level := nxt.toList
+  for c in chunks do
+    let mut p := Array.replicate (P.H + 1) NIL
+    let mut v ← getLpar c
+    for j in [1:P.H + 1] do
+      p := p.setX j v
+      let V ← getN v
+      if V.first == NIL then modN v fun n => { n with first := c }
+      modN v fun n => { n with last := c }
+      v := V.livePar
+    setPath c p
+  for c in chunks do
+    let t ← tagOf c
+    modC c fun C => { C with tag := t }
+
+def relabelAll : CM Unit := do
+  let s ← get
+  let mut chunks : Array Nat := #[]
+  let mut c := s.firstChunk
+  for _ in [0:s.C.size] do
+    if c == NIL then break
+    chunks := chunks.push c
+    c := (s.C.getX c).next
+  build chunks.toList
+
+/-! ### Drains -/
+
+def sameDrain (a b : Nat) : CM Bool := do
+  let A ← getN a
+  let B ← getN b
+  return A.overflowOf != NIL && A.overflowOf == B.overflowOf
+
+def startDrain (v : Nat) : CM Unit := do
+  let P ← getP
+  let V ← getN v
+  let h := V.height
+  let kids := V.children.toArray
+  if kids.size < 2 then return
+  let s0 ← get
+  let wt (e : Nat) : Nat := if h == 1 then 1 else (s0.nodes.getX e).weight
+  let total := (kids.toList.map wt).sum
+  -- partition the live children by weight
+  let mut acc := 0
+  let mut k := 0
+  for i in [0:kids.size - 1] do
+    if acc + wt kids[i]! ≤ total / 2 then
+      acc := acc + wt kids[i]!
+      k := i + 1
+    else break
+  k := max k 1
+  if h > 1 then
+    -- never separate the two targets of a still-active drain
+    for _ in [0:kids.size] do
+      if 0 < k && k < kids.size then
+        if ← sameDrain kids[k - 1]! kids[k]! then k := k + 1 else break
+      else break
+    if k ≥ kids.size then
+      k := kids.size - 1
+      for _ in [0:kids.size] do
+        if k > 0 then
+          if ← sameDrain kids[k - 1]! kids[k]! then k := k - 1 else break
+        else break
+    if k == 0 then return
+  let boundary := kids[k]!
+  let order := V.order
+  let entries := order.filter fun e =>
+    h == 1 || kids.contains e || (s0.nodes.getX e).first != NIL
+  let mut side : List (Nat × Side) := []
+  let mut sd := Side.left
+  for e in order do
+    if e == boundary then sd := .right
+    side := assocSet side e sd
+  if h > 1 then
+    for e in entries do
+      let E := s0.nodes.getX e
+      if E.draining then
+        let some st := lookup side E.t1 | bug "start_drain: target has no side"
+        side := assocSet side e st
+  let sideOf (e : Nat) : Option Side := lookup side e
+  let left := entries.filter (sideOf · == some .left)
+  let right := entries.filter (sideOf · == some .right)
+  -- labels for v1 / v2 in every table holding v (guards first)
+  let mut l1 : List Nat := []
+  let mut l2 : List Nat := []
+  for T in V.inTables do
+    l1 := l1 ++ [← roomNextTo T v true]
+  for T in V.inTables do
+    l2 := l2 ++ [← roomNextTo T v false]
+  -- mutate
+  let v1 ← newNode h
+  let v2 ← newNode h
+  for (T, a, b) in V.inTables.zip (l1.zip l2) do
+    tableInsert T v v1 true a
+    tableInsert T v v2 false b
+  for (w, part) in [(v1, left), (v2, right)] do
+    let gap := (1 <<< P.beta) / (part.length + 1)
+    let table := (List.range part.length).zip part |>.map fun (i, e) => (e, (i + 1) * gap)
+    modN w fun n => { n with inTables := V.inTables, table := table }
+  for e in left do
+    setInTables e (h - 1) ((← inTablesOf e (h - 1)) ++ [v1])
+  for e in right do
+    setInTables e (h - 1) ((← inTablesOf e (h - 1)) ++ [v2])
+  for (w, sdw) in [(v1, Side.left), (v2, Side.right)] do
+    let mut ch : List Nat := []
+    for e in kids do
+      match sideOf e with
+      | some x => if x == sdw then ch := ch ++ [e]
+      | none => bug "start_drain: child has no side"
+    for e in ch do
+      if h == 1 then setLpar e w
+      else modN e fun n => { n with livePar := w }
+    let weight := (ch.map wt).sum
+    modN w fun n => { n with
+      children := ch, weight := weight, livePar := V.livePar,
+      overflowOf := v }
+  let par ← getN V.livePar
+  if !par.children.contains v then bug "start_drain: not a child of its parent"
+  modN V.livePar fun n => { n with children := n.children.replace1 v [v1, v2] }
+  modN v fun n => { n with
+    draining := true, t1 := v1, t2 := v2, side := side,
+    livePar := NIL, children := [] }
+
+def finishDrain (v : Nat) : CM Unit := do
+  let V ← getN v
+  let h := V.height
+  for e in V.order do
+    let tabs ← inTablesOf e (h - 1)
+    if tabs.contains v then setInTables e (h - 1) (tabs.erase v)
+  for T in V.inTables do
+    let Tn ← getN T
+    if !(Tn.order.contains v) then bug "finish_drain: ghost missing from a table"
+    modN T fun n => { n with table := assocErase n.table v, side := assocErase n.side v }
+  for t in [V.t1, V.t2] do
+    if (← getN t).overflowOf == v then modN t fun n => { n with overflowOf := NIL }
+  modN v fun n => { n with alive := false, inTables := [] }
+
+/-- Move one chunk off ghost `v`. Returns `false` when `v` is fully drained. -/
+def drainStep (v : Nat) : CM Bool := do
+  let P ← getP
+  let V ← getN v
+  if !V.alive then return false
+  let h := V.height
+  if V.first == NIL then
+    finishDrain v
+    return false
+  let belowOf (y : Nat) : CM Nat := do
+    if h == 1 then return y else return (← getPath y).getX (h - 1)
+  let y0 := V.first
+  let b0 ← belowOf y0
+  let some sd0 := lookup V.side b0 | bug "drain_step: no side"
+  let (t, left, y, below) ← if sd0 == .left then pure (V.t1, true, y0, b0) else do
+    let y := V.last
+    let b ← belowOf y
+    let some sd := lookup V.side b | bug "drain_step: no side"
+    if sd != .right then guard "top: drain sides out of order"
+    pure (V.t2, false, y, b)
+  let T ← getN t
+  let p ← getPath y
+  if h + 1 ≥ p.size then bug "drain_step: draining the root"
+  let par ← getN (p.getX (h + 1))
+  let (some pt, some tb) := (par.lab? t, T.lab? below) | guard "top: missing table entry"
+  let some pv := par.lab? v | bug "drain_step: ghost missing from parent table"
+  let some vb := V.lab? below | bug "drain_step: entry missing from ghost table"
+  let b := P.beta
+  let old := (pv <<< (h * b)) ||| (vb <<< ((h - 1) * b))
+  let new := (pt <<< (h * b)) ||| (tb <<< ((h - 1) * b))
+  let cy ← getC y
+  if cy.tag < old then bug "drain_step: negative tag"
+  let tag := cy.tag - old + new
+  guardTag y tag
+  -- mutate
+  modC y fun C => { C with tag := tag }
+  setPathAt y h t
+  if V.first == V.last then modN v fun n => { n with first := NIL, last := NIL }
+  else if left then modN v fun n => { n with first := cy.next }
+  else modN v fun n => { n with last := cy.prev }
+  if left then
+    if T.first == NIL then modN t fun n => { n with first := y }
+    modN t fun n => { n with last := y }
+  else
+    if T.last == NIL then modN t fun n => { n with last := y }
+    modN t fun n => { n with first := y }
+  return true
+
+/-! ### Insertion jobs -/
+
+/-- The O(1) part of a top insertion: `y, z` are linked before/after `x` in the chunk list.
+Returns the job that does the rest. -/
+def insertAround (x y z : Nat) : CM Job := do
+  let P ← getP
+  let px ← getPath x
+  let tabs := (← get).cin.getX x
+  let mut ly : List Nat := []
+  let mut lz : List Nat := []
+  for T in tabs do
+    ly := ly ++ [← roomNextTo T x true]
+  for T in tabs do
+    lz := lz ++ [← roomNextTo T x false]
+  let p1 := px.getX 1
+  let some f1x := (← getN p1).lab? x | bug "insert_around: x missing from its parent table"
+  let some i1 := tabs.idx? p1 | bug "insert_around: parent not among x's tables"
+  let tx := (← getC x).tag
+  if tx < f1x then bug "insert_around: negative tag"
+  let ty := tx - f1x + ly.getD i1 0
+  let tz := tx - f1x + lz.getD i1 0
+  guardTag y ty
+  guardTag z tz
+  for (T, a, b) in tabs.zip (ly.zip lz) do
+    tableInsert T x y true a
+    tableInsert T x z false b
+  for c in [y, z] do
+    setPath c (Array.replicate (P.H + 1) NIL)
+    setInTables c 0 tabs
+    setLpar c (← getLpar x)
+  let lp ← getLpar x
+  if !(← getN lp).children.contains x then bug "insert_around: x not a child of its parent"
+  modN lp fun n => { n with children := n.children.replace1 x [y, x, z] }
+  modC y fun C => { C with tag := ty }
+  modC z fun C => { C with tag := tz }
+  return { x := x, y := y, z := z, pc := .copy 1 }
+
+/-- The sweep funding loop of `v`, resumed after `k` sweep steps. -/
+def fundLoop (j : Job) (v up src k : Nat) : CM (Option Job) := do
+  if k < (← getP).s then
+    if (← drainStep src) then return some { j with pc := .fund v up src (k + 1) }
+  return some { j with pc := .walk (some up) }
+
+def afterDrain (j : Job) (v up : Nat) : CM (Option Job) := do
+  let src := (← getN v).overflowOf
+  if src != NIL then fundLoop j v up src 0
+  else return some { j with pc := .walk (some up) }
+
+/-- The body of the upward walk at node `v`, up to its next suspension point. -/
+def walkBody (j : Job) (v : Nat) : CM (Option Job) := do
+  if v == NIL then return none
+  let P ← getP
+  let V ← getN v
+  let up := V.livePar
+  modN v fun n => { n with weight := n.weight + 2 }
+  if up != NIL && !V.draining && V.overflowOf == NIL && V.weight + 2 > 2 * P.a ^ V.height then
+    startDrain v
+    return some { j with pc := .afterDrain v up }
+  afterDrain j v up
+
+/-- Resume a job until its next suspension point (`some`), or to its end (`none`). -/
+def jobStep (j : Job) : CM (Option Job) := do
+  let P ← getP
+  match j.pc with
+  | .copy l =>
+    let v := (← getPath j.x).getX l
+    setPathAt j.y l v
+    setPathAt j.z l v
+    let V ← getN v
+    if V.first == j.x then modN v fun n => { n with first := j.y }
+    if V.last == j.x then modN v fun n => { n with last := j.z }
+    return some { j with pc := if l < P.H then .copy (l + 1) else .walk none }
+  | .walk none => walkBody j (← getLpar j.y)
+  | .walk (some v) => walkBody j v
+  | .afterDrain v up => afterDrain j v up
+  | .fund v up src k => fundLoop j v up src k
+
+end OM.Model

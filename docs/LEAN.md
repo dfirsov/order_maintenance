@@ -1,6 +1,6 @@
 # Lean Formalization — Design
 
-Status: **v0.2** (2026-10-14); M0 implemented in `lean/`. This note fixes the design of the
+Status: **v0.3** (2026-10-14); M0 and M1 implemented in `lean/`. This note fixes the design of the
 Lean 4 development. It supersedes `docs/SPEC.md` §9–§10 (Lean architecture and
 milestones), which assumed a shallow cost monad.
 
@@ -136,6 +136,14 @@ development has two levels.
   * invariants F, (P), (W1), (W3), (O), (S), (Q);
   * Lemmas G1–G4, C1–C3, Z, R, T0–T5, W;
   * the induction over time of `PROOF.md` §4.7.
+  **As implemented (M1, `lean/OM/Model/`):** `State`, `PQ`, `Top`, `Core`, `Wrapper`. Code
+  runs in `EStateM Err Core`; a failed guard throws and *keeps* the state reached, like the
+  prototype's exceptions, and the handler runs FALLBACK on it. Records live in 1-based arrays
+  with `NIL = 0` (memory that reads 0 until written, as on the machine). The prototype's
+  generators become explicit program counters (`JobPc` for top insertion jobs, `Prep` for the
+  deferred construction of a core). Every function is total: loops are `for` over bounded
+  ranges, with no `partial` and no `while`. Instrumentation is omitted. `Err.bug` marks the
+  places where the prototype would crash (assertions, missing keys).
 * **Level M (machine program, `OM/Impl/`).** The same algorithm as a program of §3, a
   straightforward transliteration of Level F.
 * **Simulation theorem.** For an encoding `enc : F.State → M.State`, running the program of
@@ -233,7 +241,7 @@ OM/
 | # | Deliverable | Proof content | Risk |
 |---|---|---|---|
 | M0 ✅ | Lake project with Mathlib; `Spec`; machine syntax, `exec`, cost; `wp` with soundness | wp soundness | low |
-| M1 | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
+| M1 ✅ | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
 | M2 | **Theorem A** at Level F | INV-S preservation, guards, FALLBACK, Invariant R | medium |
 | M3 | Theorem Z (warm-up, can start in parallel with M1) | standalone combinatorics | low |
 | M4 | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W | invariant reasoning | medium |
@@ -247,13 +255,23 @@ model, and the mechanical machine layer (M6) comes last, when Level F is stable.
 
 ## 8. Validation before proof
 
-1. **Traces.** The Python prototype exports operation sequences with their answers and
-   instrumented maxima as JSON, for every stress workload of `prototype/stress.py`.
-2. **Level F replays them** and must give the same answers, the same structural events
-   (splits, drains, reservations) and the same maxima. This catches transliteration errors
-   before they cost proof effort.
-3. **Level M replays a subset** through the interpreter and checks that the encoding
+1. **Traces** (`prototype/trace.py`, `trace_campaign.py`). The Python prototype runs a stress
+   workload and writes every operation with the prototype's answer and checkpoints of its
+   state: the key (tag, group label, element label) of every new element, the fallback and
+   rebuild counters, and digests that hash the keys of all elements of `cur` and `nxt` in list
+   order (after each of the first 2000 updates, then periodically). Random order queries are
+   interleaved.
+2. **Level F replays them** (`lake exe replay`, `OM/Test/Replay.lean`) and must reproduce every
+   answer, key, counter and digest exactly. Equal digests mean equal labels and tags for every
+   element, so the replay checks the whole label state, not just the answers. Presets: the
+   default and proof parameters, two presets with labels far too narrow (FALLBACK constantly,
+   from the core and from the top structure), and fuzz traces with random small parameters
+   and random `K_B`. Lean panics abort the replay.
+3. **Level M replays a subset** through the interpreter (M6) and checks that the encoding
    commutes, and that the measured step counts stay within the `cost_op` expressions.
+
+To make exact replay possible, the prototype's priority queue was made deterministic: within a
+bucket, the most recently added chunk is popped first (previously: Python set order).
 
 ---
 

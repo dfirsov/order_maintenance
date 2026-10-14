@@ -1,0 +1,21 @@
+KILLED    M01 averaging rounds up
+KILLED    M02 group split prefers the right sibling on ties
+KILLED    M03 chunk split prefers the right sibling on ties
+KILLED    M04 drain partition boundary strict
+KILLED    M05 drain threshold off by one
+KILLED    M06 one sweep step fewer
+KILLED    M07 rebuild trigger strict
+KILLED    M08 next capacity floor
+KILLED    M09 FALLBACK group size
+KILLED    M10 PQ +1 move ignores bucket sharing
+KILLED    M11 top averaging rounds up
+KILLED    M12 table insert after lands before
+KILLED    M13 rebuild copies dead elements
+KILLED    M14 one reservation step fewer
+KILLED    M15 chain labels off centre
+KILLED    M16 quiet siblings re-split in reverse order
+KILLED    M17 finished ghost stays in entries' table lists
+KILLED    M18 no FALLBACK after a failed background guard
+KILLED    M19 PQ pops the oldest chunk of a bucket
+KILLED    M20 drain-step range update swapped
+20/20 mutants killed

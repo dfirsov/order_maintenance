@@ -4,6 +4,10 @@ Buckets are indexed by chunk size. Non-empty buckets form a sorted doubly
 linked list, so pop_max and +-1 size changes cost O(1). Entering at a size
 above theta+1 needs a downward scan for the predecessor bucket; that slow path
 is counted in stats.pq_scan and should never happen.
+
+Within a bucket, chunks are kept in insertion order and pop_max takes the most
+recently added one (LIFO), so runs are deterministic and the Lean model
+(lean/OM/Model) can replay them exactly.
 """
 from __future__ import annotations
 
@@ -12,7 +16,7 @@ class BucketPQ:
     def __init__(self, core) -> None:
         self.core = core
         self.theta = core.P.theta
-        self.bucket: dict[int, set[int]] = {}
+        self.bucket: dict[int, dict[int, None]] = {}   # ordered sets
         self.nb_next: dict[int, int | None] = {}
         self.nb_prev: dict[int, int | None] = {}
         self.hi: int | None = None          # largest non-empty bucket
@@ -41,16 +45,16 @@ class BucketPQ:
     def _add(self, c: int, s: int, p: int | None) -> None:
         b = self.bucket.get(s)
         if b:
-            b.add(c)
+            b[c] = None
         else:
-            self.bucket[s] = {c}
+            self.bucket[s] = {c: None}
             self._link_after(s, p)
         self.where[c] = s
 
     def _del(self, c: int) -> None:
         s = self.where.pop(c)
         b = self.bucket[s]
-        b.discard(c)
+        del b[c]
         if not b:
             del self.bucket[s]
             p, n = self.nb_prev.pop(s), self.nb_next.pop(s)
@@ -101,7 +105,7 @@ class BucketPQ:
 
     def pop_max(self) -> int:
         s = self.hi
-        c = next(iter(self.bucket[s]))
+        c = next(reversed(self.bucket[s]))
         self._del(c)
         return c
 

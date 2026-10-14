@@ -12,3 +12,7 @@ rev = "v4.35.0"
 
 [[lean_lib]]
 name = "OM"
+
+[[lean_exe]]
+name = "replay"
+root = "OM.Test.Replay"

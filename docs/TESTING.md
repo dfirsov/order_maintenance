@@ -491,3 +491,75 @@ python3 lemmas.py 300000 -j 8 --preset both --seeds 2
 python3 -c "import top_stress as t; print(t.run('t3', 30000, check_every=1500, s=11)['exact_violations'])"
 python3 mutate.py -j 6
 ```
+
+---
+
+## 10. The Lean model against the prototype (2026-10-14, milestone M1)
+
+The Level F model of the Lean development (`lean/OM/Model/`, `docs/LEAN.md` §4) is a
+transliteration of the prototype. Trace replay (`docs/LEAN.md` §8) checks that it computes
+*exactly* what the prototype computes. A trace (`prototype/trace.py`) records every operation
+with the prototype's answer, together with several checkpoints:
+* the key (tag, group label, element label) of each new element;
+* the fallback and rebuild counters;
+* digests of the keys of all elements of `cur` and `nxt`.
+
+The Lean replay (`lake exe replay`) must reproduce all of them. Matching digests mean the two
+implementations assigned the same labels and tags to every element.
+
+**Prototype change.** The priority queue now pops the most recently added chunk of the
+largest bucket. Previously it popped in Python set order, which cannot be replayed. The battery
+passes with the change.
+
+### Campaign (`results/replay_2e5.txt`)
+
+| Traces | Operations | Result |
+|---|---|---|
+| 23 workloads × presets `default`, `proof` | 2·10⁵ each | exact |
+| 23 workloads × presets `tiny`, `tinytop` (labels far too narrow) | 5·10⁴ each | exact |
+| 2,000 fuzz traces (random small parameters, `K_B ∈ {2,3,4,6}`, random operation mix) | 200–1,500 | exact |
+| 200 long fuzz traces | 5,000–30,000 | exact |
+
+**Totals:**
+* **traces:** 2,292, all replayed exactly;
+* **records:** 31,223,622;
+* **FALLBACK:** 450,531 executions, in 1,869 traces;
+* **rebuilds:** 46,896.
+
+Lean panics abort the replay; there were none.
+
+The first fuzz run did produce a panic. The replay still matched, so the trace checks alone
+would have missed it. In `startDrain`, a nested `← sameDrain kids[k-1]! kids[k]!` was hoisted
+by `do`-notation ahead of the bounds test that guards it in Python. The out-of-bounds read
+returned a default value, and its result was then discarded. The read is now done only when
+the index is in range.
+
+**Speed.** The compiled replay runs about 10⁵ operations in 4 seconds, linear in the
+trace length, so the model's arrays are updated in place.
+
+### Mutation testing of the replay (`lean/scripts/mutate_model.py`, `results/mutation_lean.txt`)
+
+20 behavioural bugs were injected into the Lean model, one at a time, and replayed against
+136 short traces: every workload under all four presets at 3,000 operations, plus 40 fuzz
+traces. The mutants cover the following areas.
+
+| Area | Mutants |
+|---|---|
+| Label arithmetic | rounding of averaging, in the core and in the top tables |
+| Tie-breaking | group and chunk splits |
+| Top structure | drain threshold and drain partition; sweep funding; table insertion position; ghost cleanup; drain-step range updates |
+| Priority queue | bucket moves; LIFO pop order |
+| Wrapper | rebuild trigger; next capacity; copying of dead elements |
+| Background work | reservation steps; FALLBACK group size; skipping FALLBACK after a failed guard; re-split order of quiet siblings |
+
+**20/20 killed.**
+
+### Reproducing
+
+```
+cd lean && lake build replay
+cd ../prototype
+python3 trace_campaign.py OUTDIR 200000 -j 16 --fuzz 2000 --replay ../lean/.lake/build/bin/replay
+python3 trace_campaign.py MUTDIR 3000 --fuzz 40
+python3 ../lean/scripts/mutate_model.py COPY_OF_LEAN MUTDIR
+```

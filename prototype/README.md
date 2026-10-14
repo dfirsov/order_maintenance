@@ -7,7 +7,7 @@ Lean port is mechanical.
 |---|---|
 | `spec.py` | abstract model (plain list) |
 | `core.py` | insert-only core: elements → groups → chunks, guarded writes, fallback, reservation process, `check()` for the safety invariant (SPEC §6) |
-| `pq.py` | O(1) bucket priority queue of chunks waiting for the top level |
+| `pq.py` | O(1) bucket priority queue of chunks waiting for the top level (deterministic: LIFO within a bucket) |
 | `top_simple.py` | milestone-1 top level: averaging plus full relabel (correct, not O(1)); simulates a job length of Θ(log m) |
 | `top_wbbt.py` | real top level (SPEC §5.6): weight-balanced tree, immutable label tables, stored paths, ghost drains; O(log m) per job |
 | `guards.py` | `GuardFailure`, shared by the core and the top level |
@@ -25,6 +25,7 @@ Lean port is mechanical.
 | `lemmas.py` | lemma checker: measures every quantitative bound of `docs/PROOF.md` §4 per core (presets `default`, `proof`), including the exact per-height top bounds |
 | `top_bounds.py` | exact constants of Lemmas T3–T5 per height, plus closed forms for all heights (`docs/PROOF.md` §4.5) |
 | `lower_bounds.py` | exact constants and conditions I1–I10 of the lower levels and the assembly, per `L` (`docs/PROOF.md` §4.7) |
+| `trace.py`, `trace_campaign.py` | export operation traces with answers, keys, counters and state digests; the Lean model (`lean/OM/Test/Replay.lean`) must replay them exactly |
 | `linecov.py` | line coverage of the algorithm under all suites; every uncovered line should be a provably unreachable path |
 | `results/` | raw outputs of the campaign (see `docs/TESTING.md`) |
 
