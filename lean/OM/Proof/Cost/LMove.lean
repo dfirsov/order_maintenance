@@ -833,4 +833,106 @@ theorem linv_cmoveL {s : Core} {A : Abs} {gh : GGh} {lg : LGh} {s₀ δ δu : Na
       · rw [if_pos hy0]; omega
       · rw [if_neg hy0]; have := hlastR hy0; omega
 
+/-- **Lemma C3 across a move to the right sibling** (the chunk drive's hook). -/
+theorem linv_cmoveR {s : Core} {A : Abs} {gh : GGh} {lg : LGh} {s₀ δ δu : Nat → Nat} {x : Nat}
+    (hI : INV s A) (hG : GInv s A.elist gh (fun _ => 0)) (hP : GParams s.P) (hLP : LParams s.P)
+    (hC : CInvE s A.elist δ δu s₀ x) (hL : LInv s lg s₀ δ δu) (hxL : LiveC s x)
+    (hst : cSt s x = .splitting) (he : cF s x ≠ NIL) (hFB : FamBound s δ s₀ x) :
+    ∃ labs, (pushLabsR s x (unitCand s x false).length).run s = .ok labs s ∧
+      ∃ lg', LInv (cmoveRState s x (unitCand s x false) labs) lg' s₀ δ δu := by
+  have Fx := hC.cfam x hxL hst
+  have hxz := Fx.rx hI hxL
+  obtain ⟨hxc', tl, htl⟩ := hI.run_ne_nil he
+  have hE := hI.cEnds x hxc'
+  have hlm : cLs s x ∈ A.grps x := by rw [hE.2, htl]; exact getLastD_cons_mem _ _ _
+  have hgl : cLs s x ∈ A.glist := A.grps_sub_glist hxc' hlm
+  have ru := right_unit hI hG he
+  have UF := unit_facts (u := unitCand s x false) (x := x) hI hG hP (by
+    rcases ru with ⟨hq, h⟩ | ⟨p, hp, hps, hr, h, hok⟩
+    · left; rw [h]
+      exact ⟨hq, rfl, hI.mem_glist_iff.mp hgl, hI.chk x hxc' _ hlm⟩
+    · right
+      refine ⟨p, hp, hps, by rw [h, hr], ?_⟩
+      rw [h] at hok; exact (unitOK_three hok).2.2.2.2.1)
+  obtain ⟨-, hnd, hmem, hone, hcl, -, -⟩ := UF
+  have hsh : UnitShape s (unitCand s x false) ∧ (unitCand s x false).getLastD NIL = cLs s x := by
+    rcases ru with ⟨-, h⟩ | ⟨p, hp, hps, hr, h, -⟩
+    · rw [h]; exact ⟨Or.inl ⟨_, rfl⟩, rfl⟩
+    · have F := hG.fam p hp hps
+      rw [h]
+      refine ⟨Or.inr ⟨_, _, _, rfl, F.lAdj, ?_⟩, rfl⟩
+      rw [← hr]; exact F.rAdj
+  obtain ⟨hsh, hlastu'⟩ := hsh
+  generalize unitCand s x false = u at *
+  have hk : u.length ≤ 3 := by rcases hsh with ⟨a, rfl⟩ | ⟨a, b, c, rfl, -, -⟩ <;> simp
+  have hk1 : 1 ≤ u.length := by rcases hsh with ⟨a, rfl⟩ | ⟨a, b, c, rfl, -, -⟩ <;> simp
+  have hun : 1 ≤ units s x := by obtain ⟨um, -, hum, -⟩ := hone; exact units_pos hum
+  obtain ⟨-, hpfR⟩ := push_room hC hL hP hxL hst hFB hun (Or.inr rfl) hk
+  have hD := hLP.Dg
+  have hpush := hLP.push
+  have hPCD : (lg.pf (cRr s x) + u.length) * s.P.D_g ≤ PC s.P * s.P.D_g :=
+    Nat.mul_le_mul_right _ hpfR
+  rw [Nat.add_mul] at hPCD
+  have hfirstR : cF s (cRr s x) ≠ NIL →
+      cG s.P ≤ gL s (cF s (cRr s x)) + lg.pf (cRr s x) * s.P.D_g ∧
+        gL s (cF s (cRr s x)) ≤ cG s.P + lg.pb (cRr s x) * s.P.D_g := by
+    intro hne
+    have := hI.cF_live hne
+    have h := hL.range _ this.1; rw [this.2] at h; exact h
+  have hkD : u.length * s.P.D_g ≤
+      (if cF s (cRr s x) = NIL then cG s.P + s.P.D_g else gL s (cF s (cRr s x))) := by
+    by_cases hz0 : cF s (cRr s x) = NIL
+    · rw [if_pos hz0]; omega
+    · rw [if_neg hz0]; have := (hfirstR hz0).1; omega
+  have hroom : u.length * s.P.D_g ≤ (match (if cF s (cRr s x) = NIL then none
+      else some (gL s (cF s (cRr s x)))) with
+        | none => cG s.P + s.P.D_g | some n => n) := by
+    by_cases hz0 : cF s (cRr s x) = NIL
+    · rw [if_pos hz0]; rw [if_pos hz0] at hkD; exact hkD
+    · rw [if_neg hz0]; rw [if_neg hz0] at hkD; exact hkD
+  obtain ⟨labs, hlabs⟩ := pushFrontLabs_ok s (by omega) hroom
+  refine ⟨labs, hlabs, ?_⟩
+  have hlen : labs.length = u.length := pushFrontLabs_len hlabs
+  have hv : labs = (List.range u.length).map fun i =>
+      (if cF s (cRr s x) = NIL then cG s.P + s.P.D_g else gL s (cF s (cRr s x))) -
+        (u.length - i) * s.P.D_g := by
+    rw [(pushFrontLabs_vals hlabs).1]
+    by_cases hz0 : cF s (cRr s x) = NIL
+    · simp only [if_pos hz0]
+    · simp only [if_neg hz0]
+  have M := cmoveR_spec (s := s) (x := x) (u := u) (labs := labs) (Ne.symm hxz) hxL.2 Fx.rLive.2
+    hnd hlen (fun g hg => (hmem g hg).1.2.1)
+  obtain ⟨-, hun', hle⟩ := cinv_cmove hI hG hC M hxL hst (Or.inr rfl) (Ne.symm hxz) hmem hnd hone
+  have E := cmoveR_ends (s := s) (x := x) (u := u) (labs := labs) (Ne.symm hxz) hxL.2 Fx.rLive.2
+  refine ⟨{ lg with child := fun g => if g ∈ u then false else lg.child g, pf := Function.update lg.pf (cRr s x) (lg.pf (cRr s x) + u.length), arF := Function.update lg.arF (cRr s x) (lg.arF (cRr s x) + u.length) }, ?_⟩
+  refine linv_cmove_core hI hG hC hL M hxL hst (Or.inr rfl) hmem hk hun' hle hcl (fun g => rfl)
+    rfl rfl rfl rfl rfl (fun c => hL.pb c) ?_ ?_ ?_ ?_
+  · intro c
+    show Function.update lg.pf (cRr s x) _ c ≤ Function.update lg.arF (cRr s x) _ c + lg.rs c + lg.cs c
+    by_cases hc : c = cRr s x
+    · rw [hc, Function.update_self, Function.update_self]; have := hL.pf (cRr s x); omega
+    · rw [Function.update_of_ne hc, Function.update_of_ne hc]; exact hL.pf c
+  · intro c
+    show lg.arB c + Function.update lg.arF (cRr s x) _ c = _
+    by_cases hc : c = cRr s x
+    · rw [hc, Function.update_self, if_pos rfl]; omega
+    · rw [Function.update_of_ne hc, if_neg hc]; omega
+  · exact gaps_right hI hL M hxz Fx.rAdj Fx.rLive hxL he hsh hlastu' hnd hmem hv hkD E.2.1 E.2.2 rfl
+  · refine range_cmove M hL (fun c => le_rfl) (fun c => ?_) (fun i hi => ?_)
+    · show lg.pf c ≤ Function.update lg.pf (cRr s x) _ c
+      by_cases hc : c = cRr s x
+      · rw [hc, Function.update_self]; omega
+      · rw [Function.update_of_ne hc]
+    · show cG s.P ≤ labs.getD i 0 + Function.update lg.pf (cRr s x) _ (cRr s x) * s.P.D_g ∧
+        labs.getD i 0 ≤ cG s.P + lg.pb (cRr s x) * s.P.D_g
+      rw [Function.update_self, Nat.add_mul, hv, List.getD_eq_getElem?_getD, List.getElem?_map,
+        List.getElem?_range hi]
+      simp only [Option.map_some, Option.getD_some]
+      have h1 : (u.length - i) * s.P.D_g ≤ u.length * s.P.D_g := Nat.mul_le_mul_right _ (by omega)
+      have h2 : 1 * s.P.D_g ≤ (u.length - i) * s.P.D_g := Nat.mul_le_mul_right _ (by omega)
+      rw [Nat.one_mul] at h2
+      by_cases hz0 : cF s (cRr s x) = NIL
+      · rw [if_pos hz0]; rw [if_pos hz0] at hkD; omega
+      · rw [if_neg hz0]; rw [if_neg hz0] at hkD; have := hfirstR hz0; omega
+
 end OM.Proof
