@@ -41,28 +41,28 @@ theorem driveChunkFrom_ok {s : Core} {x : Nat} (I : Nat → Core → Prop) (Q : 
 
 /-- The extra invariant of the chunk drive survives its steps; a move also finds room for the
 moved groups' labels (Lemma C3 provides it). -/
-structure CXSteps (X Y : Core → Prop) (L : List Nat) (δ δu : Nat → Nat) (x : Nat) : Prop where
-  moveL : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu x →
+structure CXSteps (X Y : Core → Prop) (L : List Nat) (δ δu s₀ : Nat → Nat) (x : Nat) : Prop where
+  moveL : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
     LiveC t x → cSt t x = .splitting → cF t x ≠ NIL → cSz t (cLl t x) ≤ cSz t (cRr t x) → X t →
     ∃ labs, (pushLabsL t x (unitCand t x true).length).run t = .ok labs t ∧
       X (cmoveLState t x (unitCand t x true) labs)
-  moveR : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu x →
+  moveR : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
     LiveC t x → cSt t x = .splitting → cF t x ≠ NIL → cSz t (cRr t x) < cSz t (cLl t x) → X t →
     ∃ labs, (pushLabsR t x (unitCand t x false).length).run t = .ok labs t ∧
       X (cmoveRState t x (unitCand t x false) labs)
-  rem : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu x →
+  rem : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
     LiveC t x → cSt t x = .splitting → cF t x = NIL → cSz t (cLl t x) ≤ t.P.theta →
     cSz t (cRr t x) ≤ t.P.theta → X t → Y (cremoveState t x)
 
 /-- The chunk drive's invariant after `j` moves of `x`'s split. -/
-structure CDriveInv (X : Core → Prop) (s : Core) (L : List Nat) (δ δu : Nat → Nat)
+structure CDriveInv (X : Core → Prop) (s : Core) (L : List Nat) (δ δu s₀ : Nat → Nat)
     (x y z a b c u₀ j : Nat) (t : Core) : Prop where
   xx : X t
   P : t.P = s.P
   ef : EFrame s t
   inv : ∃ A', INV t A' ∧ A'.elist = L
   ginv : ∃ gh, GInv t L gh (fun _ => 0)
-  cinv : CInvE t L δ δu x
+  cinv : CInvE t L δ δu s₀ x
   live : LiveC t x
   st : cSt t x = .splitting
   ll : cLl t x = y
@@ -73,14 +73,14 @@ structure CDriveInv (X : Core → Prop) (s : Core) (L : List Nat) (δ δu : Nat 
     (1 ≤ j ∧ cSz t y ≤ cSz t z + umax s.P ∧ cSz t z ≤ cSz t y + umax s.P)
 
 /-- The chunk drive ended. -/
-structure CDriveDone (X Y : Core → Prop) (s : Core) (L : List Nat) (δ δu : Nat → Nat) (x : Nat)
+structure CDriveDone (X Y : Core → Prop) (s : Core) (L : List Nat) (δ δu s₀ : Nat → Nat) (x : Nat)
     (t : Core) : Prop where
   xx : X t ∨ Y t
   P : t.P = s.P
   ef : EFrame s t
   inv : ∃ A', INV t A' ∧ A'.elist = L
   ginv : ∃ gh, GInv t L gh (fun _ => 0)
-  cinv : CInv t L (fun _ => 0) (fun _ => 0)
+  cinv : CInv t L (fun _ => 0) (fun _ => 0) s₀
 
 end OM.Proof
 
@@ -259,15 +259,15 @@ open OM.Model
 
 set_option linter.deprecated false
 
-theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu : Nat → Nat}
-    {x y z a b c u₀ j : Nat} {t : Core} (hXs : CXSteps X Y L δ δu x) (hP : GParams s.P)
+theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s₀ : Nat → Nat}
+    {x y z a b c u₀ j : Nat} {t : Core} (hXs : CXSteps X Y L δ δu s₀ x) (hP : GParams s.P)
     (hCP : CParams s.P) (hδ : ∀ c', c' ≠ y → c' ≠ x → c' ≠ z → δ c' = 0)
     (hThi : a + b + c ≤ s.P.T + kC s.P s.P.T)
     (hbal0 : a ≤ c + umax s.P + 1 ∧ c ≤ a + umax s.P + 1)
-    (hD : CDriveInv X s L δ δu x y z a b c u₀ j t) :
+    (hD : CDriveInv X s L δ δu s₀ x y z a b c u₀ j t) :
     ∃ t', ((chunkSplitStep x).run t = .ok true t' ∧
-        CDriveInv X s L δ δu x y z a b c u₀ (j + 1) t') ∨
-      ((chunkSplitStep x).run t = .ok false t' ∧ CDriveDone X Y s L δ δu x t') := by
+        CDriveInv X s L δ δu s₀ x y z a b c u₀ (j + 1) t') ∨
+      ((chunkSplitStep x).run t = .ok false t' ∧ CDriveDone X Y s L δ δu s₀ x t') := by
   obtain ⟨A', hI', hel⟩ := hD.inv
   obtain ⟨gh, hG⟩ := hD.ginv
   subst hel
@@ -390,10 +390,10 @@ open OM.Model
 set_option linter.deprecated false
 
 /-- Closing a chunk drive: C1 holds again for the family of `x`, and nothing else was exempt. -/
-theorem CInvE.close {s : Core} {L : List Nat} {δ δu : Nat → Nat} {x : Nat}
-    (hC : CInvE s L δ δu x) (hxL : LiveC s x) (hst : cSt s x = .splitting)
+theorem CInvE.close {s : Core} {L : List Nat} {δ δu s₀ : Nat → Nat} {x : Nat}
+    (hC : CInvE s L δ δu s₀ x) (hxL : LiveC s x) (hst : cSt s x = .splitting)
     (hδ : ∀ c, c ≠ cLl s x → c ≠ x → c ≠ cRr s x → δ c = 0)
-    (hC1 : C1 s (fun _ => 0) (fun _ => 0) x) : CInv s L (fun _ => 0) (fun _ => 0) := by
+    (hC1 : C1 s (fun _ => 0) (fun _ => 0) s₀ x) : CInv s L (fun _ => 0) (fun _ => 0) s₀ := by
   have Fx := hC.cfam x hxL hst
   refine { hC with c1 := ?_, δu := fun _ => le_rfl }
   intro y hy hys _
@@ -415,14 +415,14 @@ theorem unitsOf_mono (P : Params) {a b : Nat} (h : a ≤ b) : unitsOf P a ≤ un
 insertion into it ends with the chunk invariant restored (no undriven insertion): either `x` has
 made `K_C` moves and C1 holds again, or `x` was removed and its siblings are quiet chunks of size at
 most `c_max ≤ θ`. -/
-theorem cinv_drive {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ δu : Nat → Nat} {x : Nat}
-    (hI : INV s A) (hG : GInv s A.elist gh (fun _ => 0)) (hC : CInvE s A.elist δ δu x)
-    (hC1 : C1 s δ δu x) (hXs : CXSteps X Y A.elist δ δu x) (hX : X s) (hP : GParams s.P)
+theorem cinv_drive {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ δu s₀ : Nat → Nat} {x : Nat}
+    (hI : INV s A) (hG : GInv s A.elist gh (fun _ => 0)) (hC : CInvE s A.elist δ δu s₀ x)
+    (hC1 : C1 s δ δu s₀ x) (hXs : CXSteps X Y A.elist δ δu s₀ x) (hX : X s) (hP : GParams s.P)
     (hCP : CParams s.P) (hxL : LiveC s x) (hst : cSt s x = .splitting)
     (hδ : ∀ c, c ≠ cLl s x → c ≠ x → c ≠ cRr s x → δ c = 0)
     (hδs : δ (cLl s x) + δ x + δ (cRr s x) ≤ 1)
     (hδle : δ (cLl s x) ≤ cSz s (cLl s x) ∧ δ x ≤ cSz s x ∧ δ (cRr s x) ≤ cSz s (cRr s x)) :
-    ∃ s', (driveChunkFrom x).run s = .ok () s' ∧ CDriveDone X Y s A.elist δ δu x s' := by
+    ∃ s', (driveChunkFrom x).run s = .ok () s' ∧ CDriveDone X Y s A.elist δ δu s₀ x s' := by
   have Fx := hC.cfam x hxL hst
   generalize hl : cLl s x = y at *
   generalize hr : cRr s x = z at *
@@ -432,21 +432,22 @@ theorem cinv_drive {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ δu
   have hK2 := hCP.K2
   unfold C1 at hC1
   rw [hl, hr, ha, hb, hc] at hC1
-  obtain ⟨s₀, hs0T, g1, g2, g3, g4⟩ := hC1
+  obtain ⟨hs0T, g1, g2, g3, g4⟩ := hC1
+  generalize hσ : s₀ x = σ at hs0T g1 g2
   generalize hm : s.P.K_C - 1 = m at g2
   have hm1 : 1 ≤ m := by omega
-  generalize hX0 : (a - δ y) + (b - δ x) + (c - δ z) - s₀ = Xs at g2
-  have hXq : Xs ≤ unitsOf s.P s₀ / m := by
+  generalize hX0 : (a - δ y) + (b - δ x) + (c - δ z) - σ = Xs at g2
+  have hXq : Xs ≤ unitsOf s.P σ / m := by
     rw [Nat.le_div_iff_mul_le (by omega), Nat.mul_comm]
     have := Nat.le_add_left (m * Xs) (units s x - δu x); omega
   have hU := unitsOf_mono s.P hs0T
-  have hUd : unitsOf s.P s₀ / m ≤ unitsOf s.P s.P.T / m := Nat.div_le_div_right hU
+  have hUd : unitsOf s.P σ / m ≤ unitsOf s.P s.P.T / m := Nat.div_le_div_right hU
   have hkC : kC s.P s.P.T = unitsOf s.P s.P.T / m + 1 := by unfold kC; rw [hm]
   have hThi : a + b + c ≤ s.P.T + kC s.P s.P.T := by rw [hkC]; omega
   have hbal0 : a ≤ c + umax s.P + 1 ∧ c ≤ a + umax s.P + 1 := by omega
   obtain ⟨t, hrun, hres⟩ := driveChunkFrom_ok (s := s) (x := x)
-    (fun j t => CDriveInv X s A.elist δ δu x y z a b c (units s x) j t)
-    (CDriveDone X Y s A.elist δ δu x)
+    (fun j t => CDriveInv X s A.elist δ δu s₀ x y z a b c (units s x) j t)
+    (CDriveDone X Y s A.elist δ δu s₀ x)
     ⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hC, hxL, hst, hl, hr, by omega, by omega,
       Or.inl ⟨rfl, ha, hc⟩⟩
     (fun j t hD _ => hD.step hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi hbal0)
@@ -463,11 +464,12 @@ theorem cinv_drive {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ δu
         rcases hbal with ⟨h0, -⟩ | ⟨-, h1, h2⟩
         · omega
         · exact ⟨h1, h2⟩
-      refine ⟨s₀, by rw [hD.P]; exact hs0T, ?_⟩
+      unfold C1
       simp only [Nat.sub_zero]
-      rw [hD.ll, hD.rr, hD.P, hm]
+      rw [hD.ll, hD.rr, hD.P, hm, hσ]
+      refine ⟨hs0T, ?_⟩
       refine ⟨by omega, ?_, hbalK.1, hbalK.2⟩
-      have hT : cSz t y + cSz t x + cSz t z - s₀ = Xs + (δ y + δ x + δ z) := by omega
+      have hT : cSz t y + cSz t x + cSz t z - σ = Xs + (δ y + δ x + δ z) := by omega
       rw [hT, Nat.mul_add]
       have hδux := hC.δu x
       rcases Nat.le_one_iff_eq_zero_or_eq_one.mp hδs with h0 | h1

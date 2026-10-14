@@ -179,13 +179,13 @@ theorem CFamOK.disjoint {s : Core} {x x' : Nat} (F : CFamOK s x) (F' : CFamOK s 
   · intro e; have h1 := F'.rSrc; rw [e, F.lSrc] at h1; exact hxx h1
   · intro e; have h1 := F'.rSrc; rw [e, F.rSrc] at h1; exact hxx h1
 
-theorem cinv_cmove {s s' : Core} {A : Abs} {gh : GGh} {δ δu : Nat → Nat} {x dst : Nat}
+theorem cinv_cmove {s s' : Core} {A : Abs} {gh : GGh} {δ δu s₀ : Nat → Nat} {x dst : Nat}
     {u labs : List Nat} (hI : INV s A) (hG : GInv s A.elist gh (fun _ => 0))
-    (hC : CInvE s A.elist δ δu x) (M : CMoveSpec s s' x dst u labs) (hxL : LiveC s x)
+    (hC : CInvE s A.elist δ δu s₀ x) (M : CMoveSpec s s' x dst u labs) (hxL : LiveC s x)
     (hst : cSt s x = .splitting) (hdst : dst = cLl s x ∨ dst = cRr s x) (hxd : x ≠ dst)
     (hu : ∀ g ∈ u, LiveG s g ∧ gC s g = x) (hnd : u.Nodup)
     (hone : ∃ um ∈ u, UnitG s x um ∧ ∀ g ∈ u, g ≠ um → gSt s g = .overflow) :
-    CInvE s' A.elist δ δu x ∧ units s' x + 1 = units s x ∧
+    CInvE s' A.elist δ δu s₀ x ∧ units s' x + 1 = units s x ∧
       (u.map fun g => gSz s g).sum ≤ cSz s x := by
   have F := M.gfields
   have Fx := hC.cfam x hxL hst
@@ -321,11 +321,11 @@ theorem cremoveState_C {s : Core} {x : Nat} (hx : x < s.C.size) (hl : cLl s x < 
       · subst h3; simp [h1, h2, Ne.symm h1, Ne.symm h2, hr]
       · simp [h1, h2, h3, Ne.symm h1, Ne.symm h2, Ne.symm h3]
 
-theorem cinv_cremove {s : Core} {A : Abs} {δ δu : Nat → Nat} {x : Nat} (hI : INV s A)
-    (hC : CInvE s A.elist δ δu x) (hxL : LiveC s x) (hst : cSt s x = .splitting)
+theorem cinv_cremove {s : Core} {A : Abs} {δ δu s₀ : Nat → Nat} {x : Nat} (hI : INV s A)
+    (hC : CInvE s A.elist δ δu s₀ x) (hxL : LiveC s x) (hst : cSt s x = .splitting)
     (he : cF s x = NIL)
     (hδ : ∀ c, c ≠ cLl s x → c ≠ x → c ≠ cRr s x → δ c = 0) :
-    CInv (cremoveState s x) A.elist (fun _ => 0) (fun _ => 0) := by
+    CInv (cremoveState s x) A.elist (fun _ => 0) (fun _ => 0) s₀ := by
   have Fx := hC.cfam x hxL hst
   have hlx : cLl s x ≠ x := by
     intro e; have := Fx.lAdj; rw [e] at this

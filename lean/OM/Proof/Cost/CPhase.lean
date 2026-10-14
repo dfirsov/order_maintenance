@@ -33,18 +33,18 @@ theorem CSame.cfam {s s' : Core} (h : CSame s s') {x : Nat} (hf : CFamOK s x) : 
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     simp only [h.liveC, h.l, h.r, h.next, h.st, h.src] <;> assumption
 
-theorem CSame.c1 {s s' : Core} (h : CSame s s') {δ δu : Nat → Nat} {x : Nat}
-    (hu : units s' x = units s x) (hc : C1 s δ δu x) : C1 s' δ δu x := by
+theorem CSame.c1 {s s' : Core} (h : CSame s s') {δ δu s₀ : Nat → Nat} {x : Nat}
+    (hu : units s' x = units s x) (hc : C1 s δ δu s₀ x) : C1 s' δ δu s₀ x := by
   unfold C1 at *; simp only [h.size, h.l, h.r, h.P, hu]; exact hc
 
 /-- Transfer of `CInvE` when the chunk records are the same, the elements' chunks are the same,
 the unit counts change as `δu` does, and live groups keep live chunks. -/
-theorem CInvE.transfer {s s' : Core} {L : List Nat} {δ δu δu' : Nat → Nat} {ex : Nat}
-    (hC : CInvE s L δ δu ex) (h : CSame s s')
+theorem CInvE.transfer {s s' : Core} {L : List Nat} {δ δu δu' s₀ : Nat → Nat} {ex : Nat}
+    (hC : CInvE s L δ δu s₀ ex) (h : CSame s s')
     (hel : ∀ c, celts s' L c = celts s L c)
     (hu : ∀ c, units s' c - δu' c = units s c - δu c) (hδu : ∀ c, δu' c ≤ δ c)
     (hg : ∀ g, LiveG s' g → LiveC s (gC s' g) ∧ cSt s (gC s' g) ≠ .dead) :
-    CInvE s' L δ δu' ex where
+    CInvE s' L δ δu' s₀ ex where
   csz c hc := by rw [h.size, hel]; exact hC.csz c ((h.liveC c).mp hc)
   cfam x hx hs := h.cfam (hC.cfam x ((h.liveC x).mp hx) (h.st x ▸ hs))
   covf c hc hs := by
@@ -58,9 +58,9 @@ theorem CInvE.transfer {s s' : Core} {L : List Nat} {δ δu δu' : Nat → Nat} 
 
 /-! ### Split start -/
 
-theorem cinv_splitStart {s : Core} {A : Abs} {δ δu : Nat → Nat} {ex g labL labR : Nat}
-    (hI : INV s A) (hC : CInvE s A.elist δ δu ex) (hg : LiveG s g) (hq : gSt s g = .quiet) :
-    CInvE (splitState s g labL labR) A.elist δ δu ex := by
+theorem cinv_splitStart {s : Core} {A : Abs} {δ δu s₀ : Nat → Nat} {ex g labL labR : Nat}
+    (hI : INV s A) (hC : CInvE s A.elist δ δu s₀ ex) (hg : LiveG s g) (hq : gSt s g = .quiet) :
+    CInvE (splitState s g labL labR) A.elist δ δu s₀ ex := by
   have S := splitSpec hI (hI.mem_glist_iff.mpr hg) labL labR
   generalize splitState s g labL labR = s' at S ⊢
   generalize splitL s g = gl at S
@@ -96,10 +96,10 @@ theorem cinv_splitStart {s : Core} {A : Abs} {δ δu : Nat → Nat} {ex g labL l
 
 /-! ### Split moves -/
 
-theorem cinv_move {s s' : Core} {A : Abs} {δ δu : Nat → Nat} {ex src dst e lab : Nat}
-    (hI : INV s A) (hC : CInvE s A.elist δ δu ex) (M : MoveSpec s s' src dst e lab)
+theorem cinv_move {s s' : Core} {A : Abs} {δ δu s₀ : Nat → Nat} {ex src dst e lab : Nat}
+    (hI : INV s A) (hC : CInvE s A.elist δ δu s₀ ex) (M : MoveSpec s s' src dst e lab)
     (he : eG s e = src) (hchk : gC s dst = gC s src) :
-    CInvE s' A.elist δ δu ex := by
+    CInvE s' A.elist δ δu s₀ ex := by
   have hK := M.links
   have hCs : CSame s s' := by
     refine ⟨by rw [M.C], fun c => ?_, fun c => ?_, fun c => ?_, fun c => ?_, fun c => ?_,
@@ -118,10 +118,10 @@ theorem cinv_move {s s' : Core} {A : Abs} {δ δu : Nat → Nat} {ex src dst e l
 
 /-! ### Group removal -/
 
-theorem cinv_remove {s : Core} {A : Abs} {gh : GGh} {δg δ δu : Nat → Nat} {ex p : Nat}
-    (hI : INV s A) (hG : GInvE s A.elist gh δg p) (hC : CInvE s A.elist δ δu ex) (hp : LiveG s p)
+theorem cinv_remove {s : Core} {A : Abs} {gh : GGh} {δg δ δu s₀ : Nat → Nat} {ex p : Nat}
+    (hI : INV s A) (hG : GInvE s A.elist gh δg p) (hC : CInvE s A.elist δ δu s₀ ex) (hp : LiveG s p)
     (hs : gSt s p = .splitting) (hδ : δu (gC s p) + 1 ≤ δ (gC s p)) :
-    CInvE (removeState s p) A.elist δ (Function.update δu (gC s p) (δu (gC s p) + 1)) ex := by
+    CInvE (removeState s p) A.elist δ (Function.update δu (gC s p) (δu (gC s p) + 1)) s₀ ex := by
   have Fp := hG.fam p hp hs
   have hp' := hI.mem_glist_iff.mpr hp
   have hpp : gP s p ≠ p := by
@@ -178,8 +178,9 @@ theorem cinv_remove {s : Core} {A : Abs} {gh : GGh} {δg δ δu : Nat → Nat} {
 
 /-- Before any removal: the chunk invariant with `δu`. After the removal in chunk `c`: with one
 more unit in `c`. -/
-theorem xgroup_cinv {L : List Nat} {δ δu : Nat → Nat} {c : Nat} (hδ : δu c + 1 ≤ δ c) :
-    XGroup (fun t => CInv t L δ δu) (fun t => CInv t L δ (Function.update δu c (δu c + 1))) L c := by
+theorem xgroup_cinv {L : List Nat} {δ δu s₀ : Nat → Nat} {c : Nat} (hδ : δu c + 1 ≤ δ c) :
+    XGroup (fun t => CInv t L δ δu s₀) (fun t => CInv t L δ (Function.update δu c (δu c + 1)) s₀)
+      L c := by
   refine ⟨fun δg p => ⟨?_, ?_, ?_⟩, ?_⟩
   · intro t A' gh hI hel hG hok hX
     subst hel

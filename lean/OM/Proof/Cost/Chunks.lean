@@ -83,29 +83,29 @@ structure CFamOK (s : Core) (x : Nat) : Prop where
   rSt : cSt s (cRr s x) = .overflow
   rSrc : cSrc s (cRr s x) = x
 
-/-- Lemma C1's invariant for the family of `x`, at the sizes and units before the undriven
-insertions. -/
-def C1 (s : Core) (δ δu : Nat → Nat) (x : Nat) : Prop :=
-  ∃ s₀, s₀ ≤ s.P.T ∧
-    s₀ ≤ (cSz s (cLl s x) - δ (cLl s x)) + (cSz s x - δ x) + (cSz s (cRr s x) - δ (cRr s x)) ∧
+/-- Lemma C1's invariant for the family of `x`, which started splitting with size `s₀ x`, at the
+sizes and units before the undriven insertions. -/
+def C1 (s : Core) (δ δu s₀ : Nat → Nat) (x : Nat) : Prop :=
+  s₀ x ≤ s.P.T ∧
+    s₀ x ≤ (cSz s (cLl s x) - δ (cLl s x)) + (cSz s x - δ x) + (cSz s (cRr s x) - δ (cRr s x)) ∧
     (units s x - δu x) + (s.P.K_C - 1) *
-        ((cSz s (cLl s x) - δ (cLl s x)) + (cSz s x - δ x) + (cSz s (cRr s x) - δ (cRr s x)) - s₀)
-      ≤ unitsOf s.P s₀ ∧
+        ((cSz s (cLl s x) - δ (cLl s x)) + (cSz s x - δ x) + (cSz s (cRr s x) - δ (cRr s x)) - s₀ x)
+      ≤ unitsOf s.P (s₀ x) ∧
     cSz s (cLl s x) - δ (cLl s x) ≤ cSz s (cRr s x) - δ (cRr s x) + umax s.P ∧
     cSz s (cRr s x) - δ (cRr s x) ≤ cSz s (cLl s x) - δ (cLl s x) + umax s.P
 
 /-- The chunk-level invariant, exempting the C1 conditions of the family of `ex`. -/
-structure CInvE (s : Core) (L : List Nat) (δ δu : Nat → Nat) (ex : Nat) : Prop where
+structure CInvE (s : Core) (L : List Nat) (δ δu s₀ : Nat → Nat) (ex : Nat) : Prop where
   csz : ∀ c, LiveC s c → cSz s c = (celts s L c).length
   cfam : ∀ x, LiveC s x → cSt s x = .splitting → CFamOK s x
   covf : ∀ c, LiveC s c → cSt s c = .overflow →
     LiveC s (cSrc s c) ∧ cSt s (cSrc s c) = .splitting ∧ (cLl s (cSrc s c) = c ∨ cRr s (cSrc s c) = c)
   gchk : ∀ g, LiveG s g → LiveC s (gC s g) ∧ cSt s (gC s g) ≠ .dead
-  c1 : ∀ x, LiveC s x → cSt s x = .splitting → x ≠ ex → C1 s δ δu x
+  c1 : ∀ x, LiveC s x → cSt s x = .splitting → x ≠ ex → C1 s δ δu s₀ x
   δu : ∀ c, δu c ≤ δ c
 
 /-- The chunk-level invariant with no family exempt. -/
-abbrev CInv (s : Core) (L : List Nat) (δ δu : Nat → Nat) : Prop := CInvE s L δ δu NIL
+abbrev CInv (s : Core) (L : List Nat) (δ δu s₀ : Nat → Nat) : Prop := CInvE s L δ δu s₀ NIL
 
 /-! ### Counting units -/
 
