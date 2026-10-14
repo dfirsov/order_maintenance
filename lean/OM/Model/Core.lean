@@ -62,6 +62,20 @@ def chunkSize (c : Nat) (inc : Bool) : CM Unit := do
 
 /-! ### Element insertion -/
 
+/-- Link a new element `y` (the next free index) with label `lab` and handle `h` right after
+`x`, in `x`'s group. -/
+def linkElem (s : Core) (x y lab h : Nat) : Core :=
+  let ex := s.E.getX x
+  let g := ex.grp
+  let E1 := s.E.push { grp := g, lab := lab, h := h, prev := x, next := ex.next }
+  let E2 := if ex.next != NIL then E1.modify ex.next (fun e => { e with prev := y }) else E1
+  { s with
+    E := E2.modify x (fun e => { e with next := y })
+    tail := if s.tail == x then y else s.tail
+    Gs := s.Gs.modify g (fun G => { G with last := if G.last == x then y else G.last,
+                                            size := G.size + 1 })
+    count := s.count + 1 }
+
 def insertElem (x h : Nat) : CM Nat := do
   let P ← getP
   let ex ← getE x
@@ -69,19 +83,67 @@ def insertElem (x h : Nat) : CM Nat := do
   let G ← getG g
   let lab ← if x == G.last then after ex.lab P.D_e P.B_e "elem: no room after last"
     else between ex.lab (← getE ex.next).lab "elem: no room between"
-  -- mutate
-  let y ← newElem g lab h
-  modE y fun e => { e with prev := x, next := ex.next }
-  if ex.next != NIL then modE ex.next fun e => { e with prev := y }
-  modE x fun e => { e with next := y }
-  if (← get).tail == x then modify fun s => { s with tail := y }
-  if G.last == x then modG g fun G => { G with last := y }
-  modG g fun G => { G with size := G.size + 1 }
-  modify fun s => { s with count := s.count + 1 }
-  chunkSize G.chk true
+  -- mutate (the chunk's size is updated by `background`, so that nothing after the
+  -- mutation can fail a guard: the caller retries the insertion only on such a failure)
+  let y := (← get).E.size
+  modify (linkElem · x y lab h)
   return y
 
 /-! ### Group splits -/
+
+/-- Link new groups `gl` (label `labL`) and `gr` (label `labR`) right before and after `g`, in
+the group list and in `g`'s chunk, as the overflow siblings of `g`. -/
+def linkGroupPair (s : Core) (g gl gr labL labR : Nat) : Core :=
+  let G := s.Gs.getX g
+  let c := G.chk
+  let C := s.C.getX c
+  let A0 := s.Gs.modify gl fun X =>
+    { X with lab := labL, st := .overflow, src := g, prev := G.prev, next := g }
+  let A1 := if G.prev != NIL then A0.modify G.prev (fun X => { X with next := gl }) else A0
+  let A2 := A1.modify gr fun X =>
+    { X with lab := labR, st := .overflow, src := g, prev := g, next := G.next }
+  let A3 := if G.next != NIL then A2.modify G.next (fun X => { X with prev := gr }) else A2
+  let C1 := if C.first == g then s.C.modify c (fun X => { X with first := gl }) else s.C
+  { s with
+    Gs := A3.modify g fun X => { X with prev := gl, next := gr, st := .splitting, l := gl, r := gr }
+    C := if C.last == g then C1.modify c (fun X => { X with last := gr }) else C1
+    firstGroup := if G.prev != NIL then s.firstGroup else gl }
+
+/-- Unlink group `g` from the group list and from its chunk, and free it. -/
+def unlinkGroup (s : Core) (g : Nat) : Core :=
+  let G := s.Gs.getX g
+  let c := G.chk
+  let C := s.C.getX c
+  let A1 := if G.prev != NIL then s.Gs.modify G.prev (fun X => { X with next := G.next }) else s.Gs
+  let A2 := if G.next != NIL then A1.modify G.next (fun X => { X with prev := G.prev }) else A1
+  { s with
+    Gs := A2.modify g fun X => { X with alive := false, next := NIL, prev := NIL }
+    C := if C.first == g && C.last == g then s.C.modify c (fun X => { X with first := NIL, last := NIL })
+      else if C.first == g then s.C.modify c (fun X => { X with first := G.next })
+      else if C.last == g then s.C.modify c (fun X => { X with last := G.prev })
+      else s.C
+    firstGroup := if G.prev != NIL then s.firstGroup else G.next
+    freeG := g :: s.freeG }
+
+/-- Move element `e`, the first of group `g`, to the end of group `gl` with label `lab`. -/
+def moveFirstLeft (s : Core) (g gl e lab : Nat) : Core :=
+  let G := s.Gs.getX g
+  let A1 := s.Gs.modify g fun X =>
+    if G.first == G.last then { X with first := NIL, last := NIL }
+    else { X with first := (s.E.getX e).next }
+  { s with
+    Gs := A1.modify gl fun X => { X with first := if X.first == NIL then e else X.first, last := e }
+    E := s.E.modify e fun X => { X with grp := gl, lab := lab } }
+
+/-- Move element `e`, the last of group `g`, to the front of group `gr` with label `lab`. -/
+def moveLastRight (s : Core) (g gr e lab : Nat) : Core :=
+  let G := s.Gs.getX g
+  let A1 := s.Gs.modify g fun X =>
+    if G.first == G.last then { X with first := NIL, last := NIL }
+    else { X with last := (s.E.getX e).prev }
+  { s with
+    Gs := A1.modify gr fun X => { X with last := if X.first == NIL then e else X.last, first := e }
+    E := s.E.modify e fun X => { X with grp := gr, lab := lab } }
 
 def startGroupSplit (g : Nat) : CM Unit := do
   let P ← getP
@@ -96,34 +158,18 @@ def startGroupSplit (g : Nat) : CM Unit := do
   -- mutate
   let gl ← newGroup c
   let gr ← newGroup c
-  modG gl fun X => { X with lab := labL, st := .overflow, src := g, prev := G.prev, next := g }
-  if G.prev != NIL then modG G.prev fun X => { X with next := gl }
-  else modify fun s => { s with firstGroup := gl }
-  modG gr fun X => { X with lab := labR, st := .overflow, src := g, prev := g, next := G.next }
-  if G.next != NIL then modG G.next fun X => { X with prev := gr }
-  modG g fun X => { X with prev := gl, next := gr, st := .splitting, l := gl, r := gr }
-  if C.first == g then modC c fun X => { X with first := gl }
-  if C.last == g then modC c fun X => { X with last := gr }
+  modify (linkGroupPair · g gl gr labL labR)
 
 def removeGroup (g : Nat) : CM Unit := do
   let P ← getP
   let G ← getG g
-  let c := G.chk
-  let C ← getC c
-  if G.prev != NIL then modG G.prev fun X => { X with next := G.next }
-  else modify fun s => { s with firstGroup := G.next }
-  if G.next != NIL then modG G.next fun X => { X with prev := G.prev }
-  if C.first == g && C.last == g then modC c fun X => { X with first := NIL, last := NIL }
-  else if C.first == g then modC c fun X => { X with first := G.next }
-  else if C.last == g then modC c fun X => { X with last := G.prev }
+  modify (unlinkGroup · g)
   let mut quiet : List Nat := []
   for s in [G.l, G.r] do
     let S ← getG s
     if S.st == .overflow && S.src == g then
       modG s fun X => { X with st := .quiet, src := NIL }
       quiet := quiet ++ [s]
-  modG g fun X => { X with alive := false, next := NIL, prev := NIL }
-  modify fun s => { s with freeG := g :: s.freeG }
   for s in quiet do
     if (← getG s).size ≥ P.G then startGroupSplit s
 
@@ -140,32 +186,18 @@ def groupSplitStep (g : Nat) : CM Bool := do
   let Lg ← getG gl
   let Rg ← getG gr
   let center := 1 <<< (P.B_e - 1)
-  let (e, lab, dst) ← if Lg.size ≤ Rg.size then do
+  let dst ← if Lg.size ≤ Rg.size then do
       if Lg.next != g then guard "group split: left sibling not adjacent"
-      let e := G.first
       let lab ← if Lg.first == NIL then pure center
         else after (← getE Lg.last).lab P.D_e P.B_e "elem: push-back room"
-      -- mutate
-      if G.first == G.last then modG g fun X => { X with first := NIL, last := NIL }
-      else
-        let nx := (← getE e).next
-        modG g fun X => { X with first := nx }
-      if Lg.first == NIL then modG gl fun X => { X with first := e }
-      modG gl fun X => { X with last := e }
-      pure (e, lab, gl)
+      modify (moveFirstLeft · g gl G.first lab)
+      pure gl
     else do
       if Rg.prev != g then guard "group split: right sibling not adjacent"
-      let e := G.last
       let lab ← if Rg.first == NIL then pure center
         else before (← getE Rg.first).lab P.D_e "elem: push-front room"
-      if G.first == G.last then modG g fun X => { X with first := NIL, last := NIL }
-      else
-        let pv := (← getE e).prev
-        modG g fun X => { X with last := pv }
-      if Rg.first == NIL then modG gr fun X => { X with last := e }
-      modG gr fun X => { X with first := e }
-      pure (e, lab, gr)
-  modE e fun X => { X with grp := dst, lab := lab }
+      modify (moveLastRight · g gr G.last lab)
+      pure gr
   modG g fun X => { X with size := X.size - 1 }
   modG dst fun X => { X with size := X.size + 1 }
   let D ← getG dst
@@ -214,6 +246,57 @@ def removeChunk (x : Nat) : CM Unit := do
       modC s fun X => { X with st := .quiet, src := NIL }
       pqEnterIfAbove s
 
+/-- Labels for `k` groups appended after a group labelled `prev` (`none`: the receiving chunk
+is empty; start at the centre). -/
+def pushBackLabs (center D B : Nat) : Option Nat → Nat → CM (List Nat)
+  | _, 0 => pure []
+  | prev, k + 1 => do
+    let l ← match prev with
+      | none => pure center
+      | some p => after p D B "group: push-back room"
+    return l :: (← pushBackLabs center D B (some l) k)
+
+/-- Labels for `k` groups prepended before a group labelled `nxt`, in list order. -/
+def pushFrontLabs (center D : Nat) : Option Nat → Nat → CM (List Nat)
+  | _, 0 => pure []
+  | nxt, k + 1 => do
+    let l ← match nxt with
+      | none => pure center
+      | some n => before n D "group: push-front room"
+    return (← pushFrontLabs center D (some l) k) ++ [l]
+
+/-- Move the groups `u`, a prefix of chunk `x`, to the end of chunk `y`, with labels `labs`. -/
+def moveGroupsLeft (s : Core) (x y : Nat) (u labs : List Nat) : Core :=
+  let X := s.C.getX x
+  let first := u.headD NIL
+  let last := u.getLastD NIL
+  let C1 := s.C.modify x fun Z =>
+    if X.last == last then { Z with first := NIL, last := NIL }
+    else { Z with first := (s.Gs.getX last).next }
+  { s with
+    C := C1.modify y fun Z => { Z with first := if Z.first == NIL then first else Z.first, last := last }
+    Gs := (u.zip labs).foldl (fun a p => a.modify p.1 fun G => { G with chk := y, lab := p.2 }) s.Gs }
+
+/-- Move the groups `u`, a suffix of chunk `x`, to the front of chunk `z`, with labels `labs`. -/
+def moveGroupsRight (s : Core) (x z : Nat) (u labs : List Nat) : Core :=
+  let X := s.C.getX x
+  let first := u.headD NIL
+  let last := u.getLastD NIL
+  let C1 := s.C.modify x fun Z =>
+    if X.first == first then { Z with first := NIL, last := NIL }
+    else { Z with last := (s.Gs.getX first).prev }
+  { s with
+    C := C1.modify z fun Z => { Z with last := if Z.first == NIL then last else Z.last, first := first }
+    Gs := (u.zip labs).foldl (fun a p => a.modify p.1 fun G => { G with chk := z, lab := p.2 }) s.Gs }
+
+/-- Chunk sizes after moving the groups `u` from `x` to `dst`. -/
+def moveSizes (x dst : Nat) (u : List Nat) : CM Unit := do
+  let s ← get
+  let moved := (u.map fun g => (s.Gs.getX g).size).sum
+  -- x is SPLITTING and dst is OVERFLOW: neither is in the priority queue
+  modC x fun X => { X with size := X.size - moved }
+  modC dst fun X => { X with size := X.size + moved }
+
 def chunkSplitStep (x : Nat) : CM Bool := do
   let P ← getP
   let X ← getC x
@@ -227,54 +310,18 @@ def chunkSplitStep (x : Nat) : CM Bool := do
   let center := 1 <<< (P.B_g - 1)
   let left := Y.size ≤ Z.size
   let u ← unit x left
-  let mut labs : List Nat := []
   if left then
     if Y.next != x then guard "chunk split: left sibling not adjacent"
     let yl := (← getG Y.last).lab
-    let mut prev : Option Nat := if Y.first == NIL then none else some yl
-    for _ in u do
-      let l ← match prev with
-        | none => pure center
-        | some p => after p P.D_g P.B_g "group: push-back room"
-      prev := some l
-      labs := labs ++ [l]
+    let labs ← pushBackLabs center P.D_g P.B_g (if Y.first == NIL then none else some yl) u.length
+    modify (moveGroupsLeft · x y u labs)
+    moveSizes x y u
   else
     if Z.prev != x then guard "chunk split: right sibling not adjacent"
     let zf := (← getG Z.first).lab
-    let mut nxt : Option Nat := if Z.first == NIL then none else some zf
-    for _ in u do
-      let l ← match nxt with
-        | none => pure center
-        | some n => before n P.D_g "group: push-front room"
-      nxt := some l
-      labs := labs ++ [l]
-    labs := labs.reverse
-  -- mutate
-  let first := u.headD NIL
-  let last := u.getLastD NIL
-  let dst ← if left then do
-      if X.last == last then modC x fun X => { X with first := NIL, last := NIL }
-      else
-        let nx := (← getG last).next
-        modC x fun X => { X with first := nx }
-      if Y.first == NIL then modC y fun X => { X with first := first }
-      modC y fun X => { X with last := last }
-      pure y
-    else do
-      if X.first == first then modC x fun X => { X with first := NIL, last := NIL }
-      else
-        let pv := (← getG first).prev
-        modC x fun X => { X with last := pv }
-      if Z.first == NIL then modC z fun X => { X with last := last }
-      modC z fun X => { X with first := first }
-      pure z
-  let mut moved := 0
-  for (gg, lab) in u.zip labs do
-    modG gg fun X => { X with chk := dst, lab := lab }
-    moved := moved + (← getG gg).size
-  -- x is SPLITTING and dst is OVERFLOW: neither is in the priority queue
-  modC x fun X => { X with size := X.size - moved }
-  modC dst fun X => { X with size := X.size + moved }
+    let labs ← pushFrontLabs center P.D_g (if Z.first == NIL then none else some zf) u.length
+    modify (moveGroupsRight · x z u labs)
+    moveSizes x z u
   return true
 
 def driveChunkFrom (s : Nat) : CM Unit := do
@@ -290,6 +337,17 @@ def driveChunk (c : Nat) : CM Unit := do
 
 /-! ### Reservation -/
 
+/-- Link new chunks `y` and `z` right before and after `x` in the chunk list. -/
+def linkChunkPair (s : Core) (x y z : Nat) : Core :=
+  let X := s.C.getX x
+  let C1 := s.C.modify y (fun C => { C with prev := X.prev, next := x })
+  let C2 := if X.prev != NIL then C1.modify X.prev (fun C => { C with next := y }) else C1
+  let C3 := C2.modify z (fun C => { C with prev := x, next := X.next })
+  let C4 := if X.next != NIL then C3.modify X.next (fun C => { C with prev := z }) else C3
+  { s with
+    C := C4.modify x (fun C => { C with prev := y, next := z })
+    firstChunk := if X.prev != NIL then s.firstChunk else y }
+
 def reservation (k : Nat) : CM Unit := do
   for _ in List.range (k) do
     match (← get).resJob with
@@ -299,13 +357,7 @@ def reservation (k : Nat) : CM Unit := do
       if x == NIL || x ≥ (← get).C.size then guard "reservation: invalid chunk"
       let y ← newChunk
       let z ← newChunk
-      let X ← getC x
-      modC y fun C => { C with prev := X.prev, next := x }
-      if X.prev != NIL then modC X.prev fun C => { C with next := y }
-      else modify fun s => { s with firstChunk := y }
-      modC z fun C => { C with prev := x, next := X.next }
-      if X.next != NIL then modC X.next fun C => { C with prev := z }
-      modC x fun C => { C with prev := y, next := z }
+      modify (linkChunkPair · x y z)
       let job ← insertAround x y z
       modC x fun C => { C with st := .splitting, l := y, r := z }
       modC y fun C => { C with st := .overflow, src := x }
@@ -372,6 +424,7 @@ def fallback : CM Unit := do
 
 def background (y : Nat) : CM Unit := do
   let P ← getP
+  chunkSize (← getG (← getE y).grp).chk true
   let g := (← getE y).grp
   let G ← getG g
   if G.st == .quiet && G.size ≥ P.G then startGroupSplit g

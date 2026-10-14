@@ -187,9 +187,65 @@ theorem Array.getX_def (a : Array α) (i : Nat) : a.getX i = a.getD i default :=
 @[simp] theorem Array.size_set!' (a : Array α) (i : Nat) (v : α) :
     (a.set! i v).size = a.size := by simp
 
+@[simp] theorem Array.getX_ite {c : Prop} [Decidable c] (a b : Array α) (i : Nat) :
+    (if c then a else b).getX i = if c then a.getX i else b.getX i := by split <;> rfl
+
+@[simp] theorem Array.size_ite {c : Prop} [Decidable c] (a b : Array α) :
+    (if c then a else b).size = if c then a.size else b.size := by split <;> rfl
+
 theorem Array.getX_ge (a : Array α) {j : Nat} (h : a.size ≤ j) : a.getX j = default := by
   simp [Array.getX, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none h]
 
 end arrays
+
+end OM.Proof
+
+/-! ### `run` of reads followed by a continuation -/
+
+namespace OM.Proof
+
+open OM.Model
+
+section reads
+variable {β : Type} (f : _ → CM β) (s : Core)
+
+@[simp] theorem run_get_bind (k : Core → CM β) : (get >>= k).run s = (k s).run s := rfl
+@[simp] theorem run_modify_bind (g : Core → Core) (k : PUnit → CM β) :
+    (modify g >>= k).run s = (k ⟨⟩).run (g s) := rfl
+@[simp] theorem run_getE_bind (i : Nat) (k : Elem → CM β) :
+    (getE i >>= k).run s = (k (s.E.getX i)).run s := rfl
+@[simp] theorem run_getG_bind (i : Nat) (k : Group → CM β) :
+    (getG i >>= k).run s = (k (s.Gs.getX i)).run s := rfl
+@[simp] theorem run_getC_bind (i : Nat) (k : Chunk → CM β) :
+    (getC i >>= k).run s = (k (s.C.getX i)).run s := rfl
+@[simp] theorem run_getP_bind (k : Params → CM β) : (getP >>= k).run s = (k s.P).run s := rfl
+@[simp] theorem run_pure_bind {α : Type} (a : α) (k : α → CM β) :
+    (pure a >>= k).run s = (k a).run s := rfl
+@[simp] theorem run_map_guard {γ : Type} (g : γ → β) (msg : String) :
+    (g <$> (OM.Model.guard msg : CM γ)).run s = .error (.guard msg) s := rfl
+
+theorem run_between (a b : Nat) (why : String) :
+    (between a b why).run s =
+      if a + 1 ≥ b then .error (.guard why) s else .ok ((a + b) / 2) s := by
+  unfold between
+  by_cases h : a + 1 ≥ b <;> simp [h]
+
+theorem run_after (a D B : Nat) (why : String) :
+    (after a D B why).run s =
+      if a + D ≥ 1 <<< B ∨ a + D ≤ a then .error (.guard why) s else .ok (a + D) s := by
+  unfold after
+  by_cases h : a + D ≥ 1 <<< B ∨ a + D ≤ a
+  · rcases h with h | h <;> simp [h]
+  · simp only [not_or] at h; simp [h.1, h.2]
+
+theorem run_before (b D : Nat) (why : String) :
+    (before b D why).run s =
+      if b < D ∨ D = 0 then .error (.guard why) s else .ok (b - D) s := by
+  unfold before
+  by_cases h : b < D ∨ D = 0
+  · rcases h with h | h <;> simp [h]
+  · simp only [not_or] at h; simp [h.1, h.2]
+
+end reads
 
 end OM.Proof

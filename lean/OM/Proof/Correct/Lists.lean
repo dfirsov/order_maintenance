@@ -204,3 +204,371 @@ theorem isChain_update {l : List Nat} (hnd : l.Nodup) {f f' : Nat → Nat} (hs :
       rw [hp] at this; simpa using this
 
 end OM.Proof
+
+/-! ### Successors and predecessors after list surgery -/
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem predOf_cons {a : Nat} {l : List Nat} (hnd : (a :: l).Nodup) (z : Nat) :
+    predOf (a :: l) z = if z ∈ l then (if l.head? = some z then a else predOf l z) else NIL := by
+  have := predOf_append (l1 := [a]) (l2 := l) (List.nodup_cons.mp hnd).2 z
+  simp only [List.singleton_append] at this
+  rw [this]
+  by_cases hz : z ∈ l <;> simp [hz, predOf]
+
+theorem succOf_cons' {a : Nat} {l : List Nat} (z : Nat) :
+    succOf (a :: l) z = if z = a then l.headD NIL else succOf l z := by
+  rw [succOf_cons]
+  by_cases h : z = a
+  · subst h; simp
+  · rw [if_neg (Ne.symm h), if_neg h]
+
+/-- Successors after inserting `y` right after `x`. -/
+theorem succOf_insert {l1 l2 : List Nat} {x y : Nat} (hnd : (l1 ++ x :: y :: l2).Nodup) (z : Nat) :
+    succOf (l1 ++ x :: y :: l2) z =
+      if z = x then y else if z = y then l2.headD NIL else succOf (l1 ++ x :: l2) z := by
+  have h1 : l1.Nodup := (List.nodup_append.mp hnd).1
+  have hdis := (List.nodup_append.mp hnd).2.2
+  have hx1 : x ∉ l1 := fun h => hdis x h x (by simp) rfl
+  have hy1 : y ∉ l1 := fun h => hdis y h y (by simp) rfl
+  have h2 := (List.nodup_append.mp hnd).2.1
+  simp only [List.nodup_cons, List.mem_cons, not_or] at h2
+  rw [succOf_append h1, succOf_append h1, succOf_cons', succOf_cons', succOf_cons']
+  by_cases hz1 : z ∈ l1
+  · have hzx : z ≠ x := fun h => hx1 (h ▸ hz1)
+    have hzy : z ≠ y := fun h => hy1 (h ▸ hz1)
+    simp [hz1, hzx, hzy]
+  · by_cases hzx : z = x
+    · subst hzx; simp [hz1]
+    · by_cases hzy : z = y
+      · subst hzy; simp [hz1, hzx]
+      · simp [hz1, hzx, hzy]
+
+/-- Predecessors after inserting `y` right after `x`. -/
+theorem predOf_insert {l1 l2 : List Nat} {x y : Nat} (hnd : (l1 ++ x :: y :: l2).Nodup) (z : Nat) :
+    predOf (l1 ++ x :: y :: l2) z =
+      if z = y then x else if l2.head? = some z then y else predOf (l1 ++ x :: l2) z := by
+  have h2 := (List.nodup_append.mp hnd).2.1
+  have h2' : (x :: l2).Nodup := by
+    simp only [List.nodup_cons, List.mem_cons, not_or] at h2 ⊢; exact ⟨h2.1.2, h2.2.2⟩
+  have h3 : (y :: l2).Nodup := (List.nodup_cons.mp h2).2
+  rw [predOf_append h2, predOf_append h2', predOf_cons h2, predOf_cons h2', predOf_cons h3]
+  simp only [List.nodup_cons, List.mem_cons, not_or] at h2
+  obtain ⟨⟨hxy, hx2⟩, hy2, -⟩ := h2
+  have hl2 : ∀ z, l2.head? = some z → z ∈ l2 := fun z h => List.mem_of_mem_head? h
+  by_cases hzy : z = y
+  · subst hzy; simp [Ne.symm hxy, hy2, hxy]
+  · by_cases hzx : z = x
+    · subst hzx; simp [hx2, hxy]
+      intro h; exact absurd (hl2 _ h) hx2
+    · by_cases hz2 : z ∈ l2
+      · by_cases hh : l2.head? = some z <;> simp [hz2, hzy, hzx, Ne.symm hzx, Ne.symm hzy, hh]
+      · have : l2.head? ≠ some z := fun h => hz2 (hl2 _ h)
+        simp [hz2, hzy, hzx, this]
+
+/-- Successors after inserting `a` at the front. -/
+theorem succOf_insert_front {l : List Nat} {a : Nat} (_hnd : (a :: l).Nodup) (z : Nat) :
+    succOf (a :: l) z = if z = a then l.headD NIL else succOf l z := succOf_cons' z
+
+/-- Predecessors after inserting `a` at the front. -/
+theorem predOf_insert_front {l : List Nat} {a : Nat} (hnd : (a :: l).Nodup) (z : Nat) :
+    predOf (a :: l) z = if l.head? = some z then a else predOf l z := by
+  rw [predOf_cons hnd]
+  by_cases hz : z ∈ l
+  · simp [hz]
+  · have : l.head? ≠ some z := fun h => hz (List.mem_of_mem_head? h)
+    simp [hz, this, predOf_not_mem hz]
+
+/-- Successors after removing `x` from `l1 ++ x :: l2`. -/
+theorem succOf_erase {l1 l2 : List Nat} {x : Nat} (hnd : (l1 ++ x :: l2).Nodup) {z : Nat}
+    (hzx : z ≠ x) :
+    succOf (l1 ++ l2) z = if l1.getLast? = some z then l2.headD NIL else succOf (l1 ++ x :: l2) z := by
+  have h1 : l1.Nodup := (List.nodup_append.mp hnd).1
+  rw [succOf_append h1, succOf_append h1, succOf_cons' (a := x)]
+  have hl1 : ∀ z, l1.getLast? = some z → z ∈ l1 := fun z h => List.mem_of_getLast? h
+  by_cases hz1 : z ∈ l1
+  · by_cases hl : l1.getLast? = some z <;> simp [hz1, hl]
+  · have : l1.getLast? ≠ some z := fun h => hz1 (hl1 _ h)
+    simp [hz1, this, hzx]
+
+/-- Predecessors after removing `x` from `l1 ++ x :: l2`. -/
+theorem predOf_erase {l1 l2 : List Nat} {x : Nat} (hnd : (l1 ++ x :: l2).Nodup) {z : Nat}
+    (hzx : z ≠ x) :
+    predOf (l1 ++ l2) z = if l2.head? = some z then l1.getLastD NIL else predOf (l1 ++ x :: l2) z := by
+  have h2 := (List.nodup_append.mp hnd).2.1
+  have h2' : l2.Nodup := (List.nodup_cons.mp h2).2
+  rw [predOf_append h2', predOf_append h2, predOf_cons h2]
+  have hl2 : ∀ z, l2.head? = some z → z ∈ l2 := fun z h => List.mem_of_mem_head? h
+  by_cases hz2 : z ∈ l2
+  · by_cases hh : l2.head? = some z <;> simp [hz2, hh, hzx, Ne.symm hzx]
+  · have : l2.head? ≠ some z := fun h => hz2 (hl2 _ h)
+    simp [hz2, this, hzx, Ne.symm hzx]
+
+end OM.Proof
+
+/-! ### Linked-list updates -/
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem headD_ne_nil {l : List Nat} {z : Nat} (hz : z ∈ l) (hnil : NIL ∉ l) :
+    l.headD NIL ≠ NIL := by
+  cases l with
+  | nil => simp at hz
+  | cons a t => intro h; simp at h; exact hnil (by simp [h])
+
+theorem head?_eq_iff {l : List Nat} {z : Nat} (hz : z ≠ NIL) :
+    l.head? = some z ↔ l.headD NIL = z := by
+  cases l with
+  | nil => simp; exact fun h => hz h.symm
+  | cons a t => simp
+
+theorem getLast?_eq_iff {l : List Nat} {z : Nat} (hz : z ≠ NIL) :
+    l.getLast? = some z ↔ l.getLastD NIL = z := by
+  rcases l.eq_nil_or_concat with rfl | ⟨l', a, rfl⟩
+  · simp; exact fun h => hz h.symm
+  · simp
+
+/-- Inserting `y` right after `x`. -/
+theorem LList.insert_after {nxt prv nxt' prv' : Nat → Nat} {hd : Nat} {l1 l2 : List Nat}
+    {x y : Nat} (h : LList nxt prv hd (l1 ++ x :: l2)) (hy : y ∉ l1 ++ x :: l2) (hy0 : y ≠ NIL)
+    (hn : ∀ z ∈ l1 ++ x :: y :: l2, nxt' z = if z = x then y else if z = y then nxt x else nxt z)
+    (hp : ∀ z ∈ l1 ++ x :: y :: l2, prv' z = if z = y then x else if z = nxt x then y else prv z) :
+    LList nxt' prv' hd (l1 ++ x :: y :: l2) := by
+  have hnd : (l1 ++ x :: y :: l2).Nodup := by
+    have : l1 ++ x :: y :: l2 = (l1 ++ [x]) ++ y :: l2 := by simp
+    rw [this, List.nodup_middle]
+    simp only [List.append_assoc, List.singleton_append]
+    exact List.nodup_cons.mpr ⟨hy, h.nodup⟩
+  have hmem : ∀ z ∈ l1 ++ x :: y :: l2, z ≠ y → z ∈ l1 ++ x :: l2 := by
+    intro z hz hzy; simp only [List.mem_append, List.mem_cons] at hz ⊢; tauto
+  have hsx : nxt x = l2.headD NIL := by rw [h.next x (by simp), succOf_mid h.nodup]
+  have hyx : y ≠ x := fun e => hy (e ▸ (by simp : x ∈ l1 ++ x :: l2))
+  have hnil : NIL ∉ l1 ++ x :: y :: l2 := by
+    intro hm
+    simp only [List.mem_append, List.mem_cons] at hm
+    rcases hm with hm | hm | hm | hm
+    · exact h.nonil (by simp [hm])
+    · exact h.nonil (by simp [← hm])
+    · exact hy0 hm.symm
+    · exact h.nonil (by simp [hm])
+  refine ⟨hnd, hnil, ?_, ?_, ?_⟩
+  · rw [h.head]; cases l1 <;> simp
+  · intro z hz
+    rw [hn z hz, succOf_insert hnd]
+    by_cases hzx : z = x
+    · simp [hzx]
+    · by_cases hzy : z = y
+      · simp [hzy, hyx, hsx]
+      · simp [hzx, hzy, h.next z (hmem z hz hzy)]
+  · intro z hz
+    rw [hp z hz, predOf_insert hnd]
+    have hz0 : z ≠ NIL := fun e => hnil (e ▸ hz)
+    have key : l2.head? = some z ↔ z = l2.headD NIL := by rw [head?_eq_iff hz0]; exact eq_comm
+    by_cases hzy : z = y
+    · simp [hzy]
+    · rw [if_neg hzy, if_neg hzy, hsx]
+      by_cases hzn : z = l2.headD NIL
+      · rw [if_pos hzn, if_pos (key.mpr hzn)]
+      · rw [if_neg hzn, if_neg (fun e => hzn (key.mp e)), h.prev z (hmem z hz hzy)]
+
+/-- Inserting `a` at the front. -/
+theorem LList.insert_front {nxt prv nxt' prv' : Nat → Nat} {hd : Nat} {l : List Nat} {a : Nat}
+    (h : LList nxt prv hd l) (ha : a ∉ l) (ha0 : a ≠ NIL)
+    (hn : ∀ z ∈ a :: l, nxt' z = if z = a then hd else nxt z)
+    (hp : ∀ z ∈ a :: l, prv' z = if z = a then NIL else if z = hd then a else prv z) :
+    LList nxt' prv' a (a :: l) := by
+  have hnd : (a :: l).Nodup := List.nodup_cons.mpr ⟨ha, h.nodup⟩
+  have hnil : NIL ∉ a :: l := by
+    simp only [List.mem_cons, not_or]; exact ⟨Ne.symm ha0, h.nonil⟩
+  refine ⟨hnd, hnil, rfl, ?_, ?_⟩
+  · intro z hz
+    rw [hn z hz, succOf_insert_front hnd]
+    by_cases hza : z = a
+    · simp [hza, h.head]
+    · have hzl : z ∈ l := by simpa [hza] using hz
+      simp [hza, h.next z hzl]
+  · intro z hz
+    rw [hp z hz, predOf_insert_front hnd]
+    have hz0 : z ≠ NIL := fun e => hnil (e ▸ hz)
+    by_cases hza : z = a
+    · subst hza
+      have : l.head? ≠ some z := fun e => ha (List.mem_of_mem_head? e)
+      simp only [if_true]
+      rw [if_neg this]
+      exact (predOf_not_mem ha).symm
+    · have hzl : z ∈ l := by simpa [hza] using hz
+      rw [if_neg hza, h.head]
+      have key : l.head? = some z ↔ z = l.headD NIL := by rw [head?_eq_iff hz0]; exact eq_comm
+      by_cases hzh : z = l.headD NIL
+      · rw [if_pos hzh, if_pos (key.mpr hzh)]
+      · rw [if_neg hzh, if_neg (fun e => hzh (key.mp e)), h.prev z hzl]
+
+/-- Removing `x` from `l1 ++ x :: l2`. -/
+theorem LList.erase {nxt prv nxt' prv' : Nat → Nat} {hd : Nat} {l1 l2 : List Nat} {x : Nat}
+    (h : LList nxt prv hd (l1 ++ x :: l2))
+    (hn : ∀ z ∈ l1 ++ l2, nxt' z = if z = prv x then nxt x else nxt z)
+    (hp : ∀ z ∈ l1 ++ l2, prv' z = if z = nxt x then prv x else prv z) :
+    LList nxt' prv' (if prv x = NIL then nxt x else hd) (l1 ++ l2) := by
+  have hnd : (l1 ++ l2).Nodup := by
+    have := h.nodup; rw [List.nodup_middle] at this; exact (List.nodup_cons.mp this).2
+  have hnil : NIL ∉ l1 ++ l2 := fun hm => h.nonil (by simp at hm ⊢; tauto)
+  have hpx : prv x = l1.getLastD NIL := by rw [h.prev x (by simp), predOf_mid h.nodup]
+  have hsx : nxt x = l2.headD NIL := by rw [h.next x (by simp), succOf_mid h.nodup]
+  have hxz : ∀ z ∈ l1 ++ l2, z ≠ x := by
+    intro z hz e; subst e
+    have := h.nodup; rw [List.nodup_middle] at this; exact (List.nodup_cons.mp this).1 hz
+  have hmem : ∀ z ∈ l1 ++ l2, z ∈ l1 ++ x :: l2 := by
+    intro z hz; simp only [List.mem_append, List.mem_cons] at hz ⊢; tauto
+  refine ⟨hnd, hnil, ?_, ?_, ?_⟩
+  · rw [hpx, hsx, h.head]
+    rcases l1.eq_nil_or_concat with rfl | ⟨l1', p, rfl⟩
+    · simp
+    · have hp0 : p ≠ NIL := fun e => h.nonil (by simp [e])
+      simp [hp0]
+  · intro z hz
+    have hz0 : z ≠ NIL := fun e => hnil (e ▸ hz)
+    rw [hn z hz, succOf_erase h.nodup (hxz z hz), hpx, hsx]
+    have key : l1.getLast? = some z ↔ z = l1.getLastD NIL := by
+      rw [getLast?_eq_iff hz0]; exact eq_comm
+    by_cases hzp : z = l1.getLastD NIL
+    · rw [if_pos hzp, if_pos (key.mpr hzp)]
+    · rw [if_neg hzp, if_neg (fun e => hzp (key.mp e)), h.next z (hmem z hz)]
+  · intro z hz
+    have hz0 : z ≠ NIL := fun e => hnil (e ▸ hz)
+    rw [hp z hz, predOf_erase h.nodup (hxz z hz), hpx, hsx]
+    have key : l2.head? = some z ↔ z = l2.headD NIL := by rw [head?_eq_iff hz0]; exact eq_comm
+    by_cases hzn : z = l2.headD NIL
+    · rw [if_pos hzn, if_pos (key.mpr hzn)]
+    · rw [if_neg hzn, if_neg (fun e => hzn (key.mp e)), h.prev z (hmem z hz)]
+
+/-- Inserting `a` right before and `b` right after `g`. -/
+theorem LList.insert_around {nxt prv nxt' prv' : Nat → Nat} {hd : Nat} {l1 l2 : List Nat}
+    {g a b : Nat} (h : LList nxt prv hd (l1 ++ g :: l2)) (ha : a ∉ l1 ++ g :: l2)
+    (hb : b ∉ l1 ++ g :: l2) (hab : a ≠ b) (ha0 : a ≠ NIL) (hb0 : b ≠ NIL)
+    (hn : ∀ z ∈ l1 ++ a :: g :: b :: l2, nxt' z =
+      if z = a then g else if z = g then b else if z = b then nxt g
+      else if z = prv g then a else nxt z)
+    (hp : ∀ z ∈ l1 ++ a :: g :: b :: l2, prv' z =
+      if z = a then prv g else if z = g then a else if z = b then g
+      else if z = nxt g then b else prv z) :
+    LList nxt' prv' (if prv g = NIL then a else hd) (l1 ++ a :: g :: b :: l2) := by
+  have hgm : g ∈ l1 ++ g :: l2 := by simp
+  have hag : a ≠ g := fun e => ha (e ▸ hgm)
+  have hbg : b ≠ g := fun e => hb (e ▸ hgm)
+  have hpx : prv g = l1.getLastD NIL := by rw [h.prev g hgm, predOf_mid h.nodup]
+  have hsx : nxt g = l2.headD NIL := by rw [h.next g hgm, succOf_mid h.nodup]
+  -- step 1: insert `b` after `g`
+  have h1 := LList.insert_after (nxt' := fun z => if z = g then b else if z = b then nxt g else nxt z)
+    (prv' := fun z => if z = b then g else if z = nxt g then b else prv z) h hb hb0
+    (fun z _ => rfl) (fun z _ => rfl)
+  have hb1 : (l1 ++ g :: b :: l2).Nodup := h1.nodup
+  have ha1 : a ∉ l1 ++ g :: b :: l2 := by
+    simp only [List.mem_append, List.mem_cons] at ha ⊢; tauto
+  -- members of the final list other than `a` are members of the old list, or `b`
+  have hmem : ∀ z ∈ l1 ++ a :: g :: b :: l2, z ≠ a → z ≠ b → z ∈ l1 ++ g :: l2 := by
+    intro z hz hza hzb; simp only [List.mem_append, List.mem_cons] at hz ⊢; tauto
+  have hnb : nxt g ≠ b := by
+    rw [hsx]; intro e
+    cases l2 with
+    | nil => exact hb0 e.symm
+    | cons c t => simp at e; exact hb (by simp [e])
+  have hnil : NIL ∉ l1 ++ a :: g :: b :: l2 := by
+    intro hm
+    simp only [List.mem_append, List.mem_cons] at hm
+    rcases hm with hm | hm | hm | hm | hm
+    · exact h.nonil (by simp [hm])
+    · exact ha0 hm.symm
+    · exact h.nonil (by simp [← hm])
+    · exact hb0 hm.symm
+    · exact h.nonil (by simp [hm])
+  rcases l1.eq_nil_or_concat with rfl | ⟨l1', p, rfl⟩
+  · -- `g` was the head: `a` becomes the new head
+    have hpg : prv g = NIL := by rw [hpx]; rfl
+    have hhd : hd = g := by rw [h.head]; rfl
+    rw [if_pos hpg]
+    refine LList.insert_front h1 ha1 ha0 (fun z hz => ?_) (fun z hz => ?_)
+    · rw [hn z (by simpa using hz)]
+      by_cases hza : z = a
+      · simp [hza, hhd]
+      · have hz0 : z ≠ NIL := fun e => hnil (by rw [← e]; simpa using hz)
+        simp [hza, hpg, hz0]
+    · rw [hp z (by simpa using hz)]
+      by_cases hza : z = a
+      · simp [hza, hpg]
+      · rw [if_neg hza, if_neg hza, hhd]
+  · -- `g` had a predecessor `p`: insert `a` after `p`
+    simp only [List.concat_eq_append] at *
+    have hpg : prv g = p := by rw [hpx]; simp
+    have hp0 : p ≠ NIL := fun e => h.nonil (by simp [e])
+    rw [if_neg (by rw [hpg]; exact hp0)]
+    have e1 : l1' ++ [p] ++ g :: b :: l2 = l1' ++ p :: (g :: b :: l2) := by simp
+    have e2 : l1' ++ [p] ++ a :: g :: b :: l2 = l1' ++ p :: a :: (g :: b :: l2) := by simp
+    rw [e1] at h1 ha1
+    rw [e2] at hn hp hmem ⊢
+    have hpa : p ≠ a := fun e => ha (by simp [e])
+    have hpgn : p ≠ g := fun e => by
+      have := h.nodup; rw [show l1' ++ [p] ++ g :: l2 = l1' ++ p :: g :: l2 by simp] at this
+      simp [List.nodup_append, e] at this
+    have hpb : p ≠ b := fun e => hb (by simp [e])
+    have hnp : nxt p = g := by
+      have hnd0 := h.nodup
+      rw [show l1' ++ [p] ++ g :: l2 = l1' ++ p :: (g :: l2) by simp] at hnd0
+      rw [h.next p (by simp), show l1' ++ [p] ++ g :: l2 = l1' ++ p :: (g :: l2) by simp,
+        succOf_mid hnd0]
+      rfl
+    refine LList.insert_after h1 ha1 ha0 (fun z hz => ?_) (fun z hz => ?_)
+    · rw [hn z hz]
+      by_cases hza : z = a
+      · simp [hza, hpa, hpgn, hpb, Ne.symm hpa, hnp]
+      · by_cases hzp : z = p
+        · subst hzp; simp [hpa, hpgn, hpb, hpg]
+        · simp only [hza, hzp, if_false, hpg]
+    · rw [hp z hz]
+      by_cases hza : z = a
+      · simp [hza, hpg]
+      · simp only [hza, if_false]
+        by_cases hzg : z = g
+        · subst hzg; simp [hpgn, Ne.symm hpgn, hag, Ne.symm hag, hnp, hpb, Ne.symm hbg]
+        · by_cases hzb : z = b
+          · subst hzb; simp [hbg, hnp, hpb, hpgn, hab, Ne.symm hab]
+          · simp [hzg, hzb, Ne.symm hpgn, hnp, hpb, hpgn]
+
+theorem getLastD_append_cons (l : List Nat) (a : Nat) (t : List Nat) (d : Nat) :
+    (l ++ a :: t).getLastD d = (a :: t).getLastD d := by
+  rw [List.getLastD_eq_getLast?, List.getLastD_eq_getLast?, List.getLast?_append,
+    List.getLast?_eq_some_getLast (l := a :: t) (by simp)]
+  simp
+
+theorem getLastD_cons_mem (a : Nat) (t : List Nat) (d : Nat) : (a :: t).getLastD d ∈ a :: t := by
+  rw [List.getLastD_eq_getLast?, List.getLast?_eq_some_getLast (l := a :: t) (by simp)]
+  simp only [Option.getD_some]
+  exact List.getLast_mem _
+
+theorem headD_append_cons (l : List Nat) (a : Nat) (t : List Nat) (d : Nat) :
+    (l ++ a :: t).headD d = (l.headD a) := by
+  cases l <;> simp
+
+theorem mem_insert_iff {l1 l2 : List Nat} {x y e : Nat} :
+    e ∈ l1 ++ x :: y :: l2 ↔ e = y ∨ e ∈ l1 ++ x :: l2 := by
+  simp only [List.mem_append, List.mem_cons]
+  constructor
+  · rintro (h | h | h | h)
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inl h
+    · exact Or.inr (Or.inr (Or.inr h))
+  · rintro (h | h | h | h)
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inl h
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr (Or.inr h))
+
+end OM.Proof

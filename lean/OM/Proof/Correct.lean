@@ -2,3 +2,5 @@ import OM.Proof.Correct.Monad
 import OM.Proof.Correct.Inv
 import OM.Proof.Correct.Lists
 import OM.Proof.Correct.Frame
+import OM.Proof.Correct.Good
+import OM.Proof.Correct.Insert

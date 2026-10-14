@@ -105,10 +105,23 @@ structure INV (s : Core) (A : Abs) : Prop where
 
 /-! ### Transfer: INV depends only on the fields it mentions -/
 
-/-- The fields INV-S reads (except the chunk tags) are equal. -/
+/-- The fields INV-S reads (except the chunk tags), and the element records, are equal. -/
 structure SameLinks (s s' : Core) : Prop where
-  E : s'.E = s.E
-  Gs : s'.Gs = s.Gs
+  Esize : s'.E.size = s.E.size
+  eN : ∀ e, eN s' e = eN s e
+  eP : ∀ e, eP s' e = eP s e
+  eG : ∀ e, eG s' e = eG s e
+  eL : ∀ e, eL s' e = eL s e
+  eLive : ∀ e, (s'.E.getX e).live = (s.E.getX e).live
+  eH : ∀ e, (s'.E.getX e).h = (s.E.getX e).h
+  Gsize : s'.Gs.size = s.Gs.size
+  gN : ∀ g, gN s' g = gN s g
+  gP : ∀ g, gP s' g = gP s g
+  gF : ∀ g, gF s' g = gF s g
+  gLs : ∀ g, gLs s' g = gLs s g
+  gC : ∀ g, gC s' g = gC s g
+  gL : ∀ g, gL s' g = gL s g
+  gA : ∀ g, gA s' g = gA s g
   freeG : s'.freeG = s.freeG
   head : s'.head = s.head
   tail : s'.tail = s.tail
@@ -120,51 +133,59 @@ structure SameLinks (s s' : Core) : Prop where
   cF : ∀ c, cF s' c = cF s c
   cLs : ∀ c, cLs s' c = cLs s c
 
-theorem SameLinks.refl (s : Core) : SameLinks s s :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl⟩
+theorem SameLinks.refl (s : Core) : SameLinks s s := by
+  constructor <;> intros <;> rfl
 
 theorem SameLinks.trans {s t u : Core} (h1 : SameLinks s t) (h2 : SameLinks t u) :
-    SameLinks s u :=
-  ⟨h2.E.trans h1.E, h2.Gs.trans h1.Gs, h2.freeG.trans h1.freeG, h2.head.trans h1.head,
-   h2.tail.trans h1.tail, h2.firstGroup.trans h1.firstGroup, h2.firstChunk.trans h1.firstChunk,
-   h2.Csize.trans h1.Csize, fun c => (h2.cN c).trans (h1.cN c), fun c => (h2.cP c).trans (h1.cP c),
-   fun c => (h2.cF c).trans (h1.cF c), fun c => (h2.cLs c).trans (h1.cLs c)⟩
+    SameLinks s u := by
+  constructor <;> (try intro x) <;> first
+    | exact (h2.Esize).trans h1.Esize | exact (h2.eN x).trans (h1.eN x)
+    | exact (h2.eP x).trans (h1.eP x) | exact (h2.eG x).trans (h1.eG x)
+    | exact (h2.eL x).trans (h1.eL x) | exact (h2.eLive x).trans (h1.eLive x)
+    | exact (h2.eH x).trans (h1.eH x) | exact (h2.Gsize).trans h1.Gsize
+    | exact (h2.gN x).trans (h1.gN x) | exact (h2.gP x).trans (h1.gP x)
+    | exact (h2.gF x).trans (h1.gF x) | exact (h2.gLs x).trans (h1.gLs x)
+    | exact (h2.gC x).trans (h1.gC x) | exact (h2.gL x).trans (h1.gL x)
+    | exact (h2.gA x).trans (h1.gA x) | exact h2.freeG.trans h1.freeG
+    | exact h2.head.trans h1.head | exact h2.tail.trans h1.tail
+    | exact h2.firstGroup.trans h1.firstGroup | exact h2.firstChunk.trans h1.firstChunk
+    | exact h2.Csize.trans h1.Csize | exact (h2.cN x).trans (h1.cN x)
+    | exact (h2.cP x).trans (h1.cP x) | exact (h2.cF x).trans (h1.cF x)
+    | exact (h2.cLs x).trans (h1.cLs x)
 
 theorem INV.of_sameLinks' {s s' : Core} {A : Abs} (h : INV s A) (hs : SameLinks s s')
     (hsorted : (A.chunks.map (cT s')).IsChain (· < ·)) : INV s' A := by
-  obtain ⟨hE, hG, hF, hH, hT, hFG, hFC, hCs, hcN, hcP, hcF, hcL⟩ := hs
-  have e1 : eN s' = eN s := by funext e; simp [eN, hE]
-  have e2 : eP s' = eP s := by funext e; simp [eP, hE]
-  have e3 : gN s' = gN s := by funext e; simp [gN, hG]
-  have e4 : gP s' = gP s := by funext e; simp [gP, hG]
-  have e5 : cN s' = cN s := funext hcN
-  have e6 : cP s' = cP s := funext hcP
-  have e8 : eL s' = eL s := by funext e; simp [eL, hE]
-  have e9 : gL s' = gL s := by funext e; simp [gL, hG]
+  have e1 : eN s' = eN s := funext hs.eN
+  have e2 : eP s' = eP s := funext hs.eP
+  have e3 : gN s' = gN s := funext hs.gN
+  have e4 : gP s' = gP s := funext hs.gP
+  have e5 : cN s' = cN s := funext hs.cN
+  have e6 : cP s' = cP s := funext hs.cP
+  have e8 : eL s' = eL s := funext hs.eL
+  have e9 : gL s' = gL s := funext hs.gL
   refine
     { eList := ?_, eAlloc := ?_, tail := ?_, gList := ?_, gAlloc := ?_, gAlive := ?_,
       gOut := ?_, free := ?_, freeNodup := ?_, cList := ?_, cAlloc := ?_, cOut := ?_,
       gEnds := ?_, cEnds := ?_, grp := ?_, chk := ?_, eSorted := ?_, gSorted := ?_,
-      cSorted := ?_ }
-  · rw [e1, e2, hH]; exact h.eList
-  · rw [hE]; exact h.eAlloc
-  · rw [hT]; exact h.tail
-  · rw [e3, e4, hFG]; exact h.gList
-  · rw [hG]; exact h.gAlloc
-  · intro g; simp only [gA, hG]; exact h.gAlive g
+      cSorted := hsorted }
+  · rw [e1, e2, hs.head]; exact h.eList
+  · rw [hs.Esize]; exact h.eAlloc
+  · rw [hs.tail]; exact h.tail
+  · rw [e3, e4, hs.firstGroup]; exact h.gList
+  · rw [hs.Gsize]; exact h.gAlloc
+  · intro g; rw [hs.gA, hs.Gsize]; exact h.gAlive g
   · intro g; rw [e3, e4]; exact h.gOut g
-  · rw [hF, hG]; exact h.free
-  · rw [hF]; exact h.freeNodup
-  · rw [e5, e6, hFC]; exact h.cList
-  · rw [hCs]; exact h.cAlloc
-  · intro c hc; rw [e5, e6, hcF]; exact h.cOut c hc
-  · intro g hg; simp only [gF, gLs, hG]; exact h.gEnds g hg
-  · intro c hc; rw [hcF, hcL]; exact h.cEnds c hc
-  · intro g hg e he; simp only [eG, hE]; exact h.grp g hg e he
-  · intro c hc g hg; simp only [gC, hG]; exact h.chk c hc g hg
+  · rw [hs.freeG, hs.Gsize]; exact h.free
+  · rw [hs.freeG]; exact h.freeNodup
+  · rw [e5, e6, hs.firstChunk]; exact h.cList
+  · rw [hs.Csize]; exact h.cAlloc
+  · intro c hc; rw [e5, e6, hs.cF]; exact h.cOut c hc
+  · intro g hg; rw [hs.gF, hs.gLs]; exact h.gEnds g hg
+  · intro c hc; rw [hs.cF, hs.cLs]; exact h.cEnds c hc
+  · intro g hg e he; rw [hs.eG]; exact h.grp g hg e he
+  · intro c hc g hg; rw [hs.gC]; exact h.chk c hc g hg
   · rw [e8]; exact h.eSorted
   · rw [e9]; exact h.gSorted
-  · exact hsorted
 
 theorem INV.of_sameLinks {s s' : Core} {A : Abs} (h : INV s A) (hs : SameLinks s s')
     (ht : ∀ c, cT s' c = cT s c) : INV s' A := by

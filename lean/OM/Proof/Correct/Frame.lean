@@ -38,10 +38,17 @@ theorem Pres.same_safe {α : Type} {m : CM α} (h : Pres Same m) : Pres Safe m :
 /-- Close a goal `∀ s, Same s (f s)` for a state update `f` that leaves INV-S's fields alone. -/
 syntax "same" : tactic
 macro_rules
-  | `(tactic| same) => `(tactic| (intro s; refine ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, ?_, ?_, ?_,
-      ?_, ?_⟩, ?_⟩ <;> (try intro c) <;>
-      simp [cN, cP, cF, cLs, cT, apply_ite (f := Chunk.next), apply_ite (f := Chunk.prev),
-        apply_ite (f := Chunk.first), apply_ite (f := Chunk.last), apply_ite (f := Chunk.tag)]))
+  | `(tactic| same) => `(tactic| (
+      intro s
+      refine ⟨?_, fun _ => ?_⟩
+      all_goals (try constructor)
+      all_goals (try intro _)
+      all_goals simp [eN, eP, eG, eL, gN, gP, gF, gLs, gC, gL, gA, cN, cP, cF, cLs, cT,
+        apply_ite (f := Chunk.next), apply_ite (f := Chunk.prev), apply_ite (f := Chunk.first),
+        apply_ite (f := Chunk.last), apply_ite (f := Chunk.tag),
+        apply_ite (f := Group.next), apply_ite (f := Group.prev), apply_ite (f := Group.first),
+        apply_ite (f := Group.last), apply_ite (f := Group.chk), apply_ite (f := Group.lab),
+        apply_ite (f := Group.alive)]))
 
 /-! ### Reads -/
 
@@ -168,7 +175,7 @@ theorem guardTag_run (c t : Nat) (s : Core) :
 theorem inv_setTag {s : Core} {A : Abs} (h : INV s A) {c t : Nat} (hg : TagOK s c t) :
     INV { s with C := s.C.modify c fun C => { C with tag := t } } A := by
   have hsl : SameLinks s { s with C := s.C.modify c fun C => { C with tag := t } } := by
-    refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, by simp, ?_, ?_, ?_, ?_⟩ <;> intro d <;>
+    constructor <;> (try intro _) <;>
       simp [cN, cP, cF, cLs, apply_ite (f := Chunk.next), apply_ite (f := Chunk.prev),
         apply_ite (f := Chunk.first), apply_ite (f := Chunk.last)]
   refine h.of_sameLinks' hsl ?_
@@ -201,7 +208,7 @@ theorem pres_guardedSetTag (c t : Nat) : Pres Safe (guardedSetTag c t) := by
   · rw [hr]
     simp only [run_modify]
     refine ⟨?_, fun A hI => inv_setTag hI hg⟩
-    refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, by simp, ?_, ?_, ?_, ?_⟩ <;> intro d <;>
+    constructor <;> (try intro _) <;>
       simp [cN, cP, cF, cLs, apply_ite (f := Chunk.next), apply_ite (f := Chunk.prev),
         apply_ite (f := Chunk.first), apply_ite (f := Chunk.last)]
   · rw [hr]; exact IsPre.refl (R := Safe) s
