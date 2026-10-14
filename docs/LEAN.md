@@ -244,7 +244,7 @@ OM/
 | M1 ✅ | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
 | M2 ✅ | **Theorem A** at Level F (§12) | INV-S preservation, guards, FALLBACK, Invariant R | medium |
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
-| M4 | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W | invariant reasoning | medium |
+| M4 ◐ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13: core level done; wrapper's Lemma W open) | invariant reasoning | medium |
 | M5 | Top-structure lemmas T0–T5, (Q) | the largest proof | **high** |
 | M6 | Level M programs and simulation; assembly; **Theorems B and W** | mechanical, but long | medium |
 
@@ -384,3 +384,91 @@ anchor lies in `pre`.
 * The wrapper's rebuild loop became the recursive `rebuildLoop`. The mirror steps are split
   out (`mirrorInsert`, `mirrorDelete`). `OM.apply` and `OM.runOps` give the specification's
   interface.
+
+---
+
+## 13. M4: lower-level cost lemmas at Level F
+
+**Status.** The core level is done. The wrapper's Lemma W (rebuild timing) is open. Everything
+lives in `lean/OM/Proof/Cost/`. It compiles with no `sorry`. The axioms are the standard three.
+
+**Main statements.**
+* `insertAfter_cost` (`CoreCost.lean`) is Lemma K1 for insertions. From `CostInv`, inserting
+  after a listed element runs exactly `insertElem` then `background`, with no FALLBACK and no
+  failed guard, and `CostInv` holds again.
+* `markDead_cost` and `order_cost` cover deletions and queries.
+* `costInv_fresh`, `gval_fresh`, `lowinv_initCore` and `prepareStep_low` (`Fresh.lean`): a
+  fresh core satisfies `CostInv` once its top structure is ready.
+* `gparams_proof`, `cparams_proof`, `lparams_proof` (`Params.lean`): the parameter rule
+  `proofParams N` satisfies every lower-level parameter condition. It uses `L = max 8 (bits
+  of N)`, `G = 2L`, `T = 3L²`, `θ = 2L²` and all `K = 4`. The label widths are
+  `D = 2^(halvings)` and `B = halvings + pushes + 2`, all `O(L)`.
+
+**The cost invariant** (`CostInv`):
+* `LowInv` (`ResStep.lean`), the invariants below the top structure:
+  * INV-S;
+  * `GInv`, Lemmas G1–G4 (`Groups.lean`);
+  * `CInv`, Lemmas C1–C2 (`Chunks.lean`);
+  * `LInv`, Lemma C3 (`Labels.lean`), with its parameter conditions;
+  * `PQC`, the queue holds exactly the quiet chunks above `θ`, keyed by size
+    (`Sched.lean`);
+  * `CountInv`, the chunk count (`Count.lean`);
+  * `CParams`.
+* `TI`, the top structure's invariant.
+* The zeroing game `GameInv` (`Game.lean`, Lemma R through Theorem Z), with the round
+  accounting `RoundOK` (`ResCost.lean`).
+
+Undriven insertions are tracked by ghost functions `δ` (per group or chunk) and `δu` (units
+added by a group removal). `CostInv` has none; between an insertion and its drives, at most
+one exists.
+
+**The top structure enters through contracts** (`TopIface.lean`, `Fresh.lean`). M5 must prove
+them.
+* `TopContract TI μ J cap`:
+  * `TI` depends only on the top fields and the chunk list (`TopSame`);
+  * starting a chunk split's job succeeds, with `1 ≤ μ ≤ J`;
+  * each job step succeeds, and `μ` decreases while the job continues;
+  * the structure has room for chunks below `cap`.
+* `PrepContract TI PI ν`: eager construction gives `TI`; lazy construction gives `PI` with
+  `ν ≤ H + 1`; each preparation step succeeds and either finishes (`TI`) or decreases `ν`.
+
+The parameters of the zeroing game must satisfy I5,
+`θ + R·(H_{n−1} + 1) ≤ T` with `R ≥ J / K_R + 1`. It stays a hypothesis because `J` and `H`
+come from M5. The capacity conditions `2 + 2·⌊(count + 1)/(θ + 1 − c_max)⌋ ≤ n + 1, cap` are
+also hypotheses; Lemma W will discharge them.
+
+**Proof structure.**
+
+| File | Content |
+|---|---|
+| `Runs`, `Groups`, `GSteps`, `GMove` | runs of groups; G1–G4; the group phase (`groupPhase_ok`) with extra invariants threaded through `XGroup` hooks |
+| `Chunks`, `CPhase`, `CSteps`, `CMove`, `CDrive` | C1–C2; the chunk drive (`cinv_drive`) with `CXSteps` hooks; `FamBound`: what the drive knows of the family |
+| `Labels`, `LMove`, `LPop`, `LRoom`, `LHooks` | C3 across every step; room for split starts (`split_room`) and pushes (`push_room`); the C3 hooks |
+| `PQ`, `TopFrame`, `Reserve`, `Game` | the queue (K2: `pqAdjust_inc` never scans); what the top structure may change; Lemma R's game |
+| `Sched`, `TopIface`, `Count` | `PQC`; frames `CFrame`/`DFrame`; the contracts; the chunk count |
+| `ResLoop`, `Pop`, `ResStep`, `ResCost` | the reservation loop; pops; `LowInv`; `reservation_cost` with the round accounting |
+| `Budget`, `InsStep`, `BgParts`, `Background`, `CoreCost` | chunk budgets; the insertion step; the chunk phase; `background_ok`; `insertAfter_cost` |
+| `Fresh`, `Params` | fresh cores; the parameter rule |
+
+**Deviations from `PROOF.md`** (all recorded here; none weakens the bound):
+* **C3 is coarser.** It keeps one halving counter per chunk, `hv ≤ 2·(cs + rs)` (child and
+  root split starts), instead of per-gap halving histories. Pushes are counted per end and
+  per arriving group. The label width becomes `B_g ≈ 30L + 47 + log₂(8g'+8)`. That is still
+  `Θ(L)`, but larger than PROOF.md's `≈ 9L`.
+* **The arrivals bound of C3 is untruncated.** For a splitting chunk `x`:
+  `arrivals + 3·units(x) + 3·δ(family) + 3·s₀(x) ≤ 3·(unitsOf(s₀(x)) + |family|) + 3·δu(x)`.
+  Moves, insertions, removals and the end of a drive all preserve it exactly.
+* **The game's variables are the chunk indices `1 … n`**, with `n` fixed per core. The
+  chunk count bounds the indices that occur.
+* **Round accounting** (`RoundAt`/`RoundOK`). In a round, `ip·K_R ≤ js + (K_R − j)` while a
+  job runs, and `ip·K_R ≤ J + (K_R − j)` otherwise (at iteration `j` of a reservation).
+  This gives `ip + 1 ≤ J/K_R + 1 = R` at every insertion.
+* **The chunk count** keeps ghost sizes `e c ≤ c_max` at which quiet chunks became quiet:
+  `pops·(θ + 1 − c_max) + Σ_quiet (size − e) ≤ count` and `|C| = 2 + 2·pops`.
+
+**Open in M4.**
+* The wrapper: Lemma W (rebuild timing), so every core's `count + 1` stays within its
+  capacity. Then `CostInv` for `cur` and `nxt` through `OM.insert`, `OM.delete`, rebuild
+  steps and swaps.
+* I5 is proved in M5, once `J` and `H` are fixed.
+
