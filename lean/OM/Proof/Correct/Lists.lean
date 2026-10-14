@@ -626,4 +626,41 @@ theorem mem_split_of_mem {l1 l2 : List Nat} {g z : Nat} (h : z ∈ l1 ++ l2) : z
   · exact Or.inl h
   · exact Or.inr (Or.inr h)
 
+/-- In a list without duplicates, `succOf l a = b ≠ NIL` splits `l` around the pair `a, b`. -/
+theorem succOf_split {l : List Nat} {a b : Nat} (h : succOf l a = b) (hb : b ≠ NIL) :
+    ∃ l1 l2, l = l1 ++ a :: b :: l2 := by
+  have ha : a ∈ l := by
+    by_contra hm; rw [succOf_not_mem hm] at h; exact hb h.symm
+  obtain ⟨l1, r, rfl⟩ := List.mem_iff_append.mp ha
+  induction l1 generalizing r with
+  | nil =>
+    simp only [List.nil_append] at h ⊢
+    rw [succOf_cons', if_pos rfl] at h
+    cases r with
+    | nil => exact absurd h.symm hb
+    | cons c t => simp at h; subst h; exact ⟨[], t, rfl⟩
+  | cons d t ih =>
+    by_cases hda : d = a
+    · subst hda
+      simp only [List.cons_append] at h
+      rw [succOf_cons', if_pos rfl] at h
+      cases ht : t ++ d :: r with
+      | nil => simp at ht
+      | cons c u =>
+        rw [ht] at h; simp at h; subst h
+        exact ⟨[], u, by simp [ht]⟩
+    · simp only [List.cons_append] at h
+      rw [succOf_cons', if_neg (Ne.symm hda)] at h
+      obtain ⟨l1, l2, e⟩ := ih r h (by simp)
+      exact ⟨d :: l1, l2, by simp [e]⟩
+
+/-- `predOf l b = a ≠ NIL` splits `l` around the pair `a, b`. -/
+theorem predOf_split {l : List Nat} {a b : Nat} (h : predOf l b = a) (ha : a ≠ NIL) :
+    ∃ l1 l2, l = l1 ++ a :: b :: l2 := by
+  obtain ⟨m1, m2, e⟩ := succOf_split (l := l.reverse) h ha
+  refine ⟨m2.reverse, m1.reverse, ?_⟩
+  have := congrArg List.reverse e
+  simp only [List.reverse_reverse, List.reverse_append, List.reverse_cons] at this
+  rw [this]; simp
+
 end OM.Proof

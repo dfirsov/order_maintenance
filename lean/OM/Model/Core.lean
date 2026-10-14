@@ -171,10 +171,17 @@ def startGroupSplit (g : Nat) : CM Unit := do
   let gr ← newGroup G.chk
   modify (linkGroupPair · g gl gr labL labR)
 
-def removeGroup (g : Nat) : CM Unit := do
-  let P ← getP
+/-- Unlink and free group `g`, which must be alive and empty. -/
+def unlinkStep (g : Nat) : CM Unit := do
   let G ← getG g
+  require (g != NIL && g < (← get).Gs.size && G.alive && G.first == NIL)
+    "group split: removing a dead or non-empty group"
   modify (unlinkGroup · g)
+
+def removeGroup (g : Nat) : CM Unit := do
+  unlinkStep g
+  let P ← getP
+  let G ← getG g     -- `l` and `r` are not changed by the unlink
   let mut quiet : List Nat := []
   for s in [G.l, G.r] do
     let S ← getG s
@@ -184,31 +191,39 @@ def removeGroup (g : Nat) : CM Unit := do
   for s in quiet do
     if (← getG s).size ≥ P.G then startGroupSplit s
 
-/-- One move of a splitting group. Returns `false` once `g` is gone. -/
-def groupSplitStep (g : Nat) : CM Bool := do
+/-- Move one element of the splitting group `g` (alive, non-empty) to its lighter sibling.
+Returns the sibling. -/
+def moveElem (g : Nat) : CM Nat := do
   let P ← getP
   let G ← getG g
-  require (g != NIL && g < (← get).Gs.size && G.alive) "group split: dead group"
-  if G.first == NIL then
-    removeGroup g
-    return false
+  require (g != NIL && g < (← get).Gs.size && G.alive && G.first != NIL)
+    "group split: moving out of a dead or empty group"
   let gl := G.l
   let gr := G.r
   let Lg ← getG gl
   let Rg ← getG gr
   let center := 1 <<< (P.B_e - 1)
-  let dst ← if Lg.size ≤ Rg.size then do
-      require (Lg.next == g) "group split: left sibling not adjacent"
-      let lab ← if Lg.first == NIL then pure center
-        else after (← getE Lg.last).lab P.D_e P.B_e "elem: push-back room"
-      modify (moveFirstLeft · g gl G.first lab)
-      pure gl
-    else do
-      require (Rg.prev == g) "group split: right sibling not adjacent"
-      let lab ← if Rg.first == NIL then pure center
-        else before (← getE Rg.first).lab P.D_e "elem: push-front room"
-      modify (moveLastRight · g gr G.last lab)
-      pure gr
+  if Lg.size ≤ Rg.size then do
+    require (Lg.next == g) "group split: left sibling not adjacent"
+    let lab ← if Lg.first == NIL then pure center
+      else after (← getE Lg.last).lab P.D_e P.B_e "elem: push-back room"
+    modify (moveFirstLeft · g gl G.first lab)
+    pure gl
+  else do
+    require (Rg.prev == g) "group split: right sibling not adjacent"
+    let lab ← if Rg.first == NIL then pure center
+      else before (← getE Rg.first).lab P.D_e "elem: push-front room"
+    modify (moveLastRight · g gr G.last lab)
+    pure gr
+
+/-- One move of a splitting group. Returns `false` once `g` is gone. -/
+def groupSplitStep (g : Nat) : CM Bool := do
+  let G ← getG g
+  require (g != NIL && g < (← get).Gs.size && G.alive) "group split: dead group"
+  if G.first == NIL then
+    removeGroup g
+    return false
+  let dst ← moveElem g
   modG g fun X => { X with size := X.size - 1 }
   modG dst fun X => { X with size := X.size + 1 }
   let D ← getG dst

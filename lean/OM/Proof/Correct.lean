@@ -5,3 +5,4 @@ import OM.Proof.Correct.Frame
 import OM.Proof.Correct.Good
 import OM.Proof.Correct.Insert
 import OM.Proof.Correct.GroupSplit
+import OM.Proof.Correct.GroupMove
