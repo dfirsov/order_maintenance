@@ -39,7 +39,7 @@ theorem CXSteps.and {X Y X' Y' : Core → Prop} {L : List Nat} {δ δu s₀ : Na
       X' (cmoveRState t x (unitCand t x false) labs))
     (h3 : ∀ t A gh, INV t A → A.elist = L → GInv t L gh (fun _ => 0) →
       CInvE t L δ δu s₀ x → LiveC t x → cSt t x = .splitting →
-      cSz t (cLl t x) ≤ t.P.theta → cSz t (cRr t x) ≤ t.P.theta → X' t → Y' (cremoveState t x)) :
+      cSz t (cLl t x) ≤ cmax t.P → cSz t (cRr t x) ≤ cmax t.P → X' t → Y' (cremoveState t x)) :
     CXSteps (fun t => X t ∧ X' t) (fun t => Y t ∧ Y' t) L δ δu s₀ x := by
   refine ⟨?_, ?_, ?_⟩
   · intro t A gh hI hel hG hC hxL hst hne hdir hFB hX

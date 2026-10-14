@@ -61,8 +61,8 @@ structure CXSteps (X Y : Core → Prop) (L : List Nat) (δ δu s₀ : Nat → Na
     ∃ labs, (pushLabsR t x (unitCand t x false).length).run t = .ok labs t ∧
       X (cmoveRState t x (unitCand t x false) labs)
   rem : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
-    LiveC t x → cSt t x = .splitting → cF t x = NIL → cSz t (cLl t x) ≤ t.P.theta →
-    cSz t (cRr t x) ≤ t.P.theta →
+    LiveC t x → cSt t x = .splitting → cF t x = NIL → cSz t (cLl t x) ≤ cmax t.P →
+    cSz t (cRr t x) ≤ cmax t.P →
     FamBound t δ s₀ x → X t → Y (cremoveState t x)
 
 /-- The chunk drive's invariant after `j` moves of `x`'s split. -/
@@ -302,6 +302,10 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
   by_cases he : cF t x = NIL
   · -- removal
     have hcx : cSz t x = 0 := by rw [hC.csz x hD.live, hI'.celts_empty hD.live he]; rfl
+    have hszy' : cSz t (cLl t x) ≤ cmax t.P := by
+      unfold cmax; rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
+    have hszz' : cSz t (cRr t x) ≤ cmax t.P := by
+      unfold cmax; rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
     have hszy : cSz t (cLl t x) ≤ t.P.theta := by
       rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
     have hszz : cSz t (cRr t x) ≤ t.P.theta := by
@@ -309,7 +313,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
     have hrun := chunkSplitStep_remove he hyz hxy hxz hD.live.2 ⟨Fx.lSt, Fx.lSrc⟩ ⟨Fx.rSt, Fx.rSrc⟩
       hszy hszz
     obtain ⟨hef, A'', hI'', hel''⟩ := Good.ok_inv (good_chunkSplitStep x) hI' hrun
-    refine ⟨_, Or.inr ⟨hrun, ⟨Or.inr (hXs.rem t A' gh hI' rfl hG hC hD.live hD.st he hszy hszz
+    refine ⟨_, Or.inr ⟨hrun, ⟨Or.inr (hXs.rem t A' gh hI' rfl hG hC hD.live hD.st he hszy' hszz'
       hFB hD.xx),
       hef.P.trans hPt, hD.ef.trans hef, ⟨A'', hI'', hel''⟩,
       ⟨gh, hG.of_gsame (gsame_cremove t x)⟩, ?_⟩⟩⟩

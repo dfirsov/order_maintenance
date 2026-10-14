@@ -416,7 +416,7 @@ set_option linter.deprecated false
 /-- **The chunk drive leaves the queue, the game and the top structure alone**, threaded next to
 an invariant `X`. -/
 theorem cxsteps_dframe {X Y : Core → Prop} {L : List Nat} {δ δu s₀ : Nat → Nat} {x : Nat}
-    (h : CXSteps X Y L δ δu s₀ x) (t₀ : Core) :
+    (h : CXSteps X Y L δ δu s₀ x) (t₀ : Core) (hcθ : cmax t₀.P ≤ t₀.P.theta) :
     CXSteps (fun t => X t ∧ DFrame t₀ t) (fun t => Y t ∧ DFrame t₀ t) L δ δu s₀ x := by
   refine h.and ?_ ?_ ?_
   · intro t A gh labs hI hel hG hC hxL hst hX
@@ -431,6 +431,6 @@ theorem cxsteps_dframe {X Y : Core → Prop} {L : List Nat} {δ δu s₀ : Nat �
     subst hel
     have Fx := hC.cfam x hxL hst
     exact hX.trans (cremove_dframe hxL.2 Fx.lLive.2 Fx.rLive.2 (Fx.lx hI hxL) (Fx.rx hI hxL) hst
-      Fx.lSt Fx.rSt hl hr)
+      Fx.lSt Fx.rSt (le_trans hl (by rw [hX.P]; exact hcθ)) (le_trans hr (by rw [hX.P]; exact hcθ)))
 
 end OM.Proof
