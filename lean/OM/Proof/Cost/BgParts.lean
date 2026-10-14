@@ -157,3 +157,94 @@ theorem cxsteps_count {X Y : Core → Prop} {L : List Nat} {δ δu s₀ : Nat �
       Fx.rSt hl hr⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem driveChunk_run_split {t : Core} {c : Nat} (h : cSt t c = .splitting) :
+    (driveChunk c).run t = (driveChunkFrom c).run t := by
+  unfold driveChunk; simp only [run_getC_bind]; simp only [cSt] at h; rw [h]
+
+theorem driveChunk_run_ovf {t : Core} {c : Nat} (h : cSt t c = .overflow) :
+    (driveChunk c).run t = (driveChunkFrom (cSrc t c)).run t := by
+  unfold driveChunk; simp only [run_getC_bind]; simp only [cSt] at h; rw [h]
+
+theorem driveChunk_run_quiet {t : Core} {c : Nat} (h : cSt t c = .quiet) :
+    (driveChunk c).run t = .ok () t := by
+  unfold driveChunk; simp only [run_getC_bind]; simp only [cSt] at h; rw [h]; rfl
+
+/-- What the chunk phase leaves. -/
+structure CPost (L : List Nat) (s₀ : Nat → Nat) (t3 t4 : Core) : Prop where
+  inv : ∃ A, INV t4 A ∧ A.elist = L
+  ginv : ∃ gh, GInv t4 L gh (fun _ => 0)
+  cinv : CInv t4 L (fun _ => 0) (fun _ => 0) s₀
+  lx : LX s₀ (fun _ => 0) (fun _ => 0) t4
+  cnt : ∃ e pops, CountInv t4 e pops
+  fr : DFrame t3 t4
+
+/-- **The chunk phase** after an insertion into chunk `c`. -/
+theorem driveChunk_ok {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu : Nat → Nat}
+    {e : Nat → Nat} {pops c : Nat} (hI : INV t A) (hel : A.elist = L)
+    (hG : GInv t L gh (fun _ => 0)) (hC : CInv t L (δ1 c) δu s₀) (hLX : LX s₀ (δ1 c) δu t)
+    (hN : CountInv t e pops) (hGP : GParams t.P) (hCP : CParams t.P) (hcL : LiveC t c)
+    (hcnd : cSt t c ≠ .dead) (hcsz : 1 ≤ cSz t c) :
+    ∃ t4, (driveChunk c).run t = .ok () t4 ∧ CPost L s₀ t t4 := by
+  have hδu := hC.δu
+  have hcθ : cmax t.P ≤ t.P.theta := hCP.I4
+  -- the drive of a family containing `c`
+  have drive : ∀ x, LiveC t x → cSt t x = .splitting →
+      (c = cLl t x ∨ c = x ∨ c = cRr t x) →
+      ∃ t4, (driveChunkFrom x).run t = .ok () t4 ∧ CPost L s₀ t t4 := by
+    intro x hxL hxs hcx
+    subst hel
+    have Fx := hC.cfam x hxL hxs
+    have hlx := Fx.lx hI hxL
+    have hrx := Fx.rx hI hxL
+    have hlr := Fx.lr hI hxL
+    have hCx : CInvE t A.elist (δ1 c) δu s₀ x :=
+      { hC with c1 := fun z hz hzs _ => hC.c1 z hz hzs (by unfold NIL; have := hz.1; omega) }
+    have hC1 := hC.c1 x hxL hxs (by unfold NIL; have := hxL.1; omega)
+    have hXs := cxsteps_count (cxsteps_dframe (cxsteps_linv (L := A.elist) (δ := δ1 c) (δu := δu)
+      (s₀ := s₀) (x := x)) t hcθ)
+    obtain ⟨t4, hrun, hD⟩ := cinv_drive hI hG hCx hC1 hXs ⟨⟨hLX, DFrame.refl t⟩, e, pops, hN⟩ hGP hCP
+      hxL hxs (fun c' h1 h2 h3 => by
+        unfold δ1; rw [if_neg]; rintro rfl; rcases hcx with h | h | h <;> contradiction)
+      (by unfold δ1; rcases hcx with rfl | rfl | rfl <;> simp [hlx, hrx, hlr, Ne.symm hlx,
+        Ne.symm hrx, Ne.symm hlr])
+      (by
+        unfold δ1
+        refine ⟨?_, ?_, ?_⟩ <;> split <;> first | omega | (subst_vars; exact hcsz))
+    refine ⟨t4, hrun, hD.inv, hD.ginv, hD.cinv, ?_, ?_, ?_⟩
+    · rcases hD.xx with ⟨⟨h1, -⟩, -⟩ | ⟨⟨h1, -⟩, -⟩
+      · exact h1.close hδu
+      · exact h1
+    · rcases hD.xx with ⟨-, h2⟩ | ⟨-, h2⟩ <;> exact h2
+    · rcases hD.xx with ⟨⟨-, h2⟩, -⟩ | ⟨⟨-, h2⟩, -⟩ <;> exact h2
+  cases hst : cSt t c with
+  | splitting =>
+    rw [driveChunk_run_split hst]
+    exact drive c hcL hst (Or.inr (Or.inl rfl))
+  | overflow =>
+    rw [driveChunk_run_ovf hst]
+    obtain ⟨hxL, hxs, hlr⟩ := hC.covf c hcL hst
+    exact drive _ hxL hxs (by rcases hlr with h | h; exact Or.inl h.symm; exact Or.inr (Or.inr h.symm))
+  | quiet =>
+    rw [driveChunk_run_quiet hst]
+    -- the undriven insertion is in no family
+    have hfree : ∀ x, LiveC t x → cSt t x = .splitting →
+        δ1 c (cLl t x) = 0 ∧ δ1 c x = 0 ∧ δ1 c (cRr t x) = 0 ∧ δu x = 0 := by
+      intro x hx hxs
+      have Fx := hC.cfam x hx hxs
+      have h1 : cLl t x ≠ c := by intro e; have := Fx.lSt; rw [e, hst] at this; cases this
+      have h2 : x ≠ c := by rintro rfl; rw [hst] at hxs; cases hxs
+      have h3 : cRr t x ≠ c := by intro e; have := Fx.rSt; rw [e, hst] at this; cases this
+      have h4 : δu x = 0 := by have := hδu x; unfold δ1 at this; rw [if_neg h2] at this; omega
+      unfold δ1; simp [h1, h2, h3, h4]
+    exact ⟨t, rfl, ⟨A, hI, hel⟩, ⟨gh, hG⟩, hC.drop hfree, hLX.close hδu, ⟨e, pops, hN⟩,
+      DFrame.refl t⟩
+  | dead => exact absurd hst hcnd
+
+end OM.Proof
