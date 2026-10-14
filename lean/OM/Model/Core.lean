@@ -514,27 +514,27 @@ def insertAfter (x h : Nat) : CM Nat := do
 
 /-! ### Construction -/
 
-/-- A fresh core (`Core.__init__`). With `lazy`, the top structure is built later, one
-`prepareStep` at a time. -/
+/-- A fresh core's lists: one chunk, one group, and the sentinel element (dead), all index 1. -/
+def initState (P : Params) : Core :=
+  { P := P
+    E := #[default, { grp := 1, lab := 1 <<< (P.B_e - 1), h := 0, live := false }]
+    Gs := #[default, { chk := 1, lab := 1 <<< (P.B_g - 1), first := 1, last := 1, size := 1 }]
+    C := #[default, { first := 1, last := 1, size := 1 }]
+    firstGroup := 1, firstChunk := 1, head := 1, tail := 1, count := 1 }
+
+/-- A fresh core (`Core.__init__`), from `{ P := P }`. With `lazy`, the top structure is built
+later, one `prepareStep` at a time. -/
 def initCore (lazy : Bool) : CM Unit := do
   let P ← getP
-  let c ← newChunk
-  let g ← newGroup c
+  set (initState P)
   modify fun s => { s with
-    prep := some { chunk := c, below := c, path := Array.replicate (P.H + 1) NIL } }
+    prep := some { chunk := 1, below := 1, path := Array.replicate (P.H + 1) NIL } }
   if lazy then
     modify fun s => { s with ready := false }
   else
     for _ in List.range (P.H + 1) do
       if ← initStep then break
     modify fun s => { s with ready := true }
-  modG g fun G => { G with lab := 1 <<< (P.B_g - 1) }
-  modC c fun C => { C with first := g, last := g }
-  let hd ← newElem g (1 <<< (P.B_e - 1)) 0
-  modE hd fun e => { e with live := false }
-  modG g fun G => { G with first := hd, last := hd, size := 1 }
-  modC c fun C => { C with size := 1 }
-  modify fun s => { s with firstGroup := g, firstChunk := c, tail := hd, head := hd, count := 1 }
 
 /-- One step of deferred initialization; `true` once the core is ready. -/
 def prepareStep : CM Bool := do

@@ -62,13 +62,33 @@ def OM.nextCapacity (om : OM) : Nat :=
 /-- Copy one element of `cur` at the cursor into `nxt`, if it is live. -/
 def copyAtCursor (om : OM) (nxt : Core) : WM (OM × Core) := do
   let e := om.cur.E.getX om.cursor
-  let mut om := om
-  let mut nxt := nxt
   if e.live then
     let (y, n') ← runCore nxt (insertAfter nxt.tail e.h)
-    nxt := n'
-    om := { om with nxtIdx := om.nxtIdx.setX e.h y }
-  return ({ om with cursor := e.next }, nxt)
+    return ({ om with nxtIdx := om.nxtIdx.setX e.h y, cursor := e.next }, n')
+  else
+    return ({ om with cursor := e.next }, nxt)
+
+/-- `nxt` replaces `cur`. -/
+def OM.swap (om : OM) (nxt : Core) : OM :=
+  { om with cur := nxt, curIdx := om.nxtIdx, nxt := none, nxtIdx := #[] }
+
+/-- The rebuild loop, with `budget` steps left: each iteration spends one unit, except the one
+that sets the cursor (`fuel` bounds the iterations). -/
+def rebuildLoop (om : OM) (nxt : Core) : Nat → Nat → WM OM
+  | 0, _ => return { om with nxt := some nxt }
+  | fuel + 1, budget =>
+    if budget = 0 then return { om with nxt := some nxt }
+    else if !om.cursorSet then do
+      let (ready, n') ← runCore nxt prepareStep
+      if ready then
+        rebuildLoop { om with cursor := (om.cur.E.getX om.cur.head).next, cursorSet := true } n'
+          fuel budget
+      else rebuildLoop om n' fuel (budget - 1)
+    else if om.cursor = NIL then return om.swap nxt
+    else do
+      let (om', n') ← copyAtCursor om nxt
+      if om'.cursor = NIL then return om'.swap n'
+      else rebuildLoop om' n' fuel (budget - 1)
 
 /-- The rebuild's share of one operation: exactly `K_B` steps (`wrapper.py` `_rebuild_step`). -/
 def OM.rebuildStep (mk : Nat → Params) (om : OM) : WM OM := do
@@ -80,30 +100,7 @@ def OM.rebuildStep (mk : Nat → Params) (om : OM) : WM OM := do
       return { om with nxt := some nxt, nxtIdx := #[], cursorSet := false,
                        rebuilds := om.rebuilds + 1 }
     return om
-  | some nxt0 =>
-    let mut om := { om with nxt := none }
-    let mut nxt := nxt0
-    let mut budget := om.KB
-    -- each iteration spends one unit of budget, except the one that sets the cursor
-    for _ in List.range (om.KB + 1) do
-      if budget == 0 then break
-      if !om.cursorSet then
-        let (ready, n') ← runCore nxt prepareStep
-        nxt := n'
-        if ready then
-          om := { om with cursor := (om.cur.E.getX om.cur.head).next, cursorSet := true }
-        else
-          budget := budget - 1
-        continue
-      if om.cursor != NIL then
-        let (om', n') ← copyAtCursor om nxt
-        om := om'
-        nxt := n'
-        budget := budget - 1
-      if om.cursor == NIL then
-        -- swap: nxt replaces cur
-        return { om with cur := nxt, curIdx := om.nxtIdx, nxt := none, nxtIdx := #[] }
-    return { om with nxt := some nxt }
+  | some nxt0 => rebuildLoop { om with nxt := none } nxt0 (om.KB + 1) om.KB
 
 def OM.insert (mk : Nat → Params) (om : OM) (hx : Option Nat) : WM (Nat × OM) := do
   let hy := om.nextHandle

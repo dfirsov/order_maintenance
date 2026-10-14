@@ -135,3 +135,46 @@ theorem insertAfter_run {s : Core} {A : Abs} (hI : INV s A) {x : Nat} (hx : x �
     · exact fun h => h.elim
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Queries and deletion -/
+
+theorem order_run (s : Core) (x y : Nat) :
+    (order x y).run s = .ok (keyLt (keyOf s x) (keyOf s y)) s := rfl
+
+/-- **Order queries** answer by position in the element list (Lemma 3.1). -/
+theorem order_correct {s : Core} {A : Abs} (h : INV s A) {x y : Nat} (hx : x ∈ A.elist)
+    (hy : y ∈ A.elist) : (order x y).run s = .ok (OM.Spec.precedes A.elist x y) s := by
+  rw [order_run]
+  congr 1
+  unfold OM.Spec.precedes
+  rw [Bool.eq_iff_iff, keyLt_iff, order_iff h hx hy, decide_eq_true_iff]
+
+/-- Marking an element dead touches only its `live` bit. -/
+theorem markDead_run (s : Core) (x : Nat) :
+    (markDead x).run s = .ok () { s with E := s.E.modify x fun e => { e with live := false } } := rfl
+
+/-- INV-S reads the element records only through `next`, `prev`, `grp` and `lab`. -/
+theorem INV.of_E {s : Core} {A : Abs} (h : INV s A) (E' : Array Elem) (hsz : E'.size = s.E.size)
+    (hf : ∀ e, (E'.getX e).next = (s.E.getX e).next ∧ (E'.getX e).prev = (s.E.getX e).prev ∧
+      (E'.getX e).grp = (s.E.getX e).grp ∧ (E'.getX e).lab = (s.E.getX e).lab) :
+    INV { s with E := E' } A := by
+  have e1 : eN { s with E := E' } = eN s := funext fun e => (hf e).1
+  have e2 : eP { s with E := E' } = eP s := funext fun e => (hf e).2.1
+  have e3 : eG { s with E := E' } = eG s := funext fun e => (hf e).2.2.1
+  have e4 : eL { s with E := E' } = eL s := funext fun e => (hf e).2.2.2
+  exact ⟨by rw [e1, e2]; exact h.eList, by simp only [hsz]; exact h.eAlloc, h.tail, h.gList, h.gAlloc,
+    h.gPos, h.gAlive, h.gOut, h.free, h.freeNodup, h.cList, h.cAlloc, h.cOut, h.gEnds, h.cEnds,
+    by rw [e3]; exact h.grp, h.chk, by rw [e4]; exact h.eSorted, h.gSorted, h.cSorted⟩
+
+theorem markDead_inv {s : Core} {A : Abs} (h : INV s A) (x : Nat) :
+    INV { s with E := s.E.modify x fun e => { e with live := false } } A :=
+  h.of_E _ (by simp) fun e => by
+    simp only [Array.getX_modify]; split <;> exact ⟨rfl, rfl, rfl, rfl⟩
+
+end OM.Proof
