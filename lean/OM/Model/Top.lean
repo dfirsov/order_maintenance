@@ -351,10 +351,9 @@ def drainStep (v : Nat) : CM Bool := do
 
 /-! ### Insertion jobs -/
 
-/-- The O(1) part of a top insertion: `y, z` are linked before/after `x` in the chunk list.
-Returns the job that does the rest. -/
-def insertAround (x y z : Nat) : CM Job := do
-  let P ← getP
+/-- The guarded, read-only part of `insertAround`: labels for the new neighbours `y`, `z` of
+`x` in every table holding `x`, the tags of `y` and `z`, and `x`'s live parent. -/
+def insertAroundPrep (x : Nat) : CM (Nat × Nat × List Nat × List Nat × List Nat × Nat) := do
   let px ← getPath x
   let tabs := (← get).cin.getX x
   let mut ly : List Nat := []
@@ -368,14 +367,13 @@ def insertAround (x y z : Nat) : CM Job := do
   let some i1 := tabs.idx? p1 | guard "insert_around: parent not among x's tables"
   let tx := (← getC x).tag
   if tx < f1x then guard "insert_around: negative tag"
-  let ty := tx - f1x + ly.getD i1 0
-  let tz := tx - f1x + lz.getD i1 0
   let lp ← getLpar x
   if !(← getN lp).children.contains x then guard "insert_around: x not a child of its parent"
-  -- the tags first (the prototype writes them last; only failure states differ, and FALLBACK
-  -- discards those): `y` and `z` are not neighbours, so the second guard is unaffected
-  guardedSetTag y ty
-  guardedSetTag z tz
+  return (tx - f1x + ly.getD i1 0, tx - f1x + lz.getD i1 0, tabs, ly, lz, lp)
+
+/-- The rest of `insertAround`, in the top structure only: table entries, paths, children. -/
+def insertAroundFinish (x y z : Nat) (tabs ly lz : List Nat) (lp : Nat) : CM Job := do
+  let P ← getP
   for (T, a, b) in tabs.zip (ly.zip lz) do
     tableInsert T x y true a
     tableInsert T x z false b
@@ -385,6 +383,16 @@ def insertAround (x y z : Nat) : CM Job := do
     setLpar c lp
   modN lp fun n => { n with children := n.children.replace1 x [y, x, z] }
   return { x := x, y := y, z := z, pc := .copy 1 }
+
+/-- The O(1) part of a top insertion: `y, z` are linked before/after `x` in the chunk list.
+The tags are written first (the prototype writes them last; only failure states differ, and
+FALLBACK discards those); `y` and `z` are not neighbours, so the second guard is unaffected by
+the first write. Returns the job that does the rest. -/
+def insertAround (x y z : Nat) : CM Job := do
+  let (ty, tz, tabs, ly, lz, lp) ← insertAroundPrep x
+  guardedSetTag y ty
+  guardedSetTag z tz
+  insertAroundFinish x y z tabs ly lz lp
 
 /-- The sweep funding loop of `v`, resumed after `k` sweep steps. -/
 def fundLoop (j : Job) (v up src k : Nat) : CM (Option Job) := do

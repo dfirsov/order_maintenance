@@ -394,21 +394,29 @@ def linkChunkPair (s : Core) (x y z : Nat) : Core :=
     C := C4.modify x (fun C => { C with prev := y, next := z })
     firstChunk := if X.prev != NIL then s.firstChunk else y }
 
+/-- The split's bookkeeping: chunk states and siblings, and the running job. -/
+def markSplit (x y z : Nat) (job : Job) : CM Unit := do
+  modC x fun C => { C with st := .splitting, l := y, r := z }
+  modC y fun C => { C with st := .overflow, src := x }
+  modC z fun C => { C with st := .overflow, src := x }
+  modify fun s => { s with resJob := some job }
+
+/-- Split chunk `x` (just popped from the queue): link two new chunks around it, give them tags
+(guarded) and start the top structure's insertion job. -/
+def splitChunkStart (x : Nat) : CM Unit := do
+  require (x != NIL && x < (← get).C.size) "reservation: invalid chunk"
+  let y ← newChunk
+  let z ← newChunk
+  modify (linkChunkPair · x y z)
+  let job ← insertAround x y z
+  markSplit x y z job
+
 def reservation (k : Nat) : CM Unit := do
   for _ in List.range (k) do
     match (← get).resJob with
     | none =>
       if ← pqEmpty then return
-      let x ← pqPopMax
-      require (x != NIL && x < (← get).C.size) "reservation: invalid chunk"
-      let y ← newChunk
-      let z ← newChunk
-      modify (linkChunkPair · x y z)
-      let job ← insertAround x y z
-      modC x fun C => { C with st := .splitting, l := y, r := z }
-      modC y fun C => { C with st := .overflow, src := x }
-      modC z fun C => { C with st := .overflow, src := x }
-      modify fun s => { s with resJob := some job }
+      splitChunkStart (← pqPopMax)
     | some job =>
       let r ← jobStep job
       modify fun s => { s with resJob := r }
