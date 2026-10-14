@@ -896,3 +896,78 @@ theorem rebuildStep_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} 
       omega
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+theorem countP_insertAfterL (p : Nat → Bool) {a b : Nat} {l : List Nat} (ha : a ∈ l) :
+    (OM.Spec.insertAfterL a b l).countP p = l.countP p + (if p b then 1 else 0) := by
+  induction l with
+  | nil => simp at ha
+  | cons x t ih =>
+    simp only [OM.Spec.insertAfterL]
+    by_cases hxa : x = a
+    · rw [if_pos hxa]; simp only [List.countP_cons]; split <;> split <;> omega
+    · rw [if_neg hxa]
+      have hat : a ∈ t := by simp at ha; rcases ha with h | h; exact absurd h.symm hxa; exact h
+      simp only [List.countP_cons, ih hat]; split <;> split <;> omega
+
+theorem liveH_length (c : Core) (l : List Nat) : (liveH c l).length = l.countP (live c) := by
+  unfold liveH FM; rw [List.length_map, List.countP_eq_length_filter]
+
+/-- An insertion of a live element adds one live copy. -/
+theorem liveH_length_ins {c c' : Core} {l : List Nat} {a b : Nat} (ha : a ∈ l)
+    (hrec : ∀ e ∈ l, live c' e = live c e ∧ hdl c' e = hdl c e) (hb : live c' b = true) :
+    (liveH c' (OM.Spec.insertAfterL a b l)).length = (liveH c l).length + 1 := by
+  rw [liveH_length, liveH_length, countP_insertAfterL _ ha, if_pos hb]
+  congr 1
+  exact List.countP_congr fun e he => by rw [(hrec e he).1]
+
+/-- **Mirroring an insertion** into `nxt` keeps it in service, within its fill bound. -/
+theorem mirrorInsert_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {n : Core}
+    {B : Abs} {D : Nat} {hx : Option Nat} {hy : Nat} (hn : om.nxt = some n)
+    (hset : om.cursorSet = true) (hRB : CoreR n B) (hok : CoreOK mk TI μ Jf nf Rf n B.elist)
+    (hfill : n.count ≤ 1 + (liveH n B.elist).length + D) (hroom : n.count + 1 ≤ n.P.N)
+    (hIB : IdxOK n B om.nxtIdx (liveH n B.elist))
+    (hzB : ∀ x, om.nxtIdx.getX x ≠ 0 → x ∈ liveH n B.elist) :
+    ∃ om2, om.mirrorInsert hx hy = .ok om2 ∧ om2.cur = om.cur ∧ om2.cursorSet = om.cursorSet ∧
+      om2.cursor = om.cursor ∧ om2.KB = om.KB ∧ om2.live = om.live ∧
+      ∃ n' B', om2.nxt = some n' ∧ CoreR n' B' ∧ CoreOK mk TI μ Jf nf Rf n' B'.elist ∧
+        n'.count ≤ 1 + (liveH n' B'.elist).length + D ∧ n'.P = n.P := by
+  -- the anchor in `nxt`, when it is copied
+  have hins : ∀ xn, xn ∈ B.elist → ∃ y' n' B', runCore n (insertAfter xn hy) = .ok (y', n') ∧
+      CoreR n' B' ∧ CoreOK mk TI μ Jf nf Rf n' B'.elist ∧
+      n'.count ≤ 1 + (liveH n' B'.elist).length + D ∧ n'.P = n.P := by
+    intro xn hxn
+    obtain ⟨n', B', hr', hRB', hB', hrecB, hlyB, hhyB, hyB, _, _, hP'⟩ := core_insert hRB hxn hy
+    obtain ⟨n2, hr2, -, hok2, hcnt2, hP2⟩ := hok.insert S hxn hroom hy
+    rw [hr'] at hr2; cases hr2
+    refine ⟨_, n', B', runCore_ok hr', hRB', by rw [hB']; exact hok2, ?_, hP2⟩
+    rw [hB', liveH_length_ins hxn hrecB hlyB, hcnt2]; omega
+  unfold OM.mirrorInsert
+  rw [hn]
+  simp only [hset, Bool.true_and]
+  cases hx with
+  | none =>
+    simp only [if_true]
+    obtain ⟨y', n', B', hr, hRB', hok', hfill', hP'⟩ := hins n.head hRB.head
+    simp only [bind, Except.bind, hr]
+    exact ⟨_, rfl, rfl, by simp [hset], rfl, rfl, rfl, n', B', rfl, hRB', hok', hfill', hP'⟩
+  | some x =>
+    simp only
+    by_cases hc : (om.nxtIdx.getX x != 0) = true
+    · rw [if_pos hc]
+      have hx0 : om.nxtIdx.getX x ≠ 0 := by simpa using hc
+      obtain ⟨y', n', B', hr, hRB', hok', hfill', hP'⟩ := hins _ (hIB x (hzB x hx0)).1
+      simp only [bind, Except.bind, hr]
+      exact ⟨_, rfl, rfl, by simp [hset], rfl, rfl, rfl, n', B', rfl, hRB', hok', hfill', hP'⟩
+    · rw [if_neg hc]
+      exact ⟨om, rfl, rfl, by simp [hset], rfl, rfl, rfl, n, B, hn, hRB, hok, hfill, rfl⟩
+
+end OM.Proof
