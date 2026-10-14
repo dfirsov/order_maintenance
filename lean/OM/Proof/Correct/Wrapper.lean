@@ -786,3 +786,40 @@ theorem theoremA {mk : Nat → Params} (hmk : ∀ N, CoreP (mk N)) (KB : Nat) :
   exact ⟨om, h, fun ops hv => runOps_ok hmk ops hW hv⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+/-- The parameter conditions hold for the prototype's shape (`Params.for_capacity`):
+`D_e = 2^(B_e-1) / (8G+8)` with `8G+8 ≤ 2^(B_e-1)`, and `T + 1 < 2^B_g`. -/
+theorem coreP_of_shape (P : Params) (hD : P.D_e = 2 ^ (P.B_e - 1) / (8 * P.G + 8))
+    (hB : 8 * P.G + 8 ≤ 2 ^ (P.B_e - 1)) (hT : P.T + 1 < 2 ^ P.B_g) : CoreP P := by
+  have hBe : 1 ≤ P.B_e := by
+    rcases Nat.eq_zero_or_pos P.B_e with h | h
+    · rw [h] at hB; simp at hB
+    · exact h
+  have h2 : 2 ^ P.B_e = 2 * 2 ^ (P.B_e - 1) := by
+    rw [← Nat.pow_succ']; congr 1; omega
+  have hgs : fbGS P ≤ P.G + 1 := by unfold fbGS; omega
+  have hgs1 : 1 ≤ fbGS P := fbGS_pos P
+  have hgpc : fbGPC P ≤ P.T + 1 := by
+    unfold fbGPC
+    have : P.T / 2 / fbGS P ≤ P.T := Nat.le_trans (Nat.div_le_self _ _) (Nat.div_le_self _ _)
+    omega
+  generalize hX : 2 ^ (P.B_e - 1) = X at hD hB h2
+  have hD1 : 1 ≤ P.D_e := by rw [hD]; exact (Nat.le_div_iff_mul_le (by omega)).mpr (by omega)
+  -- D_e * (8G + 8) ≤ X
+  have hDX : P.D_e * (8 * P.G + 8) ≤ X := by rw [hD]; exact Nat.div_mul_le_self _ _
+  refine ⟨⟨?_, ?_⟩, hD1, ?_⟩
+  · rw [Nat.one_shiftLeft, h2]; omega
+  · rw [Nat.one_shiftLeft]; omega
+  · rw [Nat.one_shiftLeft, h2]
+    apply (Nat.lt_div_iff_mul_lt (by omega)).mpr
+    -- D_e (gs + 1) < 2X
+    have : P.D_e * (fbGS P + 1) ≤ P.D_e * (P.G + 2) := Nat.mul_le_mul_left _ (by omega)
+    have : P.D_e * (P.G + 2) ≤ P.D_e * (8 * P.G + 8) := Nat.mul_le_mul_left _ (by omega)
+    have hX0 : 1 ≤ X := by omega
+    omega
+
+end OM.Proof
