@@ -326,3 +326,456 @@ theorem INV.prev_in_chunk {s : Core} {A : Abs} (hI : INV s A) {g : Nat} (hg : Li
   exact (List.nodup_append.mp hnd).2.2 p (by simp) p hm rfl
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem mem_GrpsC {s : Core} {c g : Nat} : g ∈ GrpsC s c ↔ LiveG s g ∧ gC s g = c := by
+  unfold GrpsC; simp only [Finset.mem_filter, Finset.mem_range]
+  exact ⟨fun h => h.2, fun h => ⟨h.1.2.1, h⟩⟩
+
+/-- Unsplit roots after a split start: the splitting group stops being one. -/
+theorem pending_split {s s' : Core} {g gl gr labL labR : Nat} (S : SplitSpec s s' g gl gr labL labR)
+    (hg : LiveG s g) (hq : gSt s g = .quiet) (lg : LGh) (c : Nat) :
+    pending s' (lg.split s g gl gr) c + (if c = gC s g ∧ lg.child g = false then 1 else 0) =
+      pending s lg c := by
+  unfold pending
+  rw [GrpsC_split S]
+  have hne : ∀ z ∈ GrpsC s c, z ≠ gl ∧ z ≠ gr := fun z hz =>
+    ⟨fun e => S.glOut (e ▸ (mem_GrpsC.mp hz).1), fun e => S.grOut (e ▸ (mem_GrpsC.mp hz).1)⟩
+  have hpred : ∀ z ∈ GrpsC s c, ((lg.split s g gl gr).child z = false ∧ gSt s' z ≠ .splitting) ↔
+      ((lg.child z = false ∧ gSt s z ≠ .splitting) ∧ z ≠ g) := by
+    intro z hz
+    obtain ⟨h1, h2⟩ := hne z hz
+    simp only [LGh.split, h1, h2, or_self, if_false, S.st]
+    by_cases hzg : z = g
+    · subst hzg; simp
+    · simp [hzg]
+  split
+  · next hcc =>
+    have hgl' : (lg.split s g gl gr).child gl = true := by simp [LGh.split]
+    have hgr' : (lg.split s g gl gr).child gr = true := by simp [LGh.split]
+    rw [Finset.filter_insert, if_neg (by simp [hgl']), Finset.filter_insert, if_neg (by simp [hgr'])]
+    rw [Finset.filter_congr hpred]
+    have hgG : g ∈ GrpsC s c := mem_GrpsC.mpr ⟨hg, hcc.symm⟩
+    by_cases hch : lg.child g = false
+    · rw [if_pos ⟨hcc, hch⟩]
+      have hgf : g ∈ (GrpsC s c).filter (fun z => lg.child z = false ∧ gSt s z ≠ .splitting) := by
+        simp only [Finset.mem_filter]; exact ⟨hgG, hch, by rw [hq]; simp⟩
+      rw [← Finset.filter_filter, Finset.filter_ne', Finset.card_erase_of_mem hgf]
+      have := Finset.card_pos.mpr ⟨g, hgf⟩
+      omega
+    · rw [if_neg (fun h => hch h.2), Nat.add_zero]
+      congr 1
+      rw [← Finset.filter_filter]
+      apply Finset.filter_true_of_mem
+      intro z hz hzg; subst hzg; simp at hz; exact hch hz.2.1
+  · next hcc =>
+    rw [if_neg (fun h => hcc h.1), Nat.add_zero]
+    congr 1
+    apply Finset.filter_congr
+    intro z hz
+    rw [hpred z hz]
+    have : z ≠ g := by rintro rfl; exact hcc (mem_GrpsC.mp hz).2.symm
+    simp [this]
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- One group's term in `charge`. -/
+def chTerm (s : Core) (lg : LGh) (g : Nat) : Nat :=
+  if gSt s g = .splitting ∧ lg.child (gLl s g) = true then famT s g - s.P.G
+  else if gSt s g = .quiet ∧ lg.child g = true then gmin s.P + gSz s g - s.P.G else 0
+
+theorem charge_eq (s : Core) (lg : LGh) (c : Nat) :
+    charge s lg c = ∑ g ∈ GrpsC s c, chTerm s lg g := rfl
+
+/-- The charge after a split start: a quiet child's `g_min` became a child split. -/
+theorem charge_split {s s' : Core} {L : List Nat} {gh : GGh} {δ : Nat → Nat} {ex : Nat}
+    {g gl gr labL labR : Nat} (S : SplitSpec s s' g gl gr labL labR) (hG : GInvE s L gh δ ex)
+    (hg : LiveG s g) (hq : gSt s g = .quiet) (hsz : gSz s g = s.P.G) (lg : LGh) (c : Nat) :
+    charge s' (lg.split s g gl gr) c + (if c = gC s g ∧ lg.child g = true then gmin s.P else 0) =
+      charge s lg c := by
+  have hne : ∀ z, LiveG s z → z ≠ gl ∧ z ≠ gr := fun z hz =>
+    ⟨fun e => S.glOut (e ▸ hz), fun e => S.grOut (e ▸ hz)⟩
+  -- terms of the old groups other than `g` are unchanged
+  have hterm : ∀ z, LiveG s z → z ≠ g → chTerm s' (lg.split s g gl gr) z = chTerm s lg z := by
+    intro z hz hzg
+    have hz' := not_or.mpr (hne z hz)
+    unfold chTerm
+    rw [S.st, if_neg hzg, if_neg hz', S.l, if_neg hzg, if_neg hz']
+    have hch : (lg.split s g gl gr).child z = lg.child z := by simp [LGh.split, hz']
+    by_cases hs : gSt s z = .splitting
+    · have F := hG.fam z hz hs
+      have hl' := not_or.mpr (hne _ F.lLive)
+      have hchl : (lg.split s g gl gr).child (gLl s z) = lg.child (gLl s z) := by
+        simp [LGh.split, hl']
+      have hfam : famT s' z = famT s z := by
+        simp only [famT, S.sz, S.l, S.r, if_neg hzg, if_neg hz', if_neg hl',
+          if_neg (not_or.mpr (hne _ F.rLive))]
+      rw [hchl, hfam, S.P, hch, S.sz, if_neg hz']
+    · simp only [hs, false_and, if_false, hch, S.sz, if_neg hz', S.P]
+  rw [charge_eq, charge_eq, GrpsC_split S]
+  split
+  · next hcc =>
+    have hgl' : chTerm s' (lg.split s g gl gr) gl = 0 := by
+      unfold chTerm; rw [S.st, if_neg (Ne.symm S.ggl), if_pos (Or.inl rfl)]; simp
+    have hgr' : chTerm s' (lg.split s g gl gr) gr = 0 := by
+      unfold chTerm; rw [S.st, if_neg (Ne.symm S.ggr), if_pos (Or.inr rfl)]; simp
+    have hglm : gl ∉ insert gr (GrpsC s c) := by
+      simp only [Finset.mem_insert, mem_GrpsC, not_or]; exact ⟨S.glr, fun h => S.glOut h.1⟩
+    have hgrm : gr ∉ GrpsC s c := by simp only [mem_GrpsC]; exact fun h => S.grOut h.1
+    rw [Finset.sum_insert hglm, Finset.sum_insert hgrm, hgl', hgr', Nat.zero_add, Nat.zero_add]
+    have hgG : g ∈ GrpsC s c := mem_GrpsC.mpr ⟨hg, hcc.symm⟩
+    rw [← Finset.add_sum_erase _ _ hgG, ← Finset.add_sum_erase _ _ hgG]
+    have hrest : ∑ z ∈ (GrpsC s c).erase g, chTerm s' (lg.split s g gl gr) z =
+        ∑ z ∈ (GrpsC s c).erase g, chTerm s lg z := by
+      refine Finset.sum_congr rfl fun z hz => ?_
+      obtain ⟨hzg, hzG⟩ := Finset.mem_erase.mp hz
+      exact hterm z (mem_GrpsC.mp hzG).1 hzg
+    rw [hrest]
+    have hg' : chTerm s' (lg.split s g gl gr) g = 0 := by
+      unfold chTerm
+      rw [S.st, if_pos rfl, S.l, if_pos rfl]
+      simp only [LGh.split, true_or, if_true, and_self, if_true]
+      simp only [famT, S.sz, S.l, S.r, if_pos rfl, true_or, or_true, if_true,
+        if_neg (not_or.mpr ⟨S.ggl, S.ggr⟩), hsz, S.P]
+      simp
+    have hgt : chTerm s lg g = if lg.child g = true then gmin s.P else 0 := by
+      unfold chTerm; rw [hq]; simp [hsz]
+    rw [hg', hgt]
+    by_cases hch : lg.child g = true
+    · rw [if_pos ⟨hcc, hch⟩, if_pos hch]; omega
+    · rw [if_neg (fun h => hch h.2), if_neg hch]; simp
+  · next hcc =>
+    rw [if_neg (fun h => hcc h.1), Nat.add_zero]
+    refine Finset.sum_congr rfl fun z hz => ?_
+    have hz' := mem_GrpsC.mp hz
+    exact hterm z hz'.1 (by rintro rfl; exact hcc hz'.2.symm)
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- The group after a non-last group of a chunk lies in the same chunk. -/
+theorem INV.next_in_chunk {s : Core} {A : Abs} (hI : INV s A) {g : Nat} (hg : LiveG s g)
+    (hl : g ≠ cLs s (gC s g)) : LiveG s (gN s g) ∧ gC s (gN s g) = gC s g := by
+  have hgl := hI.mem_glist_iff.mpr hg
+  obtain ⟨hc, hgc⟩ := hI.mem_glist hgl
+  obtain ⟨r1, r2, hrun⟩ := List.mem_iff_append.mp hgc
+  have hnd := hI.grps_nodup hc
+  rw [hrun] at hnd
+  cases r2 with
+  | nil =>
+    exfalso; apply hl; rw [(hI.cEnds _ hc).2, hrun]; simp
+  | cons n t =>
+    have hnm : n ∈ A.grps (gC s g) := by rw [hrun]; simp
+    have hnext : gN s g = n := by
+      rw [hI.gList.next g hgl, INV.glist_flatten]
+      have hnd' := hI.gList.nodup
+      rw [INV.glist_flatten] at hnd'
+      rw [succOf_flatten hnd' (List.mem_map.mpr ⟨_, hc, rfl⟩) hgc (by
+        rw [hrun, show r1 ++ g :: n :: t = (r1 ++ [g]) ++ n :: t by simp,
+          List.getLast?_append_of_ne_nil _ (by simp)]
+        intro e
+        have hm : g ∈ n :: t := List.mem_of_getLast? e
+        exact (List.nodup_cons.mp (List.nodup_append.mp hnd).2.1).1 hm),
+        hrun, succOf_mid hnd]
+      rfl
+    rw [hnext]
+    exact ⟨hI.mem_glist_iff.mp (A.grps_sub_glist hc hnm), hI.chk _ hc n hnm⟩
+
+/-- A group followed by a group of another chunk is the last of its chunk. -/
+theorem INV.last_of_next {s : Core} {A : Abs} (hI : INV s A) {g : Nat} (hg : LiveG s g)
+    (hc : gN s g ≠ NIL → gC s (gN s g) ≠ gC s g) : g = cLs s (gC s g) := by
+  by_contra hl
+  have := hI.next_in_chunk hg hl
+  exact hc this.1.1 this.2
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem div_two_pow_succ (D k : Nat) : D / 2 ^ (k + 1) = D / 2 ^ k / 2 := by
+  rw [Nat.div_div_eq_div_mul, pow_succ]
+
+/-- **The group-label invariant across a split start.** -/
+theorem linv_splitStart {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δ s₀ : Nat → Nat}
+    {ex : Nat} {lg : LGh} {g labL labR : Nat} (hI : INV s A) (hG : GInvE s L gh δ ex)
+    (hL : LInv s lg s₀) (hg : LiveG s g) (hq : gSt s g = .quiet) (hsz : gSz s g = s.P.G)
+    (hLb : (labBefore g).run s = .ok labL s) (hLa : (labAfter g).run s = .ok labR s) :
+    LInv (splitState s g labL labR) (lg.split s g (splitL s g) (splitR s g)) s₀ := by
+  have S := splitSpec hI (hI.mem_glist_iff.mpr hg) labL labR
+  have hpend := pending_split S hg hq lg
+  have hchg := charge_split S hG hg hq hsz lg
+  have hvL := labBefore_val hLb
+  have hvR := labAfter_val hLa
+  have hgB := labBefore_guard hLb
+  have hgA := labAfter_guard hLa
+  generalize splitState s g labL labR = s' at S hpend hchg ⊢
+  generalize splitL s g = gl at S hpend hchg ⊢
+  generalize splitR s g = gr at S hpend hchg ⊢
+  generalize hc : gC s g = c at hvL hvR hgB hgA hpend hchg
+  have hne : ∀ z, LiveG s z → z ≠ gl ∧ z ≠ gr := fun z hz =>
+    ⟨fun e => S.glOut (e ▸ hz), fun e => S.grOut (e ▸ hz)⟩
+  -- the chunk's ends after the split
+  have hCF : ∀ d, cF s' d = if d = c ∧ cF s d = g then gl else cF s d := by
+    intro d; simp only [cF, S.C, hc]; by_cases hd : d = c
+    · subst hd; simp
+    · simp [hd]
+  have hCL : ∀ d, cLs s' d = if d = c ∧ cLs s d = g then gr else cLs s d := by
+    intro d; simp only [cLs, S.C, hc]; by_cases hd : d = c
+    · subst hd; simp
+    · simp [hd]
+  have hchk : ∀ z, gC s' z = if z = gl ∨ z = gr then c else gC s z := by
+    intro z; rw [S.chk, hc]
+  set lg' := lg.split s g gl gr with hlg'
+  have hv' : ∀ d, lg'.hv d = if d = c then lg.hv d + (if g = cF s c then 0 else 1) +
+      (if g = cLs s c then 0 else 1) else lg.hv d := by
+    intro d; simp only [hlg', LGh.split, hc]
+  have hvge : ∀ d, lg.hv d ≤ lg'.hv d := by intro d; rw [hv']; split <;> omega
+  have wmono : ∀ d, s.P.D_g / 2 ^ lg'.hv d ≤ s.P.D_g / 2 ^ lg.hv d :=
+    fun d => div_pow_anti _ (hvge d)
+  -- chunk records other than the ends are unchanged
+  have hcf : ∀ d, cSz s' d = cSz s d ∧ cSt s' d = cSt s d ∧ cSrc s' d = cSrc s d ∧
+      cLl s' d = cLl s d ∧ cRr s' d = cRr s d := by
+    intro d; simp only [cSz, cSt, cSrc, cLl, cRr, S.C]; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  have hLC : ∀ d, LiveC s' d ↔ LiveC s d := by intro d; simp only [LiveC, S.Csize]
+  have hfamC : ∀ x, famC s' x = famC s x := by
+    intro x; simp only [famC, (hcf _).1, (hcf x).2.2.2.1, (hcf x).2.2.2.2]
+  have hunits : ∀ d, units s' d = units s d := by
+    intro d
+    apply units_congr
+    intro z
+    unfold UnitG
+    rw [S.live, S.chk]
+    by_cases h1 : z = gl
+    · subst h1; simp [S.st, Ne.symm S.ggl, S.glOut]
+    · by_cases h2 : z = gr
+      · subst h2; simp [S.st, Ne.symm S.ggr, S.grOut]
+      · simp only [h1, h2, false_or, S.st, if_false, or_self]
+        by_cases h3 : z = g
+        · subst h3; simp [hq]
+        · simp [h3]
+  have hgL' : ∀ z, gL s' z = if z = gl then labL else if z = gr then labR else gL s z := S.lab
+  refine
+    { gaps := ?_, range := ?_, hv := ?_, pb := ?_, pf := ?_, roots := ?_, claim2 := ?_,
+      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_ }
+  · -- gaps
+    intro h hh hlast
+    have hgl' : gL s' gl = labL := by rw [hgL', if_pos rfl]
+    have hgr' : gL s' gr = labR := by rw [hgL', if_neg (Ne.symm S.glr), if_pos rfl]
+    have hgg' : gL s' g = gL s g := by rw [hgL', if_neg S.ggl, if_neg S.ggr]
+    have hold : ∀ z, LiveG s z → gL s' z = gL s z := by
+      intro z hz; rw [hgL', if_neg (hne z hz).1, if_neg (hne z hz).2]
+    rcases (S.live h).mp hh with rfl | rfl | hhL
+    · -- the new left sibling
+      rw [hchk, if_pos (Or.inl rfl)]
+      rw [S.next, if_neg (Ne.symm S.ggl), if_pos rfl, hgl', hgg']
+      by_cases hf : g = cF s c
+      · rw [hvL, if_pos hf]
+        have := (hgB.1 (hc ▸ hf)).1
+        have := Nat.div_le_self s.P.D_g (2 ^ lg'.hv c)
+        rw [S.P]; omega
+      · rw [hvL, if_neg hf, S.P]
+        obtain ⟨hpL, hpc, hpn, hpl⟩ := hI.prev_in_chunk hg (hc ▸ hf)
+        have hgap := hL.gaps _ hpL (by rw [hpc, hc]; rw [hc] at hpl; exact hpl)
+        rw [hpn, hpc, hc] at hgap
+        have hw : s.P.D_g / 2 ^ lg'.hv c ≤ s.P.D_g / 2 ^ lg.hv c / 2 := by
+          rw [← div_two_pow_succ]; apply div_pow_anti
+          rw [hv', if_pos rfl, if_neg hf]; omega
+        omega
+    · -- the new right sibling
+      rw [hchk, if_pos (Or.inr rfl)] at hlast ⊢
+      have hl : g ≠ cLs s c := by
+        intro e; apply hlast; rw [hCL, if_pos ⟨rfl, e.symm⟩]
+      rw [S.next, if_neg (Ne.symm S.ggr), if_neg S.glr.symm, if_pos rfl, hgr', S.P]
+      obtain ⟨hnL, hnc⟩ := hI.next_in_chunk hg (hc ▸ hl)
+      rw [hold _ hnL, hvR, if_neg hl]
+      have hgap := hL.gaps g hg (hc ▸ hl)
+      rw [hc] at hgap
+      have hw : s.P.D_g / 2 ^ lg'.hv c ≤ s.P.D_g / 2 ^ lg.hv c / 2 := by
+        rw [← div_two_pow_succ]; apply div_pow_anti
+        rw [hv', if_pos rfl, if_neg hl]; omega
+      omega
+    · have hh' := not_or.mpr (hne h hhL)
+      rw [hchk, if_neg hh'] at hlast ⊢
+      rw [hold h hhL, S.P]
+      by_cases hhg : h = g
+      · -- the splitting group
+        subst hhg
+        rw [hc, S.next, if_pos rfl, hgr']
+        by_cases hl : h = cLs s c
+        · rw [hvR, if_pos hl]
+          have := Nat.div_le_self s.P.D_g (2 ^ lg'.hv c); omega
+        · rw [hvR, if_neg hl]
+          have hgap := hL.gaps h hhL (hc ▸ hl)
+          rw [hc] at hgap
+          have hw : s.P.D_g / 2 ^ lg'.hv c ≤ s.P.D_g / 2 ^ lg.hv c / 2 := by
+            rw [← div_two_pow_succ]; apply div_pow_anti
+            rw [hv', if_pos rfl, if_neg hl]; omega
+          omega
+      · by_cases hp : h = gP s g ∧ gP s g ≠ NIL
+        · -- the group before `g`
+          rw [S.next, if_neg hhg, if_neg (hne h hhL).1, if_neg (hne h hhL).2, if_pos hp, hgl']
+          by_cases hf : g = cF s c
+          · exfalso
+            -- `h` is the last of its chunk
+            have hgN : gN s h = g := by rw [hp.1]; exact hI.gN_gP (hI.mem_glist_iff.mpr hg) hp.2
+            have hcd : gC s h ≠ c := by
+              intro e
+              have hcf0 : cF s c ≠ NIL := by rw [← hf]; exact hg.1
+              exact hI.not_before_first hcf0 (hI.mem_glist_iff.mpr hhL) e (by rw [hgN]; exact hf)
+            have hlast' := hI.last_of_next hhL (by rw [hgN]; intro _; rw [hc]; exact Ne.symm hcd)
+            apply hlast; rw [hCL, if_neg (fun h' => hcd h'.1)]; exact hlast'
+          · obtain ⟨hpL, hpc, hpn, hpl⟩ := hI.prev_in_chunk hg (hc ▸ hf)
+            rw [← hp.1] at hpc hpn
+            rw [hpc, hc, hvL, if_neg hf, ← hp.1]
+            have hgap := hL.gaps h hhL (by rw [hpc, hc]; rw [hc, ← hp.1] at hpl; exact hpl)
+            rw [hpn, hpc, hc] at hgap
+            have hw : s.P.D_g / 2 ^ lg'.hv c ≤ s.P.D_g / 2 ^ lg.hv c / 2 := by
+              rw [← div_two_pow_succ]; apply div_pow_anti
+              rw [hv', if_pos rfl, if_neg hf]; omega
+            omega
+        · -- any other group
+          rw [S.next, if_neg hhg, if_neg (hne h hhL).1, if_neg (hne h hhL).2, if_neg hp]
+          have hl : h ≠ cLs s (gC s h) := by
+            intro e; apply hlast; rw [hCL]
+            split
+            · next h' => exact absurd (e.trans (h'.1 ▸ h'.2)) hhg
+            · exact e
+          obtain ⟨hnL, -⟩ := hI.next_in_chunk hhL hl
+          rw [hold _ hnL]
+          exact le_trans (by have := wmono (gC s h); omega) (hL.gaps h hhL hl)
+  · -- range
+    intro h hh
+    have hpf : ∀ d, lg.pf d ≤ lg'.pf d := by intro d; simp only [hlg', LGh.split]; split <;> omega
+    have hpb : ∀ d, lg.pb d ≤ lg'.pb d := by intro d; simp only [hlg', LGh.split]; split <;> omega
+    rcases (S.live h).mp hh with rfl | rfl | hhL
+    · rw [hchk, if_pos (Or.inl rfl), hgL', if_pos rfl, S.P]
+      obtain ⟨r1, r2⟩ := hL.range g hg
+      rw [hc] at r1 r2
+      have hb1 := Nat.mul_le_mul_right s.P.D_g (hpb c)
+      by_cases hf : g = cF s c
+      · have hpf1 : lg'.pf c = lg.pf c + 1 := by
+          simp only [hlg', LGh.split]; rw [if_pos ⟨hc.symm, by rw [hc]; exact hf⟩]
+        rw [hvL, if_pos hf, hpf1]
+        have := (hgB.1 (hc ▸ hf)).1
+        constructor
+        · rw [Nat.add_mul]; omega
+        · omega
+      · rw [hvL, if_neg hf]
+        obtain ⟨hpL, hpc, hpn, hpl⟩ := hI.prev_in_chunk hg (hc ▸ hf)
+        obtain ⟨p1, -⟩ := hL.range _ hpL
+        rw [hpc, hc] at p1
+        have hb2 := Nat.mul_le_mul_right s.P.D_g (hpf c)
+        have := hgB.2 (hc ▸ hf)
+        constructor <;> omega
+    · rw [hchk, if_pos (Or.inr rfl), hgL', if_neg (Ne.symm S.glr), if_pos rfl, S.P]
+      obtain ⟨r1, r2⟩ := hL.range g hg
+      rw [hc] at r1 r2
+      have hb2 := Nat.mul_le_mul_right s.P.D_g (hpf c)
+      by_cases hl : g = cLs s c
+      · have hpb1 : lg'.pb c = lg.pb c + 1 := by
+          simp only [hlg', LGh.split]; rw [if_pos ⟨hc.symm, by rw [hc]; exact hl⟩]
+        rw [hvR, if_pos hl, hpb1]
+        constructor
+        · omega
+        · rw [Nat.add_mul]; omega
+      · rw [hvR, if_neg hl]
+        obtain ⟨hnL, hnc⟩ := hI.next_in_chunk hg (hc ▸ hl)
+        obtain ⟨-, n2⟩ := hL.range _ hnL
+        rw [hnc, hc] at n2
+        have hb1 := Nat.mul_le_mul_right s.P.D_g (hpb c)
+        have := hgA.2 (hc ▸ hl)
+        constructor <;> omega
+    · have hh' := not_or.mpr (hne h hhL)
+      rw [hchk, if_neg hh', hgL', if_neg (hne h hhL).1, if_neg (hne h hhL).2, S.P]
+      obtain ⟨r1, r2⟩ := hL.range h hhL
+      have hb1 := Nat.mul_le_mul_right s.P.D_g (hpb (gC s h))
+      have hb2 := Nat.mul_le_mul_right s.P.D_g (hpf (gC s h))
+      constructor <;> omega
+  · intro d
+    have h := hL.hv d
+    by_cases hdc : d = c
+    · subst hdc
+      cases hch : lg.child g <;>
+        simp only [hlg', LGh.split, hc, hch, and_true, and_false, if_true, if_false,
+          Bool.false_eq_true, Bool.true_eq_false] <;> split_ifs <;> omega
+    · simp only [hlg', LGh.split, hc, hdc, false_and, if_false]; exact h
+  · intro d
+    have h := hL.pb d
+    by_cases hdc : d = c
+    · subst hdc
+      cases hch : lg.child g <;>
+        simp only [hlg', LGh.split, hc, hch, and_true, and_false, if_true, if_false,
+          Bool.false_eq_true, Bool.true_eq_false, true_and] <;> split_ifs <;> omega
+    · simp only [hlg', LGh.split, hc, hdc, false_and, if_false]; exact h
+  · intro d
+    have h := hL.pf d
+    by_cases hdc : d = c
+    · subst hdc
+      cases hch : lg.child g <;>
+        simp only [hlg', LGh.split, hc, hch, and_true, and_false, if_true, if_false,
+          Bool.false_eq_true, Bool.true_eq_false, true_and] <;> split_ifs <;> omega
+    · simp only [hlg', LGh.split, hc, hdc, false_and, if_false]; exact h
+  · intro d hd
+    rw [hLC] at hd
+    have h1 := hL.roots d hd
+    have h2 := hpend d
+    by_cases hdc : d = c
+    · subst hdc
+      cases hch : lg.child g <;>
+        simp only [hlg', LGh.split, hc, hch, and_true, and_false, if_true, if_false,
+          Bool.false_eq_true, Bool.true_eq_false] at h2 ⊢ <;> omega
+    · simp only [hlg', LGh.split, hc, hdc, false_and, if_false] at h2 ⊢; omega
+  · intro d hd
+    rw [hLC] at hd
+    have h1 := hL.claim2 d hd
+    have h2 := hchg d
+    simp only [hlg', LGh.split, hc, S.P] at h2 ⊢
+    by_cases hdc : d = c
+    · subst hdc
+      by_cases hch : lg.child g = true
+      · simp only [hch, and_self, true_and, if_true] at h2 ⊢
+        rw [Nat.add_mul]; omega
+      · have hch' : lg.child g = false := by simpa using hch
+        simp only [hch', Bool.false_eq_true, and_false, true_and, if_false] at h2 ⊢
+        omega
+    · simp only [hdc, false_and, if_false] at h2 ⊢; omega
+  · intro d hd hds
+    rw [hLC] at hd; rw [(hcf d).2.1] at hds
+    rw [(hcf d).1, S.P]; exact hL.insQ d hd hds
+  · intro d hd hds
+    rw [hLC] at hd; rw [(hcf d).2.1] at hds
+    rw [(hcf d).2.2.1, hfamC]; exact hL.insO d hd hds
+  · intro d hd hds
+    rw [hLC] at hd; rw [(hcf d).2.1] at hds
+    rw [hfamC, S.P]; exact hL.insS d hd hds
+  · intro x hx hxs
+    rw [hLC] at hx; rw [(hcf x).2.1] at hxs
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2, hunits, hfamC, S.P]; exact hL.arrS x hx hxs
+  · intro d hd hds
+    rw [hLC] at hd; rw [(hcf d).2.1] at hds
+    rw [S.P]; exact hL.arrN d hd hds
+  · intro d hd hds
+    rw [hLC] at hd; rw [(hcf d).2.1] at hds
+    rw [(hcf d).1]; exact hL.e0 d hd hds
+
+end OM.Proof
