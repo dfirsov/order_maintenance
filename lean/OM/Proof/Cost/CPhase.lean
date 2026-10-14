@@ -186,7 +186,7 @@ theorem xgroup_cinv {L : List Nat} {δ δu s₀ : Nat → Nat} {c : Nat} (hδ : 
     XGroup (fun t => CInv t L δ δu s₀) (fun t => CInv t L δ (Function.update δu c (δu c + 1)) s₀)
       L c := by
   refine ⟨fun δg p => ⟨?_, ?_, ?_⟩, ?_⟩
-  · intro t A' gh hI hel hG hok hX
+  · intro t A' gh hI hel hG hok _ hX
     subst hel
     have hp' := hI.mem_glist_iff.mpr hok.live
     have hl' : gLl t p ∈ A'.glist := hI.mem_of_gN hok.adj hok.live.1
@@ -197,7 +197,7 @@ theorem xgroup_cinv {L : List Nat} {δ δu s₀ : Nat → Nat} {c : Nat} (hδ : 
     have hm := mem_runOf.mp (hrun ▸ (by simp : gF t p ∈ gF t p :: rest))
     exact cinv_move hI hX (moveLState_spec hlp hok.live.2.1 (hI.gAlloc _ hl')
       ((hI.eAlloc _).mp hm.1).2) hm.2 hok.chk
-  · intro t A' gh hI hel hG hok hX
+  · intro t A' gh hI hel hG hok _ hX
     subst hel
     have hp' := hI.mem_glist_iff.mpr hok.live
     have hr' : gRr t p ∈ A'.glist := hI.mem_of_gP hok.adj hok.live.1

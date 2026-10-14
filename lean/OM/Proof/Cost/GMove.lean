@@ -1284,10 +1284,10 @@ set_option linter.deprecated false
 
 /-- The extra invariant `X` survives the steps of a drive. -/
 structure XSteps (X Y : Core → Prop) (L : List Nat) (δ : Nat → Nat) (p c : Nat) : Prop where
-  moveL : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → MoveLOK t p → X t →
-    X (moveLState t p)
-  moveR : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → MoveROK t p → X t →
-    X (moveRState t p)
+  moveL : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → MoveLOK t p →
+    gSt t p = .splitting → X t → X (moveLState t p)
+  moveR : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → MoveROK t p →
+    gSt t p = .splitting → X t → X (moveRState t p)
   rem : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → LiveG t p →
     gSt t p = .splitting → gF t p = NIL → gSz t (gLl t p) < t.P.G → gSz t (gRr t p) < t.P.G →
     gmin t.P ≤ gSz t (gLl t p) → gmin t.P ≤ gSz t (gRr t p) →
@@ -1386,7 +1386,7 @@ theorem DriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ : Nat 
       rw [hD.ll] at hG'
       have hK := M.links
       refine ⟨_, Or.inl ⟨hrun2, ?_⟩⟩
-      refine ⟨hXs.moveL t A' gh hI' rfl hG hok hD.x, hef.P.trans hPt, hD.ef.trans hef,
+      refine ⟨hXs.moveL t A' gh hI' rfl hG hok hD.st hD.x, hef.P.trans hPt, hD.ef.trans hef,
         ⟨A'', hI'', hel''⟩, ⟨_, hG'⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
       · exact (hK.liveG p).mpr hp
       · rw [hK.st]; exact hs
@@ -1423,7 +1423,7 @@ theorem DriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ : Nat 
       rw [hD.rr] at hG'
       have hK := M.links
       refine ⟨_, Or.inl ⟨hrun2, ?_⟩⟩
-      refine ⟨hXs.moveR t A' gh hI' rfl hG hok hD.x, hef.P.trans hPt, hD.ef.trans hef,
+      refine ⟨hXs.moveR t A' gh hI' rfl hG hok hD.st hD.x, hef.P.trans hPt, hD.ef.trans hef,
         ⟨A'', hI'', hel''⟩, ⟨_, hG'⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
       · exact (hK.liveG p).mpr hp
       · rw [hK.st]; exact hs
