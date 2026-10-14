@@ -91,4 +91,28 @@ theorem chunk_budget {s : Core} {L : List Nat} {lg : LGh} {s₀ δ δu : Nat →
     · unfold IC; omega
   | dead => exact absurd hst hnd
 
+/-- Undriven insertions outside every family can be forgotten (chunk invariant). -/
+theorem CInvE.drop {s : Core} {L : List Nat} {δ δu s₀ : Nat → Nat} {ex : Nat}
+    (hC : CInvE s L δ δu s₀ ex)
+    (hδ : ∀ x, LiveC s x → cSt s x = .splitting →
+      δ (cLl s x) = 0 ∧ δ x = 0 ∧ δ (cRr s x) = 0 ∧ δu x = 0) :
+    CInvE s L (fun _ => 0) (fun _ => 0) s₀ ex := by
+  refine { hC with c1 := fun x hx hxs hxe => ?_, δu := fun _ => le_rfl }
+  have h := hC.c1 x hx hxs hxe
+  obtain ⟨d1, d2, d3, d4⟩ := hδ x hx hxs
+  unfold C1 at h ⊢
+  rw [d1, d2, d3, d4] at h
+  exact h
+
+/-- Undriven insertions outside every family can be forgotten (label invariant). -/
+theorem LInv.drop {s : Core} {lg : LGh} {s₀ δ δu : Nat → Nat} (hL : LInv s lg s₀ δ δu)
+    (hδ : ∀ x, LiveC s x → cSt s x = .splitting →
+      δ (cLl s x) = 0 ∧ δ x = 0 ∧ δ (cRr s x) = 0 ∧ δu x = 0) :
+    LInv s lg s₀ (fun _ => 0) (fun _ => 0) := by
+  refine { hL with arrS := fun x hx hxs => ?_ }
+  have h := hL.arrS x hx hxs
+  obtain ⟨d1, d2, d3, d4⟩ := hδ x hx hxs
+  rw [d1, d2, d3, d4] at h
+  simpa using h
+
 end OM.Proof
