@@ -341,6 +341,8 @@ class Core:
     def _start_group_split(self, g: int) -> None:
         P = self.P
         G = self.Gs[g]
+        if g == NIL or not G.alive:     # never fires; makes correctness independent of
+            raise GuardFailure("group: split of a dead group")   # split-state invariants
         c = G.chk
         C = self.C[c]
         if g == C.first:
@@ -396,7 +398,11 @@ class Core:
         """One move of a splitting group. Returns False once g is gone."""
         P = self.P
         G = self.Gs[g]
-        if G.size == 0:
+        if g == NIL or not G.alive:     # never fires (see _start_group_split)
+            raise GuardFailure("group split: dead group")
+        # emptiness is read from the run pointers, not the sizes, so correctness does not
+        # depend on the size counters (docs/PROOF.md §3.2)
+        if G.first == NIL:
             self._remove_group(g)
             return False
         gl, gr = G.l, G.r
@@ -406,15 +412,15 @@ class Core:
             if L_.next != g:
                 raise GuardFailure("group split: left sibling not adjacent")
             e = G.first
-            lab = center if L_.size == 0 else \
+            lab = center if L_.first == NIL else \
                 self._after(self.E[L_.last].lab, P.D_e, P.B_e, "elem: push-back room")
             # -- mutate
             self.stats.steps += 1
-            if G.size == 1:
+            if G.first == G.last:
                 G.first = G.last = NIL
             else:
                 G.first = self.E[e].next
-            if L_.size == 0:
+            if L_.first == NIL:
                 L_.first = e
             L_.last = e
             dst = gl
@@ -422,14 +428,14 @@ class Core:
             if R_.prev != g:
                 raise GuardFailure("group split: right sibling not adjacent")
             e = G.last
-            lab = center if R_.size == 0 else \
+            lab = center if R_.first == NIL else \
                 self._before(self.E[R_.first].lab, P.D_e, "elem: push-front room")
             self.stats.steps += 1
-            if G.size == 1:
+            if G.first == G.last:
                 G.first = G.last = NIL
             else:
                 G.last = self.E[e].prev
-            if R_.size == 0:
+            if R_.first == NIL:
                 R_.last = e
             R_.first = e
             dst = gr
@@ -621,6 +627,8 @@ class Core:
                 self.stats.max_pq = max(self.stats.max_pq, len(self.pq.where))
                 self.stats.reservations += 1
                 x = self.pq.pop_max()
+                if not 0 <= x < len(self.C):     # never fires
+                    raise GuardFailure("reservation: invalid chunk")
                 if not self.pq.empty() and self.pq.hi > self.C[x].size:
                     self.stats.pop_not_max += 1     # Lemma R: the pop must take a largest chunk
                 y = self._new_chunk()

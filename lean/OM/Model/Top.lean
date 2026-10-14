@@ -56,8 +56,9 @@ def tagOf (c : Nat) : CM Nat := do
   let p ← getPath c
   let mut t := 0
   let mut below := c
-  for j in [1:P.H + 1] do
-    let some l := (← getN (p.getX j)).lab? below | bug "tag_of: missing label"
+  for j in List.range' 1 P.H do
+    -- total: a missing label reads as 0 (FALLBACK then checks the tags, `relabelAll`)
+    let l := ((← getN (p.getX j)).lab? below).getD 0
     t := t ||| (l <<< ((j - 1) * P.beta))
     below := p.getX j
   return t
@@ -67,11 +68,17 @@ def guardTag (c t : Nat) : CM Unit := do
   if C.prev != NIL && !((← getC C.prev).tag < t) then guard "top: tag not above predecessor"
   if C.next != NIL && !(t < (← getC C.next).tag) then guard "top: tag not below successor"
 
+/-- A guarded tag write (the safety principle): `t` must lie strictly between the tags of the
+chunk-list neighbours of `c`. -/
+def guardedSetTag (c t : Nat) : CM Unit := do
+  guardTag c t
+  modC c fun C => { C with tag := t }
+
 /-- A label for a new entry right before/after `e` in the table of node `t` (averaging). -/
 def roomNextTo (t e : Nat) (before : Bool) : CM Nat := do
   let P ← getP
   let tab := (← getN t).table
-  let some i := tab.findIdx? (·.1 == e) | bug "room_next_to: entry not in table"
+  let some i := tab.findIdx? (·.1 == e) | guard "room_next_to: entry not in table"
   let labAt (k : Nat) : Nat := (tab.getD k (0, 0)).2
   -- `lo1` is the lower neighbour's label plus one (the prototype's `lo = -1` becomes 0)
   let (lo1, hi) :=
@@ -82,12 +89,12 @@ def roomNextTo (t e : Nat) (before : Bool) : CM Nat := do
 
 def tableInsert (t e new : Nat) (before : Bool) (lab : Nat) : CM Unit := do
   let T ← getN t
-  let some i := T.table.findIdx? (·.1 == e) | bug "table_insert: entry not in table"
+  let some i := T.table.findIdx? (·.1 == e) | guard "table_insert: entry not in table"
   let table := T.table.insertIdx (if before then i else i + 1) (new, lab)
   let side ← if T.draining then
       match lookup T.side e with
       | some sd => pure (assocSet T.side new sd)
-      | none => bug "table_insert: entry has no side"
+      | none => guard "table_insert: entry has no side"
     else pure T.side
   modN t fun n => { n with table := table, side := side }
 
@@ -97,7 +104,7 @@ def tableInsert (t e new : Nat) (before : Bool) (lab : Nat) : CM Unit := do
 `true` once the structure is complete. -/
 def initStep : CM Bool := do
   let P ← getP
-  let some pr := (← get).prep | bug "init_step: nothing to prepare"
+  let some pr := (← get).prep | return true
   let c := pr.chunk
   if pr.h == 1 then
     resetTop
@@ -128,7 +135,7 @@ def build (chunks : List Nat) : CM Unit := do
   resetTop
   let P ← getP
   let mut level := chunks
-  for h in [1:P.H + 1] do
+  for h in List.range' 1 P.H do
     let groups := if h < P.H then chunksOf P.a level else [level]
     let mut nxt : Array Nat := #[]
     for grp in groups do
@@ -153,7 +160,7 @@ def build (chunks : List Nat) : CM Unit := do
   for c in chunks do
     let mut p := Array.replicate (P.H + 1) NIL
     let mut v ← getLpar c
-    for j in [1:P.H + 1] do
+    for j in List.range' 1 P.H do
       p := p.setX j v
       let V ← getN v
       if V.first == NIL then modN v fun n => { n with first := c }
@@ -164,15 +171,29 @@ def build (chunks : List Nat) : CM Unit := do
     let t ← tagOf c
     modC c fun C => { C with tag := t }
 
+/-- Strictly increasing? -/
+def increasing : List Nat → Bool
+  | a :: b :: t => a < b && increasing (b :: t)
+  | _ => true
+
+/-- FALLBACK's top part: rebuild the tree, then verify that the tags increase along the chunk
+list. If they do not (label width too small, `docs/PROOF.md` §3.4), number the chunks
+`1, 2, 3, …` instead: correctness then needs no condition on `β`. -/
 def relabelAll : CM Unit := do
   let s ← get
   let mut chunks : Array Nat := #[]
   let mut c := s.firstChunk
-  for _ in [0:s.C.size] do
+  for _ in List.range s.C.size do
     if c == NIL then break
     chunks := chunks.push c
     c := (s.C.getX c).next
   build chunks.toList
+  let s ← get
+  if !increasing (chunks.toList.map fun c => (s.C.getX c).tag) then
+    let mut i := 1
+    for ch in chunks do
+      modC ch fun C => { C with tag := i }
+      i := i + 1
 
 /-! ### Drains -/
 
@@ -193,7 +214,7 @@ def startDrain (v : Nat) : CM Unit := do
   -- partition the live children by weight
   let mut acc := 0
   let mut k := 0
-  for i in [0:kids.size - 1] do
+  for i in List.range (kids.size - 1) do
     if acc + wt kids[i]! ≤ total / 2 then
       acc := acc + wt kids[i]!
       k := i + 1
@@ -201,13 +222,13 @@ def startDrain (v : Nat) : CM Unit := do
   k := max k 1
   if h > 1 then
     -- never separate the two targets of a still-active drain
-    for _ in [0:kids.size] do
+    for _ in List.range (kids.size) do
       if 0 < k && k < kids.size then
         if ← sameDrain kids[k - 1]! kids[k]! then k := k + 1 else break
       else break
     if k ≥ kids.size then
       k := kids.size - 1
-      for _ in [0:kids.size] do
+      for _ in List.range (kids.size) do
         if k > 0 then
           if ← sameDrain kids[k - 1]! kids[k]! then k := k - 1 else break
         else break
@@ -225,7 +246,7 @@ def startDrain (v : Nat) : CM Unit := do
     for e in entries do
       let E := s0.nodes.getX e
       if E.draining then
-        let some st := lookup side E.t1 | bug "start_drain: target has no side"
+        let some st := lookup side E.t1 | guard "start_drain: target has no side"
         side := assocSet side e st
   let sideOf (e : Nat) : Option Side := lookup side e
   let left := entries.filter (sideOf · == some .left)
@@ -256,7 +277,7 @@ def startDrain (v : Nat) : CM Unit := do
     for e in kids do
       match sideOf e with
       | some x => if x == sdw then ch := ch ++ [e]
-      | none => bug "start_drain: child has no side"
+      | none => guard "start_drain: child has no side"
     for e in ch do
       if h == 1 then setLpar e w
       else modN e fun n => { n with livePar := w }
@@ -265,7 +286,7 @@ def startDrain (v : Nat) : CM Unit := do
       children := ch, weight := weight, livePar := V.livePar,
       overflowOf := v }
   let par ← getN V.livePar
-  if !par.children.contains v then bug "start_drain: not a child of its parent"
+  if !par.children.contains v then guard "start_drain: not a child of its parent"
   modN V.livePar fun n => { n with children := n.children.replace1 v [v1, v2] }
   modN v fun n => { n with
     draining := true, t1 := v1, t2 := v2, side := side,
@@ -279,7 +300,7 @@ def finishDrain (v : Nat) : CM Unit := do
     if tabs.contains v then setInTables e (h - 1) (tabs.erase v)
   for T in V.inTables do
     let Tn ← getN T
-    if !(Tn.order.contains v) then bug "finish_drain: ghost missing from a table"
+    if !(Tn.order.contains v) then guard "finish_drain: ghost missing from a table"
     modN T fun n => { n with table := assocErase n.table v, side := assocErase n.side v }
   for t in [V.t1, V.t2] do
     if (← getN t).overflowOf == v then modN t fun n => { n with overflowOf := NIL }
@@ -298,29 +319,27 @@ def drainStep (v : Nat) : CM Bool := do
     if h == 1 then return y else return (← getPath y).getX (h - 1)
   let y0 := V.first
   let b0 ← belowOf y0
-  let some sd0 := lookup V.side b0 | bug "drain_step: no side"
+  let some sd0 := lookup V.side b0 | guard "drain_step: no side"
   let (t, left, y, below) ← if sd0 == .left then pure (V.t1, true, y0, b0) else do
     let y := V.last
     let b ← belowOf y
-    let some sd := lookup V.side b | bug "drain_step: no side"
+    let some sd := lookup V.side b | guard "drain_step: no side"
     if sd != .right then guard "top: drain sides out of order"
     pure (V.t2, false, y, b)
   let T ← getN t
   let p ← getPath y
-  if h + 1 ≥ p.size then bug "drain_step: draining the root"
+  if h + 1 ≥ p.size then guard "drain_step: draining the root"
   let par ← getN (p.getX (h + 1))
   let (some pt, some tb) := (par.lab? t, T.lab? below) | guard "top: missing table entry"
-  let some pv := par.lab? v | bug "drain_step: ghost missing from parent table"
-  let some vb := V.lab? below | bug "drain_step: entry missing from ghost table"
+  let some pv := par.lab? v | guard "drain_step: ghost missing from parent table"
+  let some vb := V.lab? below | guard "drain_step: entry missing from ghost table"
   let b := P.beta
   let old := (pv <<< (h * b)) ||| (vb <<< ((h - 1) * b))
   let new := (pt <<< (h * b)) ||| (tb <<< ((h - 1) * b))
   let cy ← getC y
-  if cy.tag < old then bug "drain_step: negative tag"
+  if cy.tag < old then guard "drain_step: negative tag"
   let tag := cy.tag - old + new
-  guardTag y tag
-  -- mutate
-  modC y fun C => { C with tag := tag }
+  guardedSetTag y tag
   setPathAt y h t
   if V.first == V.last then modN v fun n => { n with first := NIL, last := NIL }
   else if left then modN v fun n => { n with first := cy.next }
@@ -348,26 +367,26 @@ def insertAround (x y z : Nat) : CM Job := do
   for T in tabs do
     lz := lz ++ [← roomNextTo T x false]
   let p1 := px.getX 1
-  let some f1x := (← getN p1).lab? x | bug "insert_around: x missing from its parent table"
-  let some i1 := tabs.idx? p1 | bug "insert_around: parent not among x's tables"
+  let some f1x := (← getN p1).lab? x | guard "insert_around: x missing from its parent table"
+  let some i1 := tabs.idx? p1 | guard "insert_around: parent not among x's tables"
   let tx := (← getC x).tag
-  if tx < f1x then bug "insert_around: negative tag"
+  if tx < f1x then guard "insert_around: negative tag"
   let ty := tx - f1x + ly.getD i1 0
   let tz := tx - f1x + lz.getD i1 0
-  guardTag y ty
-  guardTag z tz
+  let lp ← getLpar x
+  if !(← getN lp).children.contains x then guard "insert_around: x not a child of its parent"
+  -- the tags first (the prototype writes them last; only failure states differ, and FALLBACK
+  -- discards those): `y` and `z` are not neighbours, so the second guard is unaffected
+  guardedSetTag y ty
+  guardedSetTag z tz
   for (T, a, b) in tabs.zip (ly.zip lz) do
     tableInsert T x y true a
     tableInsert T x z false b
   for c in [y, z] do
     setPath c (Array.replicate (P.H + 1) NIL)
     setInTables c 0 tabs
-    setLpar c (← getLpar x)
-  let lp ← getLpar x
-  if !(← getN lp).children.contains x then bug "insert_around: x not a child of its parent"
+    setLpar c lp
   modN lp fun n => { n with children := n.children.replace1 x [y, x, z] }
-  modC y fun C => { C with tag := ty }
-  modC z fun C => { C with tag := tz }
   return { x := x, y := y, z := z, pc := .copy 1 }
 
 /-- The sweep funding loop of `v`, resumed after `k` sweep steps. -/

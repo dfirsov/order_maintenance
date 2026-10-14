@@ -65,7 +65,6 @@ def copyAtCursor (om : OM) (nxt : Core) : WM (OM × Core) := do
   let mut om := om
   let mut nxt := nxt
   if e.live then
-    if om.nxtIdx.getX e.h != 0 then throw (.bug "cursor met an already-copied element")
     let (y, n') ← runCore nxt (insertAfter nxt.tail e.h)
     nxt := n'
     om := { om with nxtIdx := om.nxtIdx.setX e.h y }
@@ -86,7 +85,7 @@ def OM.rebuildStep (mk : Nat → Params) (om : OM) : WM OM := do
     let mut nxt := nxt0
     let mut budget := om.KB
     -- each iteration spends one unit of budget, except the one that sets the cursor
-    for _ in [0:om.KB + 1] do
+    for _ in List.range (om.KB + 1) do
       if budget == 0 then break
       if !om.cursorSet then
         let (ready, n') ← runCore nxt prepareStep

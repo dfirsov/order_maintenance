@@ -98,6 +98,7 @@ def insertElem (x h : Nat) : CM Nat := do
 def startGroupSplit (g : Nat) : CM Unit := do
   let P ← getP
   let G ← getG g
+  if g == NIL || !G.alive then guard "group: split of a dead group"
   let c := G.chk
   let C ← getC c
   let labL ← if g == C.first then before G.lab P.D_g "group: no room before first"
@@ -142,7 +143,8 @@ def removeGroup (g : Nat) : CM Unit := do
 def groupSplitStep (g : Nat) : CM Bool := do
   let P ← getP
   let G ← getG g
-  if G.size == 0 then
+  if g == NIL || !G.alive then guard "group split: dead group"
+  if G.first == NIL then
     removeGroup g
     return false
   let gl := G.l
@@ -153,26 +155,26 @@ def groupSplitStep (g : Nat) : CM Bool := do
   let (e, lab, dst) ← if Lg.size ≤ Rg.size then do
       if Lg.next != g then guard "group split: left sibling not adjacent"
       let e := G.first
-      let lab ← if Lg.size == 0 then pure center
+      let lab ← if Lg.first == NIL then pure center
         else after (← getE Lg.last).lab P.D_e P.B_e "elem: push-back room"
       -- mutate
-      if G.size == 1 then modG g fun X => { X with first := NIL, last := NIL }
+      if G.first == G.last then modG g fun X => { X with first := NIL, last := NIL }
       else
         let nx := (← getE e).next
         modG g fun X => { X with first := nx }
-      if Lg.size == 0 then modG gl fun X => { X with first := e }
+      if Lg.first == NIL then modG gl fun X => { X with first := e }
       modG gl fun X => { X with last := e }
       pure (e, lab, gl)
     else do
       if Rg.prev != g then guard "group split: right sibling not adjacent"
       let e := G.last
-      let lab ← if Rg.size == 0 then pure center
+      let lab ← if Rg.first == NIL then pure center
         else before (← getE Rg.first).lab P.D_e "elem: push-front room"
-      if G.size == 1 then modG g fun X => { X with first := NIL, last := NIL }
+      if G.first == G.last then modG g fun X => { X with first := NIL, last := NIL }
       else
         let pv := (← getE e).prev
         modG g fun X => { X with last := pv }
-      if Rg.size == 0 then modG gr fun X => { X with last := e }
+      if Rg.first == NIL then modG gr fun X => { X with last := e }
       modG gr fun X => { X with first := e }
       pure (e, lab, gr)
   modE e fun X => { X with grp := dst, lab := lab }
@@ -186,7 +188,7 @@ def groupSplitStep (g : Nat) : CM Bool := do
   return true
 
 def driveGroupFrom (s : Nat) : CM Unit := do
-  for _ in [0:(← getP).K_G] do
+  for _ in List.range ((← getP).K_G) do
     if !(← groupSplitStep s) then return
 
 def driveGroup (g : Nat) : CM Unit := do
@@ -288,7 +290,7 @@ def chunkSplitStep (x : Nat) : CM Bool := do
   return true
 
 def driveChunkFrom (s : Nat) : CM Unit := do
-  for _ in [0:(← getP).K_C] do
+  for _ in List.range ((← getP).K_C) do
     if !(← chunkSplitStep s) then return
 
 def driveChunk (c : Nat) : CM Unit := do
@@ -301,11 +303,12 @@ def driveChunk (c : Nat) : CM Unit := do
 /-! ### Reservation -/
 
 def reservation (k : Nat) : CM Unit := do
-  for _ in [0:k] do
+  for _ in List.range (k) do
     match (← get).resJob with
     | none =>
       if ← pqEmpty then return
       let x ← pqPopMax
+      if x == NIL || x ≥ (← get).C.size then guard "reservation: invalid chunk"
       let y ← newChunk
       let z ← newChunk
       let X ← getC x
@@ -331,7 +334,7 @@ def elements : CM (List Nat) := do
   let s ← get
   let mut out : Array Nat := #[]
   let mut e := s.head
-  for _ in [0:s.E.size] do
+  for _ in List.range (s.E.size) do
     if e == NIL then break
     out := out.push e
     e := (s.E.getX e).next
@@ -412,7 +415,7 @@ def initCore (lazy : Bool) : CM Unit := do
   if lazy then
     modify fun s => { s with ready := false }
   else
-    for _ in [0:P.H + 1] do
+    for _ in List.range (P.H + 1) do
       if ← initStep then break
     modify fun s => { s with ready := true }
   modG g fun G => { G with lab := 1 <<< (P.B_g - 1) }

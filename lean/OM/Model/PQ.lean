@@ -42,7 +42,7 @@ def pqAdd (c s p : Nat) : CM Unit := do
 def pqDel (c : Nat) : CM Unit := do
   let st ← get
   let s := st.pqWhere.getX c
-  if s == 0 then bug "pq: delete of an absent chunk"
+  if s == 0 then guard "pq: delete of an absent chunk"
   modify fun st => { st with pqWhere := st.pqWhere.setX c 0 }
   let nx := st.pqNext.getX c
   let pv := st.pqPrev.getX c
@@ -66,7 +66,7 @@ def pqInsertScan (c s : Nat) : CM Unit := do
   let st ← get
   let th := st.P.theta
   let mut p := s - 1
-  for _ in [0:s] do
+  for _ in List.range (s) do
     if p > th && st.pqHead.getX p == NIL then
       p := p - 1
       modify fun st => { st with pqScan := st.pqScan + 1 }
@@ -101,7 +101,7 @@ def pqEnterIfAbove (c : Nat) : CM Unit := do
 def pqPopMax : CM Nat := do
   let st ← get
   let c := st.pqHead.getX st.pqHi
-  if c == NIL then bug "pq: pop from an empty queue"
+  if c == NIL then guard "pq: pop from an empty queue"
   pqDel c
   return c
 

@@ -1,6 +1,6 @@
 """Export operation traces for the Lean model's replay test (lean/OM/Test/Replay.lean).
 
-    python3 trace.py OUT.jsonl WORKLOAD N [--preset default|proof|tiny|tinytop] [--seed S] [--K_B K]
+    python3 trace.py OUT.jsonl WORKLOAD N [--preset default|proof|tiny|tinytop|beta3] [--seed S] [--K_B K]
 
 Runs a stress workload (stress.WORKLOADS) on the full structure and writes one JSON value
 per line:
@@ -54,11 +54,19 @@ def tinytop(N: int) -> Params:
     return P
 
 
+def beta3(N: int) -> Params:
+    """Top labels of 3 bits: FALLBACK's tree gives unsorted tags and is renumbered."""
+    P = Params.for_capacity(N, top="wbbt")
+    P.top_beta = 3
+    return P
+
+
 PRESETS = {
     "default": lambda N: Params.for_capacity(N, top="wbbt"),
     "proof": Params.proof,
     "tiny": tiny,
     "tinytop": tinytop,
+    "beta3": beta3,
 }
 
 

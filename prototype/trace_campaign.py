@@ -2,8 +2,8 @@
 
     python3 trace_campaign.py OUTDIR [N] [-j JOBS] [--fuzz TRIALS] [--replay BIN [--keep]]
 
-Presets `default` and `proof` run N operations (default 20000); `tiny` and `tinytop`, which
-force FALLBACK constantly, run N/4. `--fuzz` adds TRIALS fuzz.py-style traces (random small
+Presets `default` and `proof` run N operations (default 20000); `tiny`, `tinytop` and `beta3`,
+which force FALLBACK constantly, run N/4. `--fuzz` adds TRIALS fuzz.py-style traces (random small
 parameters, 200-1500 operations) and TRIALS/10 long ones (5k-30k operations).
 Then: `lake exe replay OUTDIR/*.jsonl` in lean/. With `--replay BIN` (the built
 `lean/.lake/build/bin/replay`), each trace is replayed as soon as it is written, with panics
@@ -74,7 +74,8 @@ def main() -> None:
     n = int(args[1]) if len(args) > 1 else 20000
     os.makedirs(outdir, exist_ok=True)
     tasks = []
-    for preset, k in (("default", n), ("proof", n), ("tiny", n // 4), ("tinytop", n // 4)):
+    for preset, k in (("default", n), ("proof", n), ("tiny", n // 4), ("tinytop", n // 4),
+                      ("beta3", n // 4)):
         for wl in stress.WORKLOADS:
             tasks.append((os.path.join(outdir, f"{wl}.{preset}.jsonl"), wl, k, preset))
     for seed in range(fz):

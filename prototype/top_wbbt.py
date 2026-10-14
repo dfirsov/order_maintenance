@@ -71,6 +71,9 @@ class WBBTTop:
         self.beta = beta if beta is not None else 4 * a + 8   # ~1 bit per table insertion
         self.top_steps = 0
         self.relabels = 0          # full rebuilds (fallbacks)
+        self.repairs = 0           # FALLBACKs whose tree gave unsorted tags (renumbered)
+        self.renumbered = False    # tags renumbered by the last FALLBACK: they no longer
+                                   # match the paths, which only costs further FALLBACKs
         self.max_table = 0
         self.max_lab = 0
         self.min_gap = 1 << (self.beta + 1)   # smallest label gap ever split by averaging
@@ -211,6 +214,15 @@ class WBBTTop:
             c = core.C[c].next
         self._build(chunks)
         self.top_steps += len(chunks)
+        # FALLBACK verifies its output: if the tags do not increase along the chunk list
+        # (label width too small, docs/PROOF.md §3.4), number the chunks 1, 2, 3, ... instead,
+        # so that correctness needs no condition on beta
+        tags = [core.C[c].tag for c in chunks]
+        self.renumbered = any(a >= b for a, b in zip(tags, tags[1:]))
+        if self.renumbered:
+            self.repairs += 1
+            for i, c in enumerate(chunks):
+                core.C[c].tag = i + 1
 
     def _build(self, chunks: list[int]) -> None:
         self._reset()
@@ -526,6 +538,8 @@ class WBBTTop:
         Not needed for safety (tags are guarded). `quiescent` means no job is in
         progress, so weights must be exactly up to date.
         """
+        if self.renumbered:
+            return      # the tree failed (label width too small); only the guards matter now
         core, H = self.core, self.H
         chunks = []
         c = core.first_chunk
