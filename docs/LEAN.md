@@ -244,7 +244,7 @@ OM/
 | M1 ✅ | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
 | M2 ✅ | **Theorem A** at Level F (§12) | INV-S preservation, guards, FALLBACK, Invariant R | medium |
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
-| M4 ◐ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13: core level done; wrapper's Lemma W open) | invariant reasoning | medium |
+| M4 ✅ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13), against the top structure's contracts | invariant reasoning | medium |
 | M5 | Top-structure lemmas T0–T5, (Q) | the largest proof | **high** |
 | M6 | Level M programs and simulation; assembly; **Theorems B and W** | mechanical, but long | medium |
 
@@ -389,10 +389,18 @@ anchor lies in `pre`.
 
 ## 13. M4: lower-level cost lemmas at Level F
 
-**Status.** The core level is done. The wrapper's Lemma W (rebuild timing) is open. Everything
-lives in `lean/OM/Proof/Cost/`. It compiles with no `sorry`. The axioms are the standard three.
+**Status.** M4 is done, relative to the top structure's contracts, which are M5's job.
+Everything lives in `lean/OM/Proof/Cost/` and is part of the default build. It compiles with no
+`sorry`. The axioms are the standard three.
 
 **Main statements.**
+* `wrapper_cost` (`Wrap.lean`) is the summary. The structure initializes into a state
+  satisfying `WC`, and every valid operation keeps `WC`.
+  * `WC` is the wrapper's cost invariant: Invariant R, both cores' cost invariants, and
+    Lemma W's record of a rebuild in progress.
+  * `WC.cores`: in every such state, `cur` is a core in service with room for an insertion,
+    and so is `nxt` once its preparation is over. So every core insertion the wrapper makes
+    takes no FALLBACK.
 * `insertAfter_cost` (`CoreCost.lean`) is Lemma K1 for insertions. From `CostInv`, inserting
   after a listed element runs exactly `insertElem` then `background`, with no FALLBACK and no
   failed guard, and `CostInv` holds again.
@@ -466,9 +474,28 @@ also hypotheses; Lemma W will discharge them.
 * **The chunk count** keeps ghost sizes `e c ≤ c_max` at which quiet chunks became quiet:
   `pops·(θ + 1 − c_max) + Σ_quiet (size − e) ≤ count` and `|C| = 2 + 2·pops`.
 
-**Open in M4.**
-* The wrapper: Lemma W (rebuild timing), so every core's `count + 1` stays within its
-  capacity. Then `CostInv` for `cur` and `nxt` through `OM.insert`, `OM.delete`, rebuild
-  steps and swaps.
-* I5 is proved in M5, once `J` and `H` are fixed.
+**Lemma W in Lean** (`Wrap.lean`). A rebuild in progress carries:
+* the count `c₀` and live count `live₀` at the trigger;
+* the insertions `I` and deletions `D` since the trigger.
+
+The work left `Φ` is the preparation steps left plus `cur`'s count before the cursor is set,
+then the elements from the cursor on. It satisfies `Φ + (K_B − 1)·I ≤ H' + c₀`: each insertion
+adds at most 1 to `Φ`, and each operation's `K_B` budgeted steps remove one each
+(`rebuildLoop_cost`). `nxt`'s fill satisfies `|nxt| ≤ 1 + |live copies| + D` and
+`live + D = live₀ + I`, so `|nxt| ≤ 1 + live₀ + I`. These give room in `cur` (`WC.cur_room`),
+room in `nxt` (`WC.nxt_room`), a quiet new `cur` after the swap, and `N' ≤ 4N`.
+
+**What the cost proof assumes** (`CostSetup`):
+* the two contracts, for every capacity;
+* the parameter conditions (`proofParams` satisfies the lower-level ones);
+* I5 for the game;
+* `2 + 2·⌊N/(θ + 1 − c_max)⌋ ≤ n + 1, cap`;
+* the preparation budget `H(N') + 1 ≤ L(N) + 2` for `N' ≤ 4N`;
+* `L + 6 ≤ N/2` for `N ≥ 64`;
+* `K_B ≥ 4` (an argument of `OM.init`).
+
+**Left to M5.** M5 must prove the contracts (`TopContract`, `PrepContract`) and fix `J`
+and `H`. Then it must prove I5 and the preparation budget for the parameter rule. The
+current placeholder `H := L + 2` in `proofParams` must be replaced. The budget needs
+`H(N') ≤ L(N) + 1`, while M5's `H ≈ L/3` for the WBBT.
 
