@@ -709,3 +709,278 @@ theorem QRep.del {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat �
     · rw [g4]; exact hQ.hi
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Only queue fields change -/
+
+/-- `st'` differs from `st` at most in the queue's fields. -/
+structure PQOnly (st st' : Core) : Prop where
+  E : st'.E = st.E
+  Gs : st'.Gs = st.Gs
+  C : st'.C = st.C
+  P : st'.P = st.P
+  rest : st'.freeG = st.freeG ∧ st'.count = st.count ∧ st'.head = st.head ∧ st'.tail = st.tail ∧
+    st'.firstGroup = st.firstGroup ∧ st'.firstChunk = st.firstChunk ∧ st'.ready = st.ready ∧
+    st'.prep = st.prep ∧ st'.resJob = st.resJob ∧ st'.fallbacks = st.fallbacks ∧
+    st'.pqScan = st.pqScan ∧ st'.nodes = st.nodes ∧ st'.path = st.path ∧ st'.cin = st.cin ∧
+    st'.lpar = st.lpar
+
+theorem PQOnly.refl (st : Core) : PQOnly st st :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem PQOnly.trans {a b c : Core} (h1 : PQOnly a b) (h2 : PQOnly b c) : PQOnly a c := by
+  obtain ⟨e1, g1, c1, p1, r1⟩ := h1
+  obtain ⟨e2, g2, c2, p2, r2⟩ := h2
+  refine ⟨e2.trans e1, g2.trans g1, c2.trans c1, p2.trans p1, ?_⟩
+  obtain ⟨a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15⟩ := r1
+  obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15⟩ := r2
+  exact ⟨b1.trans a1, b2.trans a2, b3.trans a3, b4.trans a4, b5.trans a5, b6.trans a6,
+    b7.trans a7, b8.trans a8, b9.trans a9, b10.trans a10, b11.trans a11, b12.trans a12,
+    b13.trans a13, b14.trans a14, b15.trans a15⟩
+
+theorem linkSt_only (st : Core) (s p : Nat) : PQOnly st (linkSt st s p) := by
+  unfold linkSt; dsimp only; split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem addSt_only (st : Core) (c s p : Nat) : PQOnly st (addSt st c s p) := by
+  unfold addSt
+  dsimp only
+  split_ifs
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · let st0 : Core := { st with pqNext := st.pqNext.setX c NIL, pqPrev := st.pqPrev.setX c NIL, pqHead := st.pqHead.setX s c }
+    obtain ⟨e, g, c', p', r⟩ := linkSt_only st0 s p
+    exact ⟨e, g, c', p', r⟩
+
+theorem delSt_only (st : Core) (c : Nat) : PQOnly st (delSt st c) := by
+  unfold delSt; dsimp only; split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-! ### The operations used by the algorithm -/
+
+theorem pqInsertScan_min (st : Core) (c : Nat) :
+    (pqInsertScan c (st.P.theta + 1)).run st = .ok () (addSt st c (st.P.theta + 1) 0) := by
+  unfold pqInsertScan
+  simp only [run_get_bind, Nat.add_sub_cancel, List.range_succ_eq_map, List.forIn_cons]
+  rw [run_bind, run_bind]
+  simp [pqAdd_run]
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- The bucket list's elements below `s`: all of them are below `s + 1` too, minus `s`. -/
+theorem filter_lt_succ_erase {nb : List Nat} (hnd : nb.Nodup) (s : Nat) :
+    (nb.erase s).filter (· < s + 1) = nb.filter (· < s) := by
+  induction nb with
+  | nil => simp
+  | cons a t ih =>
+    simp only [List.nodup_cons] at hnd
+    by_cases has : a = s
+    · subst has
+      simp only [List.erase_cons_head, List.filter_cons, lt_irrefl, decide_false,
+        Bool.false_eq_true, if_false]
+      exact List.filter_congr (fun x hx => by
+        have : x ≠ a := fun e => hnd.1 (e ▸ hx); simp; omega)
+    · rw [List.erase_cons_tail (by simpa using has)]
+      simp only [List.filter_cons]
+      have : decide (a < s + 1) = decide (a < s) := by simp; omega
+      rw [this, ih hnd.2]
+
+theorem sorted_split_mem {l : List Nat} (hs : l.IsChain (· < ·)) {s : Nat} (hsl : s ∈ l) :
+    l = l.filter (· < s) ++ s :: l.filter (s < ·) := by
+  induction l with
+  | nil => simp at hsl
+  | cons a t ih =>
+    have hst := (List.isChain_cons.mp hs).2
+    have hat : ∀ b ∈ t, a < b := by
+      have := List.isChain_iff_pairwise.mp hs; exact (List.pairwise_cons.mp this).1
+    rcases List.mem_cons.mp hsl with rfl | hst'
+    · simp only [List.filter_cons, lt_irrefl, decide_false, Bool.false_eq_true, if_false]
+      have h1 : t.filter (· < s) = [] := by
+        rw [List.filter_eq_nil_iff]; intro b hb; have := hat b hb; simp; omega
+      have h2 : t.filter (s < ·) = t := by
+        rw [List.filter_eq_self]; intro b hb; have := hat b hb; simp; omega
+      rw [h1, h2]; rfl
+    · have has : a < s := hat s hst'
+      simp only [List.filter_cons, has, decide_true, if_true]
+      have : ¬ s < a := by omega
+      simp only [this, decide_false, Bool.false_eq_true, if_false, List.cons_append]
+      congr 1; exact ih hst hst'
+
+/-- **Lemma K2 for insertions.** Adjusting a quiet chunk's key by `+1` keeps the representation
+and never scans. -/
+theorem pqAdjust_inc {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat → List Nat}
+    {nb : List Nat} (hQ : QRep st k inQ bl nb) {c old : Nat} (hc0 : c ≠ 0)
+    (hin : inQ c = decide (st.P.theta < old)) (hk : inQ c = true → k c = old) :
+    ∃ st', (pqAdjust c old (old + 1)).run st = .ok () st' ∧ PQOnly st st' ∧
+      QInv st' (Function.update k c (old + 1))
+        (Function.update inQ c (decide (st.P.theta < old + 1))) := by
+  unfold pqAdjust
+  simp only [run_getP_bind]
+  by_cases h1 : old ≤ st.P.theta
+  · by_cases h2 : st.P.theta < old + 1
+    · -- entering the queue at bucket `θ + 1`, the least possible
+      have hold : old = st.P.theta := by omega
+      rw [if_pos (by simp [h1, h2]), hold, pqInsertScan_min]
+      have hcq : inQ c = false := by rw [hin]; simp; omega
+      have := hQ.add hcq hc0 (s := st.P.theta + 1) (p := 0) (by omega) (fun _ => by
+        rw [List.filter_eq_nil_iff.mpr]
+        · rfl
+        · intro b hb
+          have hbne := (hQ.nbmem b).mp hb
+          obtain ⟨d, hd⟩ := List.exists_mem_of_ne_nil _ hbne
+          have := (hQ.bmem b d).mp hd
+          have := hQ.pos d this.1
+          simp; omega)
+      have hdec : decide (st.P.theta < st.P.theta + 1) = true := by simp
+      rw [hdec]
+      exact ⟨_, rfl, addSt_only _ _ _ _, _, _, this⟩
+    · rw [if_neg (by simp; omega), if_neg (by simp; omega), if_neg (by simp; omega)]
+      refine ⟨st, rfl, PQOnly.refl _, bl, nb, ?_⟩
+      have hcq : inQ c = false := by rw [hin]; simp; omega
+      have hnew : decide (st.P.theta < old + 1) = false := by simp; omega
+      rw [hnew]
+      refine ⟨fun d => ?_, fun d hd => ?_, hQ.bucket, fun b d => ?_, hQ.nbl, hQ.nbmem, hQ.sorted, hQ.hi⟩
+      · by_cases hd : d = c
+        · subst hd; rw [hQ.where_]; simp [hcq]
+        · rw [Function.update_of_ne hd, Function.update_of_ne hd]; exact hQ.where_ d
+      · by_cases hdc : d = c
+        · subst hdc; simp at hd
+        · rw [Function.update_of_ne hdc] at hd ⊢; exact hQ.pos d hd
+      · rw [hQ.bmem]
+        by_cases hd : d = c
+        · subst hd; simp [hcq]
+        · rw [Function.update_of_ne hd, Function.update_of_ne hd]
+  · -- moving from bucket `old` to bucket `old + 1`
+    have hcq : inQ c = true := by rw [hin]; simp; omega
+    have hkc := hk hcq
+    rw [if_neg (by simp; omega), if_neg (by simp; omega), if_pos (by simp; omega)]
+    simp only [run_get_bind, beq_self_eq_true, if_true]
+    have hcm : c ∈ bl old := (hQ.bmem old c).mpr ⟨hcq, hkc⟩
+    have hB := hQ.bucket old
+    -- `c` is alone in its bucket iff it is the head with no successor
+    have halone : (st.pqHead.getX old == c && st.pqNext.getX c == NIL) = true ↔
+        (bl old).erase c = [] := by
+      obtain ⟨l1, l2, hsplit⟩ := List.mem_iff_append.mp hcm
+      rw [hsplit] at hB
+      have hnd := hB.nodup
+      rw [hsplit, List.erase_append_right _ (fun h =>
+        (List.nodup_append.mp hnd).2.2 c h c (by simp) rfl)]
+      simp only [List.erase_cons_head, List.append_eq_nil_iff, Bool.and_eq_true, beq_iff_eq]
+      rw [hB.head, hB.next c (by simp), succOf_mid hnd]
+      constructor
+      · rintro ⟨h1, h2⟩
+        refine ⟨?_, ?_⟩
+        · cases l1 with
+          | nil => rfl
+          | cons a t =>
+            exfalso; simp at h1; subst h1
+            exact (List.nodup_append.mp hnd).2.2 a (by simp) a (by simp) rfl
+        · cases l2 with
+          | nil => rfl
+          | cons a t => exfalso; simp at h2; exact hB.nonil (by simp [h2])
+      · rintro ⟨rfl, rfl⟩; simp
+    have hsortm := sorted_split_mem hQ.sorted ((hQ.nbmem old).mpr (List.ne_nil_of_mem hcm))
+    rw [run_bind, pqDel_run st c (by rw [hQ.where_, if_pos hcq]; have := hQ.pos c hcq; omega)]
+    simp only
+    rw [pqAdd_run]
+    have hD := hQ.del hcq
+    rw [hkc] at hD
+    have hA := hD.add (c := c) (s := old + 1) (by simp) hc0 (by rw [(delSt_only st c).P]; omega)
+      (p := if (st.pqHead.getX old == c && st.pqNext.getX c == NIL) = true then st.nbPrev.getX old
+        else old) (fun _ => by
+          by_cases hal : (st.pqHead.getX old == c && st.pqNext.getX c == NIL) = true
+          · rw [if_pos hal, if_pos (halone.mp hal), filter_lt_succ_erase hQ.nbl.nodup]
+            -- the predecessor of `old` in the sorted bucket list
+            have := hQ.nbl.prev old ((hQ.nbmem old).mpr (List.ne_nil_of_mem hcm))
+            rw [this]
+            conv_lhs => rw [hsortm]
+            rw [predOf_mid (hsortm ▸ hQ.nbl.nodup)]
+          · rw [if_neg hal, if_neg (fun h => hal (halone.mpr h))]
+            conv_rhs => rw [hsortm]
+            rw [List.filter_append, List.filter_cons]
+            have e1 : (nb.filter (· < old)).filter (· < old + 1) = nb.filter (· < old) :=
+              List.filter_eq_self.mpr (fun b hb => by simp at hb ⊢; omega)
+            have e2 : (nb.filter (old < ·)).filter (· < old + 1) = [] :=
+              List.filter_eq_nil_iff.mpr (fun b hb => by simp at hb ⊢; omega)
+            simp only [e1, e2, show decide (old < old + 1) = true by simp, if_true]
+            simp)
+    have hin' : Function.update (Function.update inQ c false) c true =
+        Function.update inQ c (decide (st.P.theta < old + 1)) := by
+      rw [show decide (st.P.theta < old + 1) = true by simp; omega]; simp
+    rw [hin'] at hA
+    exact ⟨_, rfl, (delSt_only st c).trans (addSt_only _ _ _ _), _, _, hA⟩
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem QRep.empty_iff {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat → List Nat}
+    {nb : List Nat} (hQ : QRep st k inQ bl nb) : st.pqHi = 0 ↔ ∀ d, inQ d = false := by
+  rw [hQ.hi]
+  constructor
+  · intro h d
+    by_contra hd
+    simp only [Bool.not_eq_false] at hd
+    have hm : k d ∈ nb := (hQ.nbmem _).mpr (List.ne_nil_of_mem ((hQ.bmem _ d).mpr ⟨hd, rfl⟩))
+    rcases nb.eq_nil_or_concat with rfl | ⟨l, a, rfl⟩
+    · simp at hm
+    · rw [List.concat_eq_append, List.getLastD_concat] at h
+      subst h
+      exact hQ.nbl.nonil (by simp)
+  · intro h
+    cases hnb : nb with
+    | nil => rfl
+    | cons b t =>
+      exfalso
+      have hb : bl b ≠ [] := (hQ.nbmem b).mp (by rw [hnb]; simp)
+      obtain ⟨d, hd⟩ := List.exists_mem_of_ne_nil _ hb
+      have := ((hQ.bmem b d).mp hd).1
+      rw [h d] at this; cases this
+
+theorem pqEmpty_run (st : Core) : pqEmpty.run st = .ok (st.pqHi == 0) st := rfl
+
+/-- **`pqPopMax`** returns a queued chunk of largest key, and deletes it. -/
+theorem pqPopMax_ok {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat → List Nat}
+    {nb : List Nat} (hQ : QRep st k inQ bl nb) (hne : st.pqHi ≠ 0) :
+    ∃ c, pqPopMax.run st = .ok c (delSt st c) ∧ inQ c = true ∧
+      ∀ d, inQ d = true → k d ≤ k c := by
+  have hnb : nb ≠ [] := by intro h; apply hne; rw [hQ.hi, h]; rfl
+  obtain ⟨l, b, hl⟩ := (nb.eq_nil_or_concat).resolve_left hnb
+  rw [List.concat_eq_append] at hl
+  have hhi : st.pqHi = b := by rw [hQ.hi, hl, List.getLastD_concat]
+  have hbm : b ∈ nb := by rw [hl]; simp
+  have hbl : bl b ≠ [] := (hQ.nbmem b).mp hbm
+  have hB := hQ.bucket b
+  obtain ⟨c, t, hct⟩ := List.exists_cons_of_ne_nil hbl
+  have hc : st.pqHead.getX b = c := by rw [hB.head, hct]; rfl
+  have hcm : c ∈ bl b := by rw [hct]; simp
+  have hc0 : c ≠ NIL := fun e => hB.nonil (e ▸ hcm)
+  obtain ⟨hcq, hkc⟩ := (hQ.bmem b c).mp hcm
+  refine ⟨c, ?_, hcq, fun d hd => ?_⟩
+  · unfold pqPopMax
+    simp only [run_get_bind, hhi, hc]
+    rw [if_neg (by simpa using hc0)]
+    rw [run_bind, pqDel_run st c (by rw [hQ.where_, if_pos hcq]; have := hQ.pos c hcq; omega)]
+    rfl
+  · rw [hkc]
+    have hdm : k d ∈ nb := (hQ.nbmem _).mpr (List.ne_nil_of_mem ((hQ.bmem _ d).mpr ⟨hd, rfl⟩))
+    have hs := hQ.sorted
+    rw [hl] at hs hdm
+    rw [List.isChain_iff_pairwise, List.pairwise_append] at hs
+    rcases List.mem_append.mp hdm with h | h
+    · exact le_of_lt (hs.2.2 _ h b (by simp))
+    · simp at h; omega
+
+end OM.Proof
