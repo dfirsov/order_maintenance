@@ -1253,8 +1253,8 @@ structure DriveInv (X : Core → Prop) (s : Core) (L : List Nat) (δ : Nat → N
     (1 ≤ j ∧ gSz t l ≤ gSz t r + 1 ∧ gSz t r ≤ gSz t l + 1)
 
 /-- The drive ended by removing `p`. -/
-structure DriveDone (X : Core → Prop) (s : Core) (L : List Nat) (t : Core) : Prop where
-  x : X t
+structure DriveDone (X Y : Core → Prop) (s : Core) (L : List Nat) (t : Core) : Prop where
+  x : X t ∨ Y t
   P : t.P = s.P
   ef : EFrame s t
   inv : ∃ A', INV t A' ∧ A'.elist = L
@@ -1269,23 +1269,23 @@ open OM.Model
 set_option linter.deprecated false
 
 /-- The extra invariant `X` survives the steps of a drive. -/
-structure XSteps (X : Core → Prop) (L : List Nat) (δ : Nat → Nat) (p : Nat) : Prop where
+structure XSteps (X Y : Core → Prop) (L : List Nat) (δ : Nat → Nat) (p : Nat) : Prop where
   moveL : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → MoveLOK t p → X t →
     X (moveLState t p)
   moveR : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → MoveROK t p → X t →
     X (moveRState t p)
   rem : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → LiveG t p →
     gSt t p = .splitting → gF t p = NIL → gSz t (gLl t p) < t.P.G → gSz t (gRr t p) < t.P.G →
-    X t → X (removeState t p)
+    X t → Y (removeState t p)
 
-theorem DriveInv.step {X : Core → Prop} {s : Core} {L : List Nat} {δ : Nat → Nat}
-    {p l r a b c j : Nat} {t : Core} (hXs : XSteps X L δ p)
+theorem DriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ : Nat → Nat}
+    {p l r a b c j : Nat} {t : Core} (hXs : XSteps X Y L δ p)
     (hP : GParams s.P) (hδ : ∀ z, z ≠ l → z ≠ p → z ≠ r → δ z = 0)
     (hTlo : s.P.G ≤ a + b + c) (hThi : a + b + c ≤ s.P.G + s.P.G / (s.P.K_G - 1) + 1)
     (hbal0 : a ≤ c + 2 ∧ c ≤ a + 2)
     (hD : DriveInv X s L δ p l r a b c j t) :
     ∃ t', ((groupSplitStep p).run t = .ok true t' ∧ DriveInv X s L δ p l r a b c (j + 1) t') ∨
-      ((groupSplitStep p).run t = .ok false t' ∧ DriveDone X s L t') := by
+      ((groupSplitStep p).run t = .ok false t' ∧ DriveDone X Y s L t') := by
   obtain ⟨A', hI', hel⟩ := hD.inv
   obtain ⟨gh, hG⟩ := hD.ginv
   subst hel
@@ -1331,8 +1331,8 @@ theorem DriveInv.step {X : Core → Prop} {s : Core} {L : List Nat} {δ : Nat �
       (by rw [hD.ll]; exact hszl) (by rw [hD.rr]; exact hszr)
     obtain ⟨hef, A'', hI'', hel''⟩ := Good.ok_inv (good_groupSplitStep p) hI' hrun
     refine ⟨_, Or.inr ⟨hrun, ⟨?_, ?_, hD.ef.trans hef, ⟨A'', hI'', hel''⟩, ⟨gh, ?_⟩⟩⟩⟩
-    · exact hXs.rem t A' gh hI' rfl hG hp hs he (by rw [hD.ll]; exact hszl)
-        (by rw [hD.rr]; exact hszr) hD.x
+    · exact Or.inr (hXs.rem t A' gh hI' rfl hG hp hs he (by rw [hD.ll]; exact hszl)
+        (by rw [hD.rr]; exact hszr) hD.x)
     · exact hef.P.trans hPt
     · refine ginv_remove hI' hG hp hs (by rw [hD.ll, hD.rr]; exact hδ) hfam
         (by rw [hD.ll]; exact ⟨hszl, hgl⟩) (by rw [hD.rr]; exact ⟨hszr, hgr⟩) hg1
@@ -1430,14 +1430,14 @@ set_option linter.deprecated false
 /-- **Lemma G1 for one drive.** Driving the family of `p` after at most one undriven insertion
 into it ends with `GInv` (no undriven insertion): either `p` has made `K_G` moves and the family
 satisfies G1 again, or `p` was removed and its siblings are quiet groups of the right size. -/
-theorem ginv_drive {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ : Nat → Nat} {p : Nat}
-    (hI : INV s A) (hXs : XSteps X A.elist δ p) (hX : X s)
+theorem ginv_drive {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ : Nat → Nat} {p : Nat}
+    (hI : INV s A) (hXs : XSteps X Y A.elist δ p) (hX : X s)
     (hG : GInvE s A.elist gh δ p) (hP : GParams s.P) (hp : LiveG s p) (hs : gSt s p = .splitting)
     (hG1 : G1 s δ p)
     (hδ : ∀ z, z ≠ gLl s p → z ≠ p → z ≠ gRr s p → δ z = 0)
     (hδs : δ (gLl s p) + δ p + δ (gRr s p) ≤ 1)
     (hδle : δ (gLl s p) ≤ gSz s (gLl s p) ∧ δ p ≤ gSz s p ∧ δ (gRr s p) ≤ gSz s (gRr s p)) :
-    ∃ s', (driveGroupFrom p).run s = .ok () s' ∧ DriveDone X s A.elist s' := by
+    ∃ s', (driveGroupFrom p).run s = .ok () s' ∧ DriveDone X Y s A.elist s' := by
   generalize hl : gLl s p = l at *
   generalize hr : gRr s p = r at *
   generalize ha : gSz s l = a at *
@@ -1460,7 +1460,7 @@ theorem ginv_drive {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ : Nat
   have hThi : a + b + c ≤ s.P.G + s.P.G / (s.P.K_G - 1) + 1 := by rw [hm, hq]; omega
   have hbal0 : a ≤ c + 2 ∧ c ≤ a + 2 := by omega
   obtain ⟨t, hrun, hres⟩ := driveGroupFrom_ok (s := s) (p := p)
-    (fun j t => DriveInv X s A.elist δ p l r a b c j t) (DriveDone X s A.elist)
+    (fun j t => DriveInv X s A.elist δ p l r a b c j t) (DriveDone X Y s A.elist)
     ⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hp, hs, hl, hr, by omega, by omega,
       Or.inl ⟨rfl, ha, hc⟩⟩
     (fun j t hD _ => hD.step hXs hP (by intro z h1 h2 h3; exact hδ z h1 h2 h3) hTlo hThi hbal0)
@@ -1469,7 +1469,7 @@ theorem ginv_drive {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ : Nat
   · -- `K_G` moves: G1 holds again
     obtain ⟨A', hI', hel⟩ := hD.inv
     obtain ⟨gh', hG'⟩ := hD.ginv
-    refine ⟨hD.x, hD.P, hD.ef, ⟨A', hI', hel⟩, ⟨gh', hG'.close hD.live hD.st ?_ ?_⟩⟩
+    refine ⟨Or.inl hD.x, hD.P, hD.ef, ⟨A', hI', hel⟩, ⟨gh', hG'.close hD.live hD.st ?_ ?_⟩⟩
     · rw [hD.ll, hD.rr]; exact hδ
     · have hsum := hD.sum
       have hcnt := hD.cnt
@@ -1532,8 +1532,8 @@ theorem GInv.quiet_close {s : Core} {L : List Nat} {gh : GGh} {g : Nat}
     simpa using this
 
 /-- What the extra invariant must survive in the group phase. -/
-structure XGroup (X : Core → Prop) (L : List Nat) : Prop where
-  drive : ∀ δ p, XSteps X L δ p
+structure XGroup (X Y : Core → Prop) (L : List Nat) : Prop where
+  drive : ∀ δ p, XSteps X Y L δ p
   split : ∀ s A gh g labL labR, INV s A → A.elist = L →
     GInv s L gh (fun b => if b = g then 1 else 0) → LiveG s g → gSt s g = .quiet →
     gSz s g = s.P.G → (labBefore g).run s = .ok labL s → (labAfter g).run s = .ok labR s →
@@ -1541,8 +1541,8 @@ structure XGroup (X : Core → Prop) (L : List Nat) : Prop where
 
 /-- **The group phase.** After an insertion into group `g`, the optional split start and the
 drive of `g`'s family succeed and restore `GInv` with no undriven insertion. -/
-theorem groupPhase_ok {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g : Nat} (hI : INV s A)
-    (hXg : XGroup X A.elist) (hX : X s)
+theorem groupPhase_ok {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g : Nat} (hI : INV s A)
+    (hXg : XGroup X Y A.elist) (hX : X s)
     (hG : GInv s A.elist gh (fun b => if b = g then 1 else 0)) (hP : GParams s.P)
     (hg : LiveG s g) (hpos : 1 ≤ gSz s g)
     (hroom : gSt s g = .quiet → s.P.G ≤ gSz s g → SplitRoom s g) :
@@ -1550,7 +1550,7 @@ theorem groupPhase_ok {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g : N
         if ((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true then
           startGroupSplit g
         else pure ()
-        driveGroup g).run s = .ok () s' ∧ DriveDone X s A.elist s' := by
+        driveGroup g).run s = .ok () s' ∧ DriveDone X Y s A.elist s' := by
   have hδle : ∀ p, (fun b => if b = g then 1 else 0) p ≤ gSz s p := by
     intro p; by_cases h : p = g
     · subst h; simp [hpos]
@@ -1581,7 +1581,7 @@ theorem groupPhase_ok {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g : N
       rw [hs1]
       rw [← hel1] at hG1
       have hP1 : GParams s1.P := by rw [S.P]; exact hP
-      have hXd : XSteps X A1.elist (fun _ => 0) g := by rw [hel1]; exact hXg.drive _ g
+      have hXd : XSteps X Y A1.elist (fun _ => 0) g := by rw [hel1]; exact hXg.drive _ g
       obtain ⟨s2, hrun, hD⟩ := ginv_drive hI1 hXd
         hX1 (hG1.weaken g) hP1 hg1 hs1 (hG1.split g hg1 hs1 hg1.1) (fun _ _ _ _ => rfl)
         (by simp) (by simp)
@@ -1596,7 +1596,8 @@ theorem groupPhase_ok {X : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g : N
       rw [run_getG_bind]
       simp only [gSt] at hst
       rw [hst]
-      exact ⟨s, rfl, ⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG.quiet_close hst (by omega)⟩⟩⟩
+      exact ⟨s, rfl, ⟨Or.inl hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩,
+        ⟨gh, hG.quiet_close hst (by omega)⟩⟩⟩
   | overflow =>
     have hc : ¬ ((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true := by
       simp only [gSt] at hst; simp [hst]
