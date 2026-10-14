@@ -935,4 +935,118 @@ theorem linv_cmoveR {s : Core} {A : Abs} {gh : GGh} {lg : LGh} {s₀ δ δu : Na
       · rw [if_pos hz0]; rw [if_pos hz0] at hkD; omega
       · rw [if_neg hz0]; rw [if_neg hz0] at hkD; have := hfirstR hz0; omega
 
+/-- **Lemma C3 across a chunk removal**: the emptied chunk dies, its siblings become quiet with
+their current sizes as `e0`, and every undriven insertion counts as driven. -/
+theorem linv_cremove {s : Core} {A : Abs} {lg : LGh} {s₀ δ δu : Nat → Nat} {x : Nat}
+    (hI : INV s A) (hC : CInvE s A.elist δ δu s₀ x) (hL : LInv s lg s₀ δ δu) (hxL : LiveC s x)
+    (hst : cSt s x = .splitting) (hFB : FamBound s δ s₀ x) :
+    LInv (cremoveState s x)
+      { lg with e0 := fun c => if c = cLl s x ∨ c = cRr s x then cSz s c else lg.e0 c } s₀
+      (fun _ => 0) (fun _ => 0) := by
+  have Fx := hC.cfam x hxL hst
+  have hlx := Fx.lx hI hxL
+  have hrx := Fx.rx hI hxL
+  have hC' := cremoveState_C hxL.2 Fx.lLive.2 Fx.rLive.2 hlx hrx
+  have hLC : ∀ c, LiveC (cremoveState s x) c ↔ LiveC s c := by
+    intro c; simp [LiveC, cremoveState]
+  have hsz : ∀ c, cSz (cremoveState s x) c = cSz s c := by
+    intro c; simp only [cSz, hC']; split_ifs <;> rfl
+  have hll : ∀ c, cLl (cremoveState s x) c = cLl s c := by
+    intro c; simp only [cLl, hC']; split_ifs <;> rfl
+  have hrr : ∀ c, cRr (cremoveState s x) c = cRr s c := by
+    intro c; simp only [cRr, hC']; split_ifs <;> rfl
+  have hls : ∀ c, cLs (cremoveState s x) c = cLs s c := by
+    intro c; simp only [cLs, hC']; split_ifs <;> rfl
+  have hstO : ∀ c, c ≠ x → c ≠ cLl s x → c ≠ cRr s x →
+      cSt (cremoveState s x) c = cSt s c ∧ cSrc (cremoveState s x) c = cSrc s c := by
+    intro c h1 h2 h3; simp only [cSt, cSrc, hC', if_neg h1, if_neg (not_or.mpr ⟨h2, h3⟩)]; simp
+  have hstx : cSt (cremoveState s x) x = .dead := by simp [cSt, hC', deadC]
+  have hstlr : ∀ c, c = cLl s x ∨ c = cRr s x → cSt (cremoveState s x) c = .quiet := by
+    intro c hc
+    have : c ≠ x := by rcases hc with rfl | rfl; exact hlx; exact hrx
+    simp [cSt, hC', this, hc, quietC]
+  have hfamC : ∀ c, famC (cremoveState s x) c = famC s c := by
+    intro c; unfold famC; rw [hll, hrr, hsz, hsz, hsz]
+  have hgs : ∀ g, (cremoveState s x).Gs.getX g = s.Gs.getX g := fun g => rfl
+  have hgr : ∀ c, GrpsC (cremoveState s x) c = GrpsC s c := fun c => rfl
+  have hP : (cremoveState s x).P = s.P := rfl
+  have hun : ∀ c, units (cremoveState s x) c = units s c := fun c => rfl
+  -- the family's size, as the drive knows it
+  have hF := hFB.fam
+  have hδs := hFB.δs
+  have hδu := hC.δu x
+  have hU := unitsOf_mono s.P hFB.T
+  have hUm : unitsOf s.P (s₀ x) / (s.P.K_C - 1) ≤ unitsOf s.P s.P.T / (s.P.K_C - 1) :=
+    Nat.div_le_div_right hU
+  refine
+    { gaps := ?_, range := hL.range, hv := hL.hv, pb := hL.pb, pf := hL.pf, roots := ?_,
+      claim2 := ?_, insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_,
+      famChild := hL.famChild }
+  · intro g hg hl; rw [hls] at hl; exact hL.gaps g hg hl
+  · intro d hd; rw [hLC] at hd; exact hL.roots d hd
+  · intro d hd; rw [hLC] at hd; exact hL.claim2 d hd
+  · intro d hd hds; rw [hLC] at hd
+    show lg.ins d + (if d = cLl s x ∨ d = cRr s x then cSz s d else lg.e0 d) ≤
+      cSz (cremoveState s x) d + kC s.P s.P.T
+    rw [hsz]
+    by_cases h2 : d = cLl s x ∨ d = cRr s x
+    · rw [if_pos h2]
+      have hdo : cSt s d = .overflow := by rcases h2 with rfl | rfl; exact Fx.lSt; exact Fx.rSt
+      have hds : cSrc s d = x := by rcases h2 with rfl | rfl; exact Fx.lSrc; exact Fx.rSrc
+      have hO := hL.insO d hd hdo
+      rw [hds] at hO; unfold famC at hO
+      unfold kC
+      generalize unitsOf s.P (s₀ x) / (s.P.K_C - 1) = q1 at *
+      generalize unitsOf s.P s.P.T / (s.P.K_C - 1) = q2 at *
+      omega
+    · rw [if_neg h2]
+      have h1 : d ≠ x := by intro e; rw [e, hstx] at hds; cases hds
+      rw [(hstO d h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1] at hds
+      exact hL.insQ d hd hds
+  · intro d hd hds; rw [hLC] at hd
+    have h1 : d ≠ x := by intro e; rw [e, hstx] at hds; cases hds
+    have h2 : ¬ (d = cLl s x ∨ d = cRr s x) := by intro h; rw [hstlr d h] at hds; cases hds
+    obtain ⟨o1, o2⟩ := hstO d h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))
+    rw [o1] at hds; rw [o2, hfamC]
+    exact hL.insO d hd hds
+  · intro d hd hds; rw [hLC] at hd
+    have h1 : d ≠ x := by intro e; rw [e, hstx] at hds; cases hds
+    have h2 : ¬ (d = cLl s x ∨ d = cLl s x ∨ d = cRr s x) := by
+      rintro (h | h | h) <;> (rw [hstlr d (by simp [h])] at hds; cases hds)
+    rw [(hstO d h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr (Or.inr e)))).1] at hds
+    rw [hfamC, hP]; exact hL.insS d hd hds
+  · intro x' hx' hxs'; rw [hLC] at hx'
+    have h1 : x' ≠ x := by intro e; rw [e, hstx] at hxs'; cases hxs'
+    have h2 : ¬ (x' = cLl s x ∨ x' = cRr s x) := by intro h; rw [hstlr x' h] at hxs'; cases hxs'
+    rw [(hstO x' h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1] at hxs'
+    have h := hL.arrS x' hx' hxs'
+    have hδu' := hC.δu x'
+    rw [hll, hrr, hun, hfamC, hP]
+    dsimp only
+    omega
+  · intro d hd hds; rw [hLC] at hd
+    by_cases h2 : d = cLl s x ∨ d = cRr s x
+    · have hA := hL.arrS x hxL hst
+      unfold famC at hA
+      have harr : lg.arB d + lg.arF d ≤ lg.arB (cLl s x) + lg.arF (cLl s x) + lg.arB (cRr s x) +
+          lg.arF (cRr s x) := by rcases h2 with rfl | rfl <;> omega
+      show lg.arB d + lg.arF d ≤ 3 * Mu s.P
+      unfold Mu kC
+      generalize unitsOf s.P (s₀ x) / (s.P.K_C - 1) = q1 at *
+      generalize unitsOf s.P s.P.T / (s.P.K_C - 1) = q2 at *
+      omega
+    · by_cases h1 : d = x
+      · subst h1; exact hL.arrN d hd (by rw [hst]; simp)
+      · rw [(hstO d h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1] at hds
+        exact hL.arrN d hd hds
+  · intro d hd hds; rw [hLC] at hd
+    show (if d = cLl s x ∨ d = cRr s x then cSz s d else lg.e0 d) ≤ cSz (cremoveState s x) d
+    rw [hsz]
+    by_cases h2 : d = cLl s x ∨ d = cRr s x
+    · rw [if_pos h2]
+    · rw [if_neg h2]
+      have h1 : d ≠ x := by intro e; rw [e, hstx] at hds; cases hds
+      rw [(hstO d h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1] at hds
+      exact hL.e0 d hd hds
+
 end OM.Proof
