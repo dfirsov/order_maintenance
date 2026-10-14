@@ -313,3 +313,399 @@ theorem link_llist {st : Core} {nb : List Nat}
     simp [ha]
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Adding a chunk -/
+
+theorem QRep.disj {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat → List Nat}
+    {nb : List Nat} (hQ : QRep st k inQ bl nb) {a b c : Nat} (ha : c ∈ bl a) (hb : c ∈ bl b) :
+    a = b := by
+  rw [hQ.bmem] at ha hb; rw [← ha.2, ← hb.2]
+
+theorem QRep.add {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat → List Nat}
+    {nb : List Nat} (hQ : QRep st k inQ bl nb) {c s p : Nat} (hc : inQ c = false) (hc0 : c ≠ 0)
+    (hs : st.P.theta < s) (hp : bl s = [] → p = (nb.filter (· < s)).getLastD 0) :
+    QRep (addSt st c s p) (Function.update k c s) (Function.update inQ c true)
+      (Function.update bl s (c :: bl s))
+      (if bl s = [] then nb.filter (· < s) ++ s :: nb.filter (s < ·) else nb) := by
+  have hcb : ∀ b, c ∉ bl b := fun b h => by rw [hQ.bmem] at h; rw [hc] at h; cases h.1
+  have hs0 : s ≠ 0 := by omega
+  have hsnb : s ∈ nb ↔ bl s ≠ [] := hQ.nbmem s
+  -- the facts common to both cases
+  have hwhere : ∀ (t : Core), t.pqWhere = st.pqWhere → ∀ d,
+      (t.pqWhere.setX c s).getX d = if Function.update inQ c true d then Function.update k c s d
+        else 0 := by
+    intro t ht d; rw [ht, Array.getX_setX]
+    by_cases hd : d = c
+    · subst hd; simp
+    · simp only [if_neg hd, Function.update_of_ne hd]; exact hQ.where_ d
+  have hpos : ∀ d, Function.update inQ c true d = true → st.P.theta < Function.update k c s d := by
+    intro d hd
+    by_cases hdc : d = c
+    · subst hdc; simpa using hs
+    · rw [Function.update_of_ne hdc] at hd ⊢; exact hQ.pos d hd
+  have hbmem : ∀ b d, d ∈ Function.update bl s (c :: bl s) b ↔
+      Function.update inQ c true d = true ∧ Function.update k c s d = b := by
+    intro b d
+    by_cases hb : b = s
+    · subst hb
+      rw [Function.update_self]
+      by_cases hd : d = c
+      · subst hd; simp
+      · simp only [List.mem_cons, hd, false_or, Function.update_of_ne hd]; exact hQ.bmem b d
+    · rw [Function.update_of_ne hb, hQ.bmem]
+      by_cases hd : d = c
+      · subst hd; simp [hc, Ne.symm hb]
+      · simp [Function.update_of_ne hd]
+  by_cases hbe : bl s = []
+  · -- an empty bucket: link it in
+    have hsn : s ∉ nb := fun h => (hsnb.mp h) hbe
+    have hhd : st.pqHead.getX s = NIL := (hQ.bucket s).nil_iff.mp hbe
+    let st0 : Core := { st with pqNext := st.pqNext.setX c NIL, pqPrev := st.pqPrev.setX c NIL, pqHead := st.pqHead.setX s c }
+    have hadd : addSt st c s p = { (linkSt st0 s p) with pqWhere := (linkSt st0 s p).pqWhere.setX c s } := by
+      simp only [addSt, hhd, ne_eq, not_true_eq_false, if_false]; rfl
+    obtain ⟨r1, r2, r3, r4, r5⟩ := linkSt_rest st0 s p
+    have hL := link_llist (st := st0) (nb := nb) hQ.nbl hQ.sorted hsn hs0 (hp hbe)
+    rw [hadd, if_pos hbe]
+    refine ⟨hwhere _ r4, by rw [show (linkSt st0 s p).P = st.P from r5]; exact hpos, fun b => ?_,
+      hbmem, hL.1, fun b => ?_, sorted_insert hQ.sorted s, ?_⟩
+    · simp only [r1, r2, r3, st0, Array.getX_setX]
+      by_cases hb : b = s
+      · subst hb
+        rw [Function.update_self, hbe]
+        refine ⟨by simp, by simp only [List.mem_singleton]; exact fun h => hc0 h.symm, by simp,
+          fun z hz => ?_, fun z hz => ?_⟩
+        · simp at hz; subst hz; simp [succOf]
+        · simp at hz; subst hz; simp [predOf, succOf]
+      · rw [Function.update_of_ne hb, if_neg hb]
+        refine (hQ.bucket b).congr (fun z hz => ?_) (fun z hz => ?_) rfl
+        · rw [if_neg (fun (e : z = c) => hcb b (e ▸ hz))]
+        · rw [if_neg (fun (e : z = c) => hcb b (e ▸ hz))]
+    · by_cases hb : b = s
+      · subst hb; simp
+      · rw [Function.update_of_ne hb, ← hQ.nbmem b]
+        simp only [List.mem_append, List.mem_cons, List.mem_filter, decide_eq_true_eq, hb, false_or]
+        constructor
+        · rintro (⟨h, _⟩ | ⟨h, _⟩) <;> exact h
+        · intro h
+          rcases Nat.lt_or_gt_of_ne hb with h' | h'
+          · exact Or.inl ⟨h, h'⟩
+          · exact Or.inr ⟨h, h'⟩
+    · show (linkSt st0 s p).pqHi = _
+      rw [hL.2]
+      have hsplit := sorted_split hQ.sorted s hsn
+      by_cases h2 : nb.filter (s < ·) = []
+      · rw [if_pos h2, h2]; simp
+      · rw [if_neg h2, hQ.hi]
+        conv_lhs => rw [hsplit]
+        rcases (nb.filter (s < ·)).eq_nil_or_concat with h | ⟨l', a, h⟩
+        · exact absurd h h2
+        · rw [h, List.concat_eq_append]
+          simp only [← List.append_assoc, List.getLastD_concat]
+          rw [show nb.filter (· < s) ++ s :: (l' ++ [a]) = (nb.filter (· < s) ++ s :: l') ++ [a] by simp,
+            List.getLastD_concat]
+  · -- a non-empty bucket: push at its head
+    have hhd : st.pqHead.getX s ≠ NIL := fun e => hbe ((hQ.bucket s).nil_iff.mpr e)
+    have hadd : addSt st c s p = { st with pqNext := st.pqNext.setX c (st.pqHead.getX s), pqPrev := (st.pqPrev.setX (st.pqHead.getX s) c).setX c NIL, pqHead := st.pqHead.setX s c, pqWhere := st.pqWhere.setX c s } := by
+      simp only [addSt, ne_eq, hhd, not_false_eq_true, if_true]
+    rw [hadd, if_neg hbe]
+    have hhdm : st.pqHead.getX s ∈ bl s := by
+      have := (hQ.bucket s).head
+      cases h : bl s with
+      | nil => exact absurd h hbe
+      | cons a t => rw [h] at this; simp at this; rw [this]; simp
+    refine ⟨hwhere st rfl, hpos, fun b => ?_, hbmem, hQ.nbl, fun b => ?_, hQ.sorted, hQ.hi⟩
+    · simp only [Array.getX_setX]
+      by_cases hb : b = s
+      · subst hb
+        rw [Function.update_self, if_pos rfl]
+        refine LList.insert_front (hQ.bucket b) (hcb b) hc0 (fun z _ => ?_) (fun z _ => ?_)
+        · rfl
+        · by_cases hz : z = c
+          · simp [hz]
+          · simp [hz]
+      · rw [Function.update_of_ne hb, if_neg hb]
+        refine (hQ.bucket b).congr (fun z hz => ?_) (fun z hz => ?_) rfl
+        · show (if z = c then _ else _) = _
+          rw [if_neg (fun (e : z = c) => hcb b (e ▸ hz))]
+        · have hzh : z ≠ st.pqHead.getX s := fun e => hb (hQ.disj hz (e ▸ hhdm))
+          show (if z = c then _ else (if z = st.pqHead.getX s then _ else _)) = _
+          rw [if_neg (fun (e : z = c) => hcb b (e ▸ hz)), if_neg hzh]
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self]; simp only [ne_eq, reduceCtorEq, not_false_eq_true,
+          iff_true]; exact hsnb.mpr hbe
+      · rw [Function.update_of_ne hb]; exact hQ.nbmem b
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Deleting a chunk -/
+
+section del
+variable (st : Core) (c : Nat)
+
+/-- The bucket head after unlinking `c`, before the bucket list is touched. -/
+def delHead : Array Nat :=
+  if st.pqPrev.getX c ≠ NIL then st.pqHead
+  else st.pqHead.setX (st.pqWhere.getX c) (st.pqNext.getX c)
+
+theorem delSt_fields :
+    (delSt st c).pqWhere = st.pqWhere.setX c 0 ∧
+    (delSt st c).pqNext = (if st.pqPrev.getX c ≠ NIL then
+      st.pqNext.setX (st.pqPrev.getX c) (st.pqNext.getX c) else st.pqNext) ∧
+    (delSt st c).pqPrev = (if st.pqNext.getX c ≠ NIL then
+      st.pqPrev.setX (st.pqNext.getX c) (st.pqPrev.getX c) else st.pqPrev) ∧
+    (delSt st c).pqHead = delHead st c ∧ (delSt st c).P = st.P := by
+  unfold delSt delHead
+  by_cases h1 : st.pqPrev.getX c = NIL <;> by_cases h2 : st.pqNext.getX c = NIL <;>
+    simp only [h1, h2, ne_eq, not_true_eq_false, not_false_eq_true, if_true, if_false] <;>
+    split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+theorem delSt_nb_keep (h : (delHead st c).getX (st.pqWhere.getX c) ≠ NIL) :
+    (delSt st c).nbNext = st.nbNext ∧ (delSt st c).nbPrev = st.nbPrev ∧
+    (delSt st c).pqLo = st.pqLo ∧ (delSt st c).pqHi = st.pqHi := by
+  unfold delSt
+  unfold delHead at h
+  by_cases h1 : st.pqPrev.getX c = NIL <;> by_cases h2 : st.pqNext.getX c = NIL <;>
+    simp only [h1, h2, ne_eq, not_true_eq_false, not_false_eq_true, if_true, if_false] at h ⊢ <;>
+    rw [if_neg h] <;> exact ⟨rfl, rfl, rfl, rfl⟩
+
+theorem delSt_nb_drop (h : (delHead st c).getX (st.pqWhere.getX c) = NIL) :
+    (∀ b, (delSt st c).nbNext.getX b =
+      if st.nbPrev.getX (st.pqWhere.getX c) ≠ 0 ∧ b = st.nbPrev.getX (st.pqWhere.getX c) then
+        st.nbNext.getX (st.pqWhere.getX c)
+      else if b = st.pqWhere.getX c then 0 else st.nbNext.getX b) ∧
+    (∀ b, (delSt st c).nbPrev.getX b =
+      if st.nbNext.getX (st.pqWhere.getX c) ≠ 0 ∧ b = st.nbNext.getX (st.pqWhere.getX c) then
+        st.nbPrev.getX (st.pqWhere.getX c)
+      else if b = st.pqWhere.getX c then 0 else st.nbPrev.getX b) ∧
+    (delSt st c).pqLo = (if st.nbPrev.getX (st.pqWhere.getX c) ≠ 0 then st.pqLo
+      else st.nbNext.getX (st.pqWhere.getX c)) ∧
+    (delSt st c).pqHi = (if st.nbNext.getX (st.pqWhere.getX c) ≠ 0 then st.pqHi
+      else st.nbPrev.getX (st.pqWhere.getX c)) := by
+  unfold delSt
+  unfold delHead at h
+  generalize st.pqWhere.getX c = s at h ⊢
+  generalize hp : st.nbPrev.getX s = p
+  generalize hn : st.nbNext.getX s = n
+  by_cases h1 : st.pqPrev.getX c = NIL <;> by_cases h2 : st.pqNext.getX c = NIL <;>
+    simp only [h1, h2, ne_eq, not_true_eq_false, not_false_eq_true, if_true, if_false] at h ⊢ <;>
+    rw [if_pos h] <;> simp only [hp, hn] <;>
+    refine ⟨fun b => ?_, fun b => ?_, ?_, ?_⟩ <;>
+    by_cases hp0 : p = 0 <;> by_cases hn0 : n = 0 <;> simp [hp0, hn0, Array.getX_setX] <;>
+    split_ifs <;> simp_all
+
+end del
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem getLastD_append_ne {l1 l2 : List Nat} (h : l2 ≠ []) (d : Nat) :
+    (l1 ++ l2).getLastD d = l2.getLastD d := by
+  rcases l2.eq_nil_or_concat with rfl | ⟨l', a, rfl⟩
+  · exact absurd rfl h
+  · rw [List.concat_eq_append, ← List.append_assoc, List.getLastD_concat, List.getLastD_concat]
+
+theorem QRep.del {st : Core} {k : Nat → Nat} {inQ : Nat → Bool} {bl : Nat → List Nat}
+    {nb : List Nat} (hQ : QRep st k inQ bl nb) {c : Nat} (hc : inQ c = true) :
+    QRep (delSt st c) k (Function.update inQ c false)
+      (Function.update bl (k c) ((bl (k c)).erase c))
+      (if (bl (k c)).erase c = [] then nb.erase (k c) else nb) := by
+  have hw : st.pqWhere.getX c = k c := by rw [hQ.where_, hc]; rfl
+  generalize hs : k c = s at hw ⊢
+  have hcm : c ∈ bl s := (hQ.bmem s c).mpr ⟨hc, hs⟩
+  obtain ⟨l1, l2, hsplit⟩ := List.mem_iff_append.mp hcm
+  have hB := hQ.bucket s
+  rw [hsplit] at hB
+  have hnd := hB.nodup
+  have hpv : st.pqPrev.getX c = l1.getLastD NIL := by rw [hB.prev c (by simp), predOf_mid hnd]
+  have hnx : st.pqNext.getX c = l2.headD NIL := by rw [hB.next c (by simp), succOf_mid hnd]
+  have herase : (bl s).erase c = l1 ++ l2 := by
+    rw [hsplit, List.erase_append_right _ (fun h => (List.nodup_append.mp hnd).2.2 c h c (by simp) rfl)]
+    simp
+  obtain ⟨f1, f2, f3, f4, f5⟩ := delSt_fields st c
+  -- the bucket of `c` after unlinking
+  have hB' : LList (fun z => (delSt st c).pqNext.getX z) (fun z => (delSt st c).pqPrev.getX z)
+      ((delSt st c).pqHead.getX s) (l1 ++ l2) := by
+    have := LList.erase (nxt' := fun z => (delSt st c).pqNext.getX z)
+      (prv' := fun z => (delSt st c).pqPrev.getX z) hB (fun z hz => ?_) (fun z hz => ?_)
+    · refine this.congr (fun _ _ => rfl) (fun _ _ => rfl) ?_
+      rw [f4]; unfold delHead; rw [hw]
+      by_cases h : st.pqPrev.getX c = NIL
+      · rw [if_neg (by simpa using h), if_pos h, Array.getX_setX, if_pos rfl]
+      · rw [if_pos h, if_neg h]
+    · have hz0 : z ≠ NIL := fun e => hB.nonil (by rw [← e]; simp at hz ⊢; tauto)
+      simp only [f2]
+      by_cases h : st.pqPrev.getX c = NIL
+      · rw [if_neg (by simpa using h)]; simp only [h]; rw [if_neg hz0]
+      · rw [if_pos h, Array.getX_setX]
+    · have hz0 : z ≠ NIL := fun e => hB.nonil (by rw [← e]; simp at hz ⊢; tauto)
+      simp only [f3]
+      by_cases h : st.pqNext.getX c = NIL
+      · rw [if_neg (by simpa using h)]; simp only [h]; rw [if_neg hz0]
+      · rw [if_pos h, Array.getX_setX]
+  have hcb : ∀ b, b ≠ s → c ∉ bl b := fun b hb h => hb (hQ.disj h hcm)
+  have hpvm : st.pqPrev.getX c = NIL ∨ st.pqPrev.getX c ∈ bl s := by
+    rw [hpv, hsplit]; rcases l1.eq_nil_or_concat with rfl | ⟨l', a, rfl⟩
+    · left; rfl
+    · right; simp
+  have hnxm : st.pqNext.getX c = NIL ∨ st.pqNext.getX c ∈ bl s := by
+    rw [hnx, hsplit]; cases l2 with
+    | nil => left; rfl
+    | cons a t => right; simp
+  have hbucket : ∀ b, b ≠ s → LList (fun z => (delSt st c).pqNext.getX z)
+      (fun z => (delSt st c).pqPrev.getX z) ((delSt st c).pqHead.getX b) (bl b) := by
+    intro b hb
+    refine (hQ.bucket b).congr (fun z hz => ?_) (fun z hz => ?_) ?_
+    · have h1 : z ≠ st.pqPrev.getX c := by
+        intro e; rcases hpvm with h | h
+        · exact (hQ.bucket b).nonil (by rw [← h, ← e]; exact hz)
+        · exact hb (hQ.disj hz (e ▸ h))
+      simp only [f2]; split <;> simp [Array.getX_setX, h1]
+    · have h1 : z ≠ st.pqNext.getX c := by
+        intro e; rcases hnxm with h | h
+        · exact (hQ.bucket b).nonil (by rw [← h, ← e]; exact hz)
+        · exact hb (hQ.disj hz (e ▸ h))
+      simp only [f3]; split <;> simp [Array.getX_setX, h1]
+    · rw [f4]; unfold delHead; rw [hw]; split <;> simp [Array.getX_setX, hb]
+  have hsnb : s ∈ nb := (hQ.nbmem s).mpr (by rw [hsplit]; simp)
+  rw [herase]
+  by_cases hemp : l1 ++ l2 = []
+  · -- the bucket became empty: drop it from the list
+    rw [if_pos hemp]
+    have hdh : (delHead st c).getX (st.pqWhere.getX c) = NIL := by
+      rw [hw, ← f4]; exact hB'.nil_iff.mp hemp
+    obtain ⟨g1, g2, g3, g4⟩ := delSt_nb_drop st c hdh
+    rw [hw] at g1 g2 g3 g4
+    obtain ⟨n1, n2, hnsplit⟩ := List.mem_iff_append.mp hsnb
+    have hN := hQ.nbl
+    rw [hnsplit] at hN
+    have hnnd := hN.nodup
+    have hps : st.nbPrev.getX s = n1.getLastD 0 := by rw [hN.prev s (by simp), predOf_mid hnnd]
+    have hns : st.nbNext.getX s = n2.headD 0 := by rw [hN.next s (by simp), succOf_mid hnnd]
+    have hnerase : nb.erase s = n1 ++ n2 := by
+      rw [hnsplit, List.erase_append_right _ (fun h => (List.nodup_append.mp hnnd).2.2 s h s (by simp) rfl)]
+      simp
+    rw [hnerase]
+    have hN' := LList.erase (nxt' := fun b => (delSt st c).nbNext.getX b)
+      (prv' := fun b => (delSt st c).nbPrev.getX b) hN (fun z hz => ?_) (fun z hz => ?_)
+    rotate_left
+    · have hz0 : z ≠ 0 := fun e => hN.nonil (by
+        have : z ∈ n1 ++ s :: n2 := by simp at hz ⊢; tauto
+        rw [e] at this; exact this)
+      have hzs : z ≠ s := fun e => by
+        rw [e] at hz; exact (List.nodup_middle.mp hnnd |> List.nodup_cons.mp).1 hz
+      simp only [g1]
+      by_cases hp0 : st.nbPrev.getX s = 0
+      · simp [hp0, hzs, hz0]
+      · simp [hp0, hzs]
+    · have hz0 : z ≠ 0 := fun e => hN.nonil (by
+        have : z ∈ n1 ++ s :: n2 := by simp at hz ⊢; tauto
+        rw [e] at this; exact this)
+      have hzs : z ≠ s := fun e => by
+        rw [e] at hz; exact (List.nodup_middle.mp hnnd |> List.nodup_cons.mp).1 hz
+      simp only [g2]
+      by_cases hn0 : st.nbNext.getX s = 0
+      · simp [hn0, hzs, hz0]
+      · simp [hn0, hzs]
+    refine ⟨fun d => ?_, fun d hd => ?_, fun b => ?_, fun b d => ?_, ?_, fun b => ?_, ?_, ?_⟩
+    · rw [f1, Array.getX_setX]
+      by_cases hd : d = c
+      · subst hd; simp
+      · simp only [if_neg hd, Function.update_of_ne hd]; exact hQ.where_ d
+    · rw [f5]
+      by_cases hdc : d = c
+      · subst hdc; simp at hd
+      · rw [Function.update_of_ne hdc] at hd; exact hQ.pos d hd
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self]; exact hB'
+      · rw [Function.update_of_ne hb]; exact hbucket b hb
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self, hemp]
+        simp only [List.not_mem_nil, false_iff, not_and]
+        intro hd hk
+        by_cases hdc : d = c
+        · subst hdc; simp at hd
+        · rw [Function.update_of_ne hdc] at hd
+          have := (hQ.bmem b d).mpr ⟨hd, hk⟩
+          rw [← herase] at hemp
+          have hmem : d ∈ (bl b).erase c := (List.mem_erase_of_ne hdc).mpr this
+          rw [hemp] at hmem; simp at hmem
+      · rw [Function.update_of_ne hb, hQ.bmem]
+        by_cases hdc : d = c
+        · subst hdc; simp [hc, hs, Ne.symm hb]
+        · rw [Function.update_of_ne hdc]
+    · refine hN'.congr (fun _ _ => rfl) (fun _ _ => rfl) ?_
+      rw [g3, hps]
+      rcases n1.eq_nil_or_concat with rfl | ⟨n1', q, rfl⟩
+      · simp
+      · have hq0 : q ≠ 0 := fun e => hN.nonil (by rw [e]; simp)
+        simp [hq0]
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self, hemp]
+        simp only [ne_eq, not_true_eq_false, iff_false]
+        exact (List.nodup_middle.mp hnnd |> List.nodup_cons.mp).1
+      · rw [Function.update_of_ne hb, ← hQ.nbmem b, hnsplit]
+        simp [hb]
+    · have := hQ.sorted
+      rw [hnsplit, List.isChain_iff_pairwise] at this
+      rw [List.isChain_iff_pairwise]
+      exact this.sublist (List.Sublist.append_left (List.sublist_cons_self s n2) n1)
+    · rw [g4, hns, hps]
+      cases n2 with
+      | nil => simp
+      | cons a t =>
+        have ha : a ≠ 0 := fun e => hN.nonil (by simp [e])
+        simp only [List.headD_cons, ne_eq, ha, not_false_eq_true, if_true]
+        rw [hQ.hi, hnsplit, show n1 ++ s :: a :: t = (n1 ++ [s]) ++ a :: t by simp,
+          getLastD_append_ne (by simp), getLastD_append_ne (by simp)]
+  · -- the bucket stays: the list of buckets is unchanged
+    rw [if_neg hemp]
+    have hdh : (delHead st c).getX (st.pqWhere.getX c) ≠ NIL := by
+      rw [hw, ← f4]; exact fun e => hemp (hB'.nil_iff.mpr e)
+    obtain ⟨g1, g2, g3, g4⟩ := delSt_nb_keep st c hdh
+    refine ⟨fun d => ?_, fun d hd => ?_, fun b => ?_, fun b d => ?_, ?_, fun b => ?_, hQ.sorted, ?_⟩
+    · rw [f1, Array.getX_setX]
+      by_cases hd : d = c
+      · subst hd; simp
+      · simp only [if_neg hd, Function.update_of_ne hd]; exact hQ.where_ d
+    · rw [f5]
+      by_cases hdc : d = c
+      · subst hdc; simp at hd
+      · rw [Function.update_of_ne hdc] at hd; exact hQ.pos d hd
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self]; exact hB'
+      · rw [Function.update_of_ne hb]; exact hbucket b hb
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self, ← herase]
+        by_cases hdc : d = c
+        · subst hdc
+          simp only [Function.update_self, Bool.false_eq_true, false_and, iff_false]
+          exact List.Nodup.not_mem_erase (hsplit ▸ hnd)
+        · rw [List.mem_erase_of_ne hdc, Function.update_of_ne hdc]; exact hQ.bmem b d
+      · rw [Function.update_of_ne hb, hQ.bmem]
+        by_cases hdc : d = c
+        · subst hdc; simp [hc, hs, Ne.symm hb]
+        · rw [Function.update_of_ne hdc]
+    · rw [g1, g2, g3]; exact hQ.nbl
+    · by_cases hb : b = s
+      · subst hb; rw [Function.update_self]; simp only [ne_eq]; exact ⟨fun _ => hemp, fun _ => hsnb⟩
+      · rw [Function.update_of_ne hb]; exact hQ.nbmem b
+    · rw [g4]; exact hQ.hi
+
+end OM.Proof
