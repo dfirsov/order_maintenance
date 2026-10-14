@@ -295,3 +295,141 @@ theorem cinv_cmove {s s' : Core} {A : Abs} {gh : GGh} {δ δu : Nat → Nat} {x 
       · rw [if_neg hgu]
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Chunk removal -/
+
+theorem cremoveState_C {s : Core} {x : Nat} (hx : x < s.C.size) (hl : cLl s x < s.C.size)
+    (hr : cRr s x < s.C.size) (hlx : cLl s x ≠ x) (hrx : cRr s x ≠ x) (c : Nat) :
+    (cremoveState s x).C.getX c =
+      if c = x then deadC (s.C.getX c)
+      else if c = cLl s x ∨ c = cRr s x then quietC (s.C.getX c) else s.C.getX c := by
+  simp only [cremoveState, Array.getX_modify, Array.size_modify']
+  by_cases h1 : c = x
+  · subst h1; simp [hx, hlx, hrx, Ne.symm hlx, Ne.symm hrx]
+  · by_cases h2 : c = cLl s x
+    · subst h2
+      by_cases h3 : cLl s x = cRr s x
+      · simp [h1, Ne.symm h1, hl, h3, hr, quietC, hrx, Ne.symm hrx]
+      · simp [h1, Ne.symm h1, hl, h3, Ne.symm h3]
+    · by_cases h3 : c = cRr s x
+      · subst h3; simp [h1, h2, Ne.symm h1, Ne.symm h2, hr]
+      · simp [h1, h2, h3, Ne.symm h1, Ne.symm h2, Ne.symm h3]
+
+theorem cinv_cremove {s : Core} {A : Abs} {δ δu : Nat → Nat} {x : Nat} (hI : INV s A)
+    (hC : CInvE s A.elist δ δu x) (hxL : LiveC s x) (hst : cSt s x = .splitting)
+    (he : cF s x = NIL)
+    (hδ : ∀ c, c ≠ cLl s x → c ≠ x → c ≠ cRr s x → δ c = 0) :
+    CInv (cremoveState s x) A.elist (fun _ => 0) (fun _ => 0) := by
+  have Fx := hC.cfam x hxL hst
+  have hlx : cLl s x ≠ x := by
+    intro e; have := Fx.lAdj; rw [e] at this
+    have hxm := (hI.cAlloc x).mpr hxL
+    rw [hI.cList.next x hxm] at this
+    exact succOf_ne_self hI.cList.nodup x (by unfold NIL; have := hxL.1; omega) this
+  have hrx : cRr s x ≠ x := by
+    intro e; have := Fx.rAdj; rw [e] at this
+    have hxm := (hI.cAlloc x).mpr hxL
+    rw [hI.cList.next x hxm] at this
+    exact succOf_ne_self hI.cList.nodup x (by unfold NIL; have := hxL.1; omega) this
+  have hC' := cremoveState_C hxL.2 Fx.lLive.2 Fx.rLive.2 hlx hrx
+  have hLC : ∀ c, LiveC (cremoveState s x) c ↔ LiveC s c := by
+    intro c; simp [LiveC, cremoveState]
+  have hsz : ∀ c, cSz (cremoveState s x) c = cSz s c := by
+    intro c; simp only [cSz, hC']; split_ifs <;> rfl
+  have hnext : ∀ c, cN (cremoveState s x) c = cN s c := by
+    intro c; simp only [cN, hC']; split_ifs <;> rfl
+  have hll : ∀ c, cLl (cremoveState s x) c = cLl s c := by
+    intro c; simp only [cLl, hC']; split_ifs <;> rfl
+  have hrr : ∀ c, cRr (cremoveState s x) c = cRr s c := by
+    intro c; simp only [cRr, hC']; split_ifs <;> rfl
+  have hstO : ∀ c, c ≠ x → c ≠ cLl s x → c ≠ cRr s x →
+      cSt (cremoveState s x) c = cSt s c ∧ cSrc (cremoveState s x) c = cSrc s c := by
+    intro c h1 h2 h3; simp only [cSt, cSrc, hC', if_neg h1, if_neg (not_or.mpr ⟨h2, h3⟩)]; simp
+  have hstx : cSt (cremoveState s x) x = .dead := by simp [cSt, hC', deadC]
+  have hstlr : ∀ c, c = cLl s x ∨ c = cRr s x → cSt (cremoveState s x) c = .quiet := by
+    intro c hc
+    have : c ≠ x := by rcases hc with rfl | rfl; exact hlx; exact hrx
+    simp [cSt, hC', this, hc, quietC]
+  have hG' : ∀ g, gC (cremoveState s x) g = gC s g := fun g => rfl
+  -- no group lies in the emptied chunk
+  have hnog : ∀ g, LiveG s g → gC s g ≠ x := by
+    intro g hg hgx
+    have hgm := hI.mem_glist_iff.mpr hg
+    have hgx' := hI.mem_grps_of_chk hgm hgx
+    have hxm := (hI.cAlloc x).mpr hxL
+    have hE := (hI.cEnds x hxm).1
+    rw [he] at hE
+    cases h : A.grps x with
+    | nil => rw [h] at hgx'; simp at hgx'
+    | cons a t => rw [h] at hE; simp at hE; exact hI.gList.nonil (hE ▸ A.grps_sub_glist hxm (h ▸ by simp))
+  refine ⟨?_, ?_, ?_, ?_, ?_, fun _ => le_rfl⟩
+  · intro c hc; rw [hLC] at hc; rw [hsz]; unfold celts; simp only [hG', eG]
+    exact hC.csz c hc
+  · intro y hy hys
+    rw [hLC] at hy
+    by_cases h1 : y = x
+    · subst h1; rw [hstx] at hys; cases hys
+    · by_cases h2 : y = cLl s x ∨ y = cRr s x
+      · rw [hstlr y h2] at hys; cases hys
+      · rw [(hstO y h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1] at hys
+        have Fy := hC.cfam y hy hys
+        obtain ⟨d1, d2, d3, d4, d5, d6, d7, d8⟩ := Fx.disjoint Fy (Ne.symm h1) hst hys
+        have := hstO (cLl s y) d3 d5 d6
+        have := hstO (cRr s y) d4 d7 d8
+        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+          simp only [hLC, hll, hrr, hnext, (hstO (cLl s y) d3 d5 d6).1, (hstO (cLl s y) d3 d5 d6).2,
+            (hstO (cRr s y) d4 d7 d8).1, (hstO (cRr s y) d4 d7 d8).2]
+        exacts [Fy.lLive, Fy.rLive, Fy.lAdj, Fy.rAdj, Fy.lSt, Fy.lSrc, Fy.rSt, Fy.rSrc]
+  · intro c hc hcs
+    rw [hLC] at hc
+    by_cases h1 : c = x
+    · subst h1; rw [hstx] at hcs; cases hcs
+    · by_cases h2 : c = cLl s x ∨ c = cRr s x
+      · rw [hstlr c h2] at hcs; cases hcs
+      · obtain ⟨o1, o2⟩ := hstO c h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))
+        rw [o1] at hcs
+        obtain ⟨p1, p2, p3⟩ := hC.covf c hc hcs
+        have hq : cSrc s c ≠ x := by
+          intro e; rw [e] at p3; rcases p3 with p3 | p3 <;> [exact h2 (Or.inl p3.symm);
+            exact h2 (Or.inr p3.symm)]
+        have Fq := hC.cfam _ p1 p2
+        obtain ⟨d1, d2, -, -, -, -, -, -⟩ := Fx.disjoint Fq (Ne.symm hq) hst p2
+        rw [o2, hLC, (hstO _ hq d1 d2).1, hll, hrr]
+        exact ⟨p1, p2, p3⟩
+  · intro g hg
+    rw [hG', hLC]
+    obtain ⟨g1, g2⟩ := hC.gchk g hg
+    refine ⟨g1, ?_⟩
+    have hgx := hnog g hg
+    by_cases h2 : gC s g = cLl s x ∨ gC s g = cRr s x
+    · rw [hstlr _ h2]; simp
+    · rw [(hstO _ hgx (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1]; exact g2
+  · intro y hy hys _
+    rw [hLC] at hy
+    by_cases h1 : y = x
+    · subst h1; rw [hstx] at hys; cases hys
+    · by_cases h2 : y = cLl s x ∨ y = cRr s x
+      · rw [hstlr y h2] at hys; cases hys
+      · rw [(hstO y h1 (fun e => h2 (Or.inl e)) (fun e => h2 (Or.inr e))).1] at hys
+        have Fy := hC.cfam y hy hys
+        obtain ⟨d1, d2, d3, d4, d5, d6, d7, d8⟩ := Fx.disjoint Fy (Ne.symm h1) hst hys
+        have := hC.c1 y hy hys h1
+        have hu : units (cremoveState s x) y = units s y := units_congr fun g => Iff.rfl
+        unfold C1 at this ⊢
+        rw [hδ _ d5 d3 d6, hδ _ (fun e => h2 (Or.inl e)) h1 (fun e => h2 (Or.inr e)),
+          hδ _ d7 d4 d8] at this
+        have hδu : δu y = 0 := by
+          have := hC.δu y
+          rw [hδ _ (fun e => h2 (Or.inl e)) h1 (fun e => h2 (Or.inr e))] at this; omega
+        rw [hδu] at this
+        have hP : (cremoveState s x).P = s.P := rfl
+        simp only [hsz, hll, hrr, hu, hP]
+        simpa using this
+
+end OM.Proof
