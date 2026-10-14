@@ -262,3 +262,58 @@ theorem lowinv_initState (P : Params) (hGP : GParams P) (hCP : CParams P) (hLP :
     rw [hQ, Finset.sum_singleton, c1sz]; simp [initState]
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+/-- A fresh core keeps its lower invariants through `initCore`. -/
+theorem lowinv_initCore {s s' : Core} {lazy : Bool} (hGP : GParams s.P) (hCP : CParams s.P)
+    (hLP : LParams s.P) (h : (initCore lazy).run s = .ok () s') :
+    LowInv s' initAbs.elist ∧ INV s' initAbs := by
+  obtain ⟨s'', hr, hI, -⟩ := initCore_run lazy s
+  rw [hr] at h; cases h
+  have hR : LowRel (initState s.P) s' := by
+    unfold initCore at hr
+    simp only [run_getP_bind] at hr
+    rw [run_bind, run_set] at hr
+    dsimp only at hr
+    have := low_initTop lazy (initState s.P)
+    rw [hr] at this; exact this
+  exact ⟨(lowinv_initState s.P hGP hCP hLP).lowRel hR ⟨initAbs, hI, rfl⟩, hI⟩
+
+/-- **The top structure's contract for its deferred construction.** `PI` holds while it is being
+built; `ν` counts the steps left. -/
+structure PrepContract (TI PI : Core → Prop) (ν : Core → Nat) : Prop where
+  eager : ∀ s s', (initCore false).run s = .ok () s' → TI s' ∧ s'.resJob = none
+  lazy : ∀ s s', (initCore true).run s = .ok () s' → PI s' ∧ ν s' ≤ s.P.H + 1
+  step : ∀ s, PI s → ∃ b s', prepareStep.run s = .ok b s' ∧
+    (b = true → TI s' ∧ s'.resJob = none) ∧ (b = false → PI s' ∧ ν s' < ν s)
+
+/-- A ready fresh core satisfies the cost invariant: all game values are 0 and no job runs. -/
+theorem costInv_fresh {TI : Core → Prop} {μ : Job → Nat} {J n R : Nat} {s : Core}
+    (hL : LowInv s initAbs.elist) (hTI : TI s) (hres : s.resJob = none) (hn : 1 ≤ n)
+    (hz : ∀ c, gval s c = 0) : CostInv TI μ J n R initAbs.elist s := by
+  have hz' : ∀ j : Fin n, gvec n s j = 0 := fun j => by unfold gvec; rw [hz]; simp
+  refine ⟨hL, hTI, 0, ⟨0, hn⟩, fun _ => 0, 0, 0, GameInv.reset hz' _, ?_⟩
+  unfold RoundOK; rw [hres]; exact Or.inl hz
+
+/-- The game values of a core holding the sentinel alone are 0. -/
+theorem gval_fresh {s : Core} (hL : LowInv s initAbs.elist) (hI : INV s initAbs) (c : Nat) :
+    gval s c = 0 := by
+  obtain ⟨s₀, hC, -⟩ := hL.cinv
+  have hθ := hL.cp.I4
+  unfold gval
+  split
+  · next hc =>
+    have hsz := hC.csz c hc.1
+    have : (celts s initAbs.elist c).length ≤ 1 := by
+      unfold celts; rw [initAbs_elist]; exact (List.length_filter_le _ _).trans (by simp)
+    have hkG : 1 ≤ kG s.P := Nat.le_add_left 1 _
+    have hcm : 1 ≤ cmax s.P := by unfold cmax umax; omega
+    omega
+  · rfl
+
+end OM.Proof
