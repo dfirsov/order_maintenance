@@ -595,4 +595,242 @@ theorem gaps_right {s s' : Core} {A : Abs} {s₀ δ δu : Nat → Nat} {lg lg' :
           intro hm; have := (hu _ hm).2; rw [hn.2] at this; exact hhx this
         exact gaps_frame M hL hhv hh hu' hnu hl
 
+/-- Pushing at the back succeeds when every label fits. -/
+theorem pushBackLabs_ok (s : Core) {center D B : Nat} (hD : 0 < D) :
+    ∀ {k : Nat} {prev : Option Nat},
+      (∀ j < k, (match prev with | none => center | some p => p + D) + j * D < 1 <<< B) →
+      ∃ labs, (pushBackLabs center D B prev k).run s = .ok labs s
+  | 0, prev, _ => by cases prev <;> exact ⟨[], rfl⟩
+  | k + 1, prev, h => by
+    have rest : ∀ l, (∀ j < k, l + D + j * D < 1 <<< B) →
+        ∃ labs, (pushBackLabs center D B (some l) k >>= fun r => pure (l :: r) : CM (List Nat)).run s
+          = .ok labs s := by
+      intro l hl
+      obtain ⟨r, hr⟩ := pushBackLabs_ok s hD (k := k) (prev := some l) hl
+      exact ⟨l :: r, by rw [run_bind, hr]; rfl⟩
+    cases prev with
+    | none =>
+      unfold pushBackLabs
+      obtain ⟨labs, hl⟩ := rest center (fun j hj => by
+        have := h (j + 1) (by omega); simp only [Nat.succ_mul] at this; omega)
+      exact ⟨labs, by simpa using hl⟩
+    | some p =>
+      unfold pushBackLabs
+      simp only
+      rw [run_bind, run_after]
+      have h0 := h 0 (by omega)
+      simp only [Nat.zero_mul, Nat.add_zero] at h0
+      rw [if_neg (by omega)]
+      obtain ⟨labs, hl⟩ := rest (p + D) (fun j hj => by
+        have := h (j + 1) (by omega); simp only [Nat.succ_mul] at this; omega)
+      exact ⟨labs, hl⟩
+
+/-- Pushing at the front succeeds when every label stays nonnegative. -/
+theorem pushFrontLabs_ok (s : Core) {center D : Nat} (hD : 0 < D) :
+    ∀ {k : Nat} {nxt : Option Nat},
+      k * D ≤ (match nxt with | none => center + D | some n => n) →
+      ∃ labs, (pushFrontLabs center D nxt k).run s = .ok labs s
+  | 0, nxt, _ => by cases nxt <;> exact ⟨[], rfl⟩
+  | k + 1, nxt, h => by
+    have rest : ∀ l, k * D ≤ l →
+        ∃ labs, (pushFrontLabs center D (some l) k >>= fun r => pure (r ++ [l]) : CM (List Nat)).run s
+          = .ok labs s := by
+      intro l hl
+      obtain ⟨r, hr⟩ := pushFrontLabs_ok s hD (k := k) (nxt := some l) hl
+      exact ⟨r ++ [l], by rw [run_bind, hr]; rfl⟩
+    rw [Nat.add_mul, Nat.one_mul] at h
+    cases nxt with
+    | none =>
+      unfold pushFrontLabs
+      obtain ⟨labs, hl⟩ := rest center (by simp only at h; omega)
+      exact ⟨labs, by simpa using hl⟩
+    | some n =>
+      simp only at h
+      unfold pushFrontLabs
+      simp only
+      rw [run_bind, run_before, if_neg (by omega)]
+      obtain ⟨labs, hl⟩ := rest (n - D) (by omega)
+      exact ⟨labs, hl⟩
+
+/-- **Room for pushes** at a sibling of a splitting chunk: with at least one unit left in `x`,
+its pushes plus one more unit stay within `PC`. -/
+theorem push_room {s : Core} {A : Abs} {lg : LGh} {s₀ δ δu : Nat → Nat} {x c k : Nat}
+    (hC : CInvE s A.elist δ δu s₀ x) (hL : LInv s lg s₀ δ δu) (hP : GParams s.P)
+    (hxL : LiveC s x) (hst : cSt s x = .splitting) (hFB : FamBound s δ s₀ x)
+    (hun : 1 ≤ units s x) (hc : c = cLl s x ∨ c = cRr s x) (hk : k ≤ 3) :
+    lg.pb c + k ≤ PC s.P ∧ lg.pf c + k ≤ PC s.P := by
+  have Fx := hC.cfam x hxL hst
+  have hgm : 0 < gmin s.P := by unfold gmin; have := hP.G4; omega
+  have hU := unitsOf_mono s.P hFB.T
+  have hUm : unitsOf s.P (s₀ x) / (s.P.K_C - 1) ≤ unitsOf s.P s.P.T / (s.P.K_C - 1) :=
+    Nat.div_le_div_right hU
+  have hA := hL.arrS x hxL hst
+  unfold famC at hA
+  have hF := hFB.fam
+  have hδs := hFB.δs
+  have hδu := hC.δu x
+  have hcL : LiveC s c := by rcases hc with rfl | rfl; exact Fx.lLive; exact Fx.rLive
+  have hco : cSt s c = .overflow := by rcases hc with rfl | rfl; exact Fx.lSt; exact Fx.rSt
+  have hcs : cSrc s c = x := by rcases hc with rfl | rfl; exact Fx.lSrc; exact Fx.rSrc
+  have hR := hL.roots c hcL
+  have hQ := hL.claim2 c hcL
+  have hO := hL.insO c hcL hco
+  rw [hcs] at hO; unfold famC at hO
+  have hpb := hL.pb c
+  have hpf := hL.pf c
+  have harr : lg.arB c + lg.arF c ≤ lg.arB (cLl s x) + lg.arF (cLl s x) + lg.arB (cRr s x) +
+      lg.arF (cRr s x) := by rcases hc with rfl | rfl <;> omega
+  have hcsB : lg.cs c ≤ csB s.P := by
+    unfold csB; rw [Nat.le_div_iff_mul_le hgm]
+    unfold IC kC
+    have : lg.cs c * gmin s.P ≤ lg.ins c := by omega
+    omega
+  unfold PC rsB Mu kC at *
+  generalize unitsOf s.P (s₀ x) / (s.P.K_C - 1) = q1 at *
+  generalize unitsOf s.P s.P.T / (s.P.K_C - 1) = q2 at *
+  constructor <;> omega
+
+/-- The label range after a move, given the range of the pushed labels. -/
+theorem range_cmove {s s' : Core} {s₀ δ δu : Nat → Nat} {lg lg' : LGh} {x dst : Nat}
+    {u labs : List Nat} (M : CMoveSpec s s' x dst u labs) (hL : LInv s lg s₀ δ δu)
+    (hpb : ∀ c, lg.pb c ≤ lg'.pb c) (hpf : ∀ c, lg.pf c ≤ lg'.pf c)
+    (hin : ∀ i < u.length, cG s.P ≤ labs.getD i 0 + lg'.pf dst * s.P.D_g ∧
+      labs.getD i 0 ≤ cG s.P + lg'.pb dst * s.P.D_g) :
+    ∀ g, LiveG s' g → cG s'.P ≤ gL s' g + lg'.pf (gC s' g) * s'.P.D_g ∧
+      gL s' g ≤ cG s'.P + lg'.pb (gC s' g) * s'.P.D_g := by
+  intro g hg
+  rw [M.liveG] at hg
+  rw [M.P, (M.gfields g).2.2.2.2.2.2.2.2.2.2]
+  by_cases hgu : g ∈ u
+  · rw [if_pos hgu, M.gL_in hgu]; exact hin _ (List.idxOf_lt_length_of_mem hgu)
+  · rw [if_neg hgu, M.gL_out hgu]
+    have h1 := hL.range g hg
+    have h2 := Nat.mul_le_mul_right s.P.D_g (hpb (gC s g))
+    have h3 := Nat.mul_le_mul_right s.P.D_g (hpf (gC s g))
+    omega
+
+theorem cG_two (P : Params) (hB : 1 ≤ P.B_g) : 1 <<< P.B_g = 2 * cG P := by
+  unfold cG; simp only [Nat.shiftLeft_eq, one_mul]
+  rw [show P.B_g = (P.B_g - 1) + 1 by omega, pow_succ]; simp; ring
+
+/-- The last group of a non-empty chunk is live and lies in it. -/
+theorem INV.cLs_live {s : Core} {A : Abs} (hI : INV s A) {c : Nat} (hne : cF s c ≠ NIL) :
+    LiveG s (cLs s c) ∧ gC s (cLs s c) = c := by
+  obtain ⟨hc, t, ht⟩ := hI.run_ne_nil hne
+  have hm : cLs s c ∈ A.grps c := by rw [(hI.cEnds c hc).2, ht]; exact getLastD_cons_mem _ _ _
+  exact ⟨hI.mem_glist_iff.mp (A.grps_sub_glist hc hm), hI.chk c hc _ hm⟩
+
+/-- The first group of a non-empty chunk is live and lies in it. -/
+theorem INV.cF_live {s : Core} {A : Abs} (hI : INV s A) {c : Nat} (hne : cF s c ≠ NIL) :
+    LiveG s (cF s c) ∧ gC s (cF s c) = c := by
+  obtain ⟨hc, t, ht⟩ := hI.run_ne_nil hne
+  have hm : cF s c ∈ A.grps c := by rw [ht]; simp
+  exact ⟨hI.mem_glist_iff.mp (A.grps_sub_glist hc hm), hI.chk c hc _ hm⟩
+
+theorem units_pos {s : Core} {x um : Nat} (h : UnitG s x um) : 1 ≤ units s x := by
+  unfold units
+  exact Finset.card_pos.mpr ⟨um, Finset.mem_filter.mpr ⟨Finset.mem_range.mpr h.1.2.1, h⟩⟩
+
+/-- **Lemma C3 across a move to the left sibling** (the chunk drive's hook): the pushed labels fit,
+and the invariant holds after the move. -/
+theorem linv_cmoveL {s : Core} {A : Abs} {gh : GGh} {lg : LGh} {s₀ δ δu : Nat → Nat} {x : Nat}
+    (hI : INV s A) (hG : GInv s A.elist gh (fun _ => 0)) (hP : GParams s.P) (hLP : LParams s.P)
+    (hC : CInvE s A.elist δ δu s₀ x) (hL : LInv s lg s₀ δ δu) (hxL : LiveC s x)
+    (hst : cSt s x = .splitting) (he : cF s x ≠ NIL) (hFB : FamBound s δ s₀ x) :
+    ∃ labs, (pushLabsL s x (unitCand s x true).length).run s = .ok labs s ∧
+      ∃ lg', LInv (cmoveLState s x (unitCand s x true) labs) lg' s₀ δ δu := by
+  have Fx := hC.cfam x hxL hst
+  have hxy := Fx.lx hI hxL
+  obtain ⟨hxc, t0, ht0⟩ := hI.run_ne_nil he
+  have hg0 : cF s x ∈ A.glist := A.grps_sub_glist hxc (by rw [ht0]; simp)
+  have hg0L := hI.mem_glist_iff.mp hg0
+  have hg0x : gC s (cF s x) = x := hI.chk x hxc _ (by rw [ht0]; simp)
+  have lu := left_unit hI hG he
+  have UF := unit_facts (u := unitCand s x true) (x := x) hI hG hP (by
+    rcases lu with ⟨hq, h⟩ | ⟨p, hp, hps, hl, h, hok⟩
+    · left; rw [h]; exact ⟨hq, rfl, hg0L, hg0x⟩
+    · right
+      refine ⟨p, hp, hps, by rw [h, hl], ?_⟩
+      rw [h] at hok; exact (unitOK_three hok).2.2.2.2.1)
+  obtain ⟨-, hnd, hmem, hone, hcl, -, -⟩ := UF
+  have hsh : UnitShape s (unitCand s x true) ∧ (unitCand s x true).headD NIL = cF s x := by
+    rcases lu with ⟨-, h⟩ | ⟨p, hp, hps, hl, h, -⟩
+    · rw [h]; exact ⟨Or.inl ⟨_, rfl⟩, rfl⟩
+    · have F := hG.fam p hp hps
+      rw [h]
+      refine ⟨Or.inr ⟨_, _, _, rfl, ?_, F.rAdj⟩, rfl⟩
+      rw [← hl]; exact F.lAdj
+  obtain ⟨hsh, hhead⟩ := hsh
+  generalize unitCand s x true = u at *
+  have hk : u.length ≤ 3 := by rcases hsh with ⟨a, rfl⟩ | ⟨a, b, c, rfl, -, -⟩ <;> simp
+  have hun : 1 ≤ units s x := by obtain ⟨um, -, hum, -⟩ := hone; exact units_pos hum
+  obtain ⟨hpbR, -⟩ := push_room hC hL hP hxL hst hFB hun (Or.inl rfl) hk
+  have hD := hLP.Dg
+  have hpush := hLP.push
+  have hPCD : (lg.pb (cLl s x) + u.length) * s.P.D_g ≤ PC s.P * s.P.D_g :=
+    Nat.mul_le_mul_right _ hpbR
+  rw [Nat.add_mul] at hPCD
+  -- the last group of a non-empty left sibling, within range
+  have hlastR : cF s (cLl s x) ≠ NIL →
+      cG s.P ≤ gL s (cLs s (cLl s x)) + lg.pf (cLl s x) * s.P.D_g ∧
+        gL s (cLs s (cLl s x)) ≤ cG s.P + lg.pb (cLl s x) * s.P.D_g := by
+    intro hne
+    have := hI.cLs_live hne
+    have h := hL.range _ this.1; rw [this.2] at h; exact h
+  -- the labels fit
+  have hroom : ∀ j < u.length, (match (if cF s (cLl s x) = NIL then none
+      else some (gL s (cLs s (cLl s x)))) with
+        | none => cG s.P | some p => p + s.P.D_g) + j * s.P.D_g < 1 <<< s.P.B_g := by
+    intro j hj
+    rw [cG_two _ hLP.Bg]
+    have hjk : (j + 1) * s.P.D_g ≤ u.length * s.P.D_g := Nat.mul_le_mul_right _ hj
+    rw [Nat.add_mul, Nat.one_mul] at hjk
+    by_cases hy0 : cF s (cLl s x) = NIL
+    · rw [if_pos hy0]; show cG s.P + j * s.P.D_g < 2 * cG s.P; omega
+    · rw [if_neg hy0]; show gL s (cLs s (cLl s x)) + s.P.D_g + j * s.P.D_g < 2 * cG s.P
+      have := (hlastR hy0).2; omega
+  obtain ⟨labs, hlabs⟩ := pushBackLabs_ok s (by omega) hroom
+  refine ⟨labs, hlabs, ?_⟩
+  have hlen : labs.length = u.length := pushBackLabs_len hlabs
+  have hv : labs = (List.range u.length).map fun i =>
+      (if cF s (cLl s x) = NIL then cG s.P else gL s (cLs s (cLl s x)) + s.P.D_g) +
+        i * s.P.D_g := by
+    rw [pushBackLabs_vals hlabs]
+    by_cases hy0 : cF s (cLl s x) = NIL
+    · simp only [if_pos hy0]
+    · simp only [if_neg hy0]
+  have M := cmoveL_spec (s := s) (x := x) (u := u) (labs := labs) (Ne.symm hxy) hxL.2 Fx.lLive.2
+    hnd hlen (fun g hg => (hmem g hg).1.2.1)
+  obtain ⟨-, hun', hle⟩ := cinv_cmove hI hG hC M hxL hst (Or.inl rfl) (Ne.symm hxy) hmem hnd hone
+  have E := cmoveL_ends (s := s) (x := x) (u := u) (labs := labs) (Ne.symm hxy) hxL.2 Fx.lLive.2
+  refine ⟨{ lg with child := fun g => if g ∈ u then false else lg.child g, pb := Function.update lg.pb (cLl s x) (lg.pb (cLl s x) + u.length), arB := Function.update lg.arB (cLl s x) (lg.arB (cLl s x) + u.length) }, ?_⟩
+  refine linv_cmove_core hI hG hC hL M hxL hst (Or.inl rfl) hmem hk hun' hle hcl (fun g => rfl)
+    rfl rfl rfl rfl rfl ?_ (fun c => hL.pf c) ?_ ?_ ?_
+  · intro c
+    show Function.update lg.pb (cLl s x) _ c ≤ Function.update lg.arB (cLl s x) _ c + lg.rs c + lg.cs c
+    by_cases hc : c = cLl s x
+    · rw [hc, Function.update_self, Function.update_self]; have := hL.pb (cLl s x); omega
+    · rw [Function.update_of_ne hc, Function.update_of_ne hc]; exact hL.pb c
+  · intro c
+    show Function.update lg.arB (cLl s x) _ c + lg.arF c = _
+    by_cases hc : c = cLl s x
+    · rw [hc, Function.update_self, if_pos rfl]; omega
+    · rw [Function.update_of_ne hc, if_neg hc]; omega
+  · exact gaps_left hI hL M hxy Fx.lAdj Fx.lLive hxL he hsh hhead hnd hmem hv E.1 E.2 rfl
+  · refine range_cmove M hL (fun c => ?_) (fun c => le_rfl) (fun i hi => ?_)
+    · show lg.pb c ≤ Function.update lg.pb (cLl s x) _ c
+      by_cases hc : c = cLl s x
+      · rw [hc, Function.update_self]; omega
+      · rw [Function.update_of_ne hc]
+    · show cG s.P ≤ labs.getD i 0 + lg.pf (cLl s x) * s.P.D_g ∧
+        labs.getD i 0 ≤ cG s.P + Function.update lg.pb (cLl s x) _ (cLl s x) * s.P.D_g
+      rw [Function.update_self, Nat.add_mul, hv, List.getD_eq_getElem?_getD, List.getElem?_map,
+        List.getElem?_range hi]
+      simp only [Option.map_some, Option.getD_some]
+      have hik : (i + 1) * s.P.D_g ≤ u.length * s.P.D_g := Nat.mul_le_mul_right _ hi
+      rw [Nat.add_mul, Nat.one_mul] at hik
+      by_cases hy0 : cF s (cLl s x) = NIL
+      · rw [if_pos hy0]; omega
+      · rw [if_neg hy0]; have := hlastR hy0; omega
+
 end OM.Proof

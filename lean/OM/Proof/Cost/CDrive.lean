@@ -39,23 +39,31 @@ theorem driveChunkFrom_ok {s : Core} {x : Nat} (I : Nat → Core → Prop) (Q : 
   dsimp only
   split <;> rfl
 
+/-- What the chunk drive knows about the family of `x` throughout: its size is at most what C1
+allowed when the drive started, at most one insertion is undriven, and `s₀ x ≤ T`. -/
+structure FamBound (t : Core) (δ s₀ : Nat → Nat) (x : Nat) : Prop where
+  fam : cSz t (cLl t x) + cSz t x + cSz t (cRr t x) ≤
+    δ (cLl t x) + δ x + δ (cRr t x) + s₀ x + unitsOf t.P (s₀ x) / (t.P.K_C - 1)
+  δs : δ (cLl t x) + δ x + δ (cRr t x) ≤ 1
+  T : s₀ x ≤ t.P.T
+
 /-- The extra invariant of the chunk drive survives its steps; a move also finds room for the
 moved groups' labels (Lemma C3 provides it). -/
 structure CXSteps (X Y : Core → Prop) (L : List Nat) (δ δu s₀ : Nat → Nat) (x : Nat) : Prop where
   moveL : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
-    LiveC t x → cSt t x = .splitting → cF t x ≠ NIL → cSz t (cLl t x) ≤ cSz t (cRr t x) → X t →
+    LiveC t x → cSt t x = .splitting → cF t x ≠ NIL → cSz t (cLl t x) ≤ cSz t (cRr t x) →
+    FamBound t δ s₀ x → X t →
     ∃ labs, (pushLabsL t x (unitCand t x true).length).run t = .ok labs t ∧
       X (cmoveLState t x (unitCand t x true) labs)
   moveR : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
-    LiveC t x → cSt t x = .splitting → cF t x ≠ NIL → cSz t (cRr t x) < cSz t (cLl t x) → X t →
+    LiveC t x → cSt t x = .splitting → cF t x ≠ NIL → cSz t (cRr t x) < cSz t (cLl t x) →
+    FamBound t δ s₀ x → X t →
     ∃ labs, (pushLabsR t x (unitCand t x false).length).run t = .ok labs t ∧
       X (cmoveRState t x (unitCand t x false) labs)
   rem : ∀ t A' gh, INV t A' → A'.elist = L → GInv t L gh (fun _ => 0) → CInvE t L δ δu s₀ x →
     LiveC t x → cSt t x = .splitting → cF t x = NIL → cSz t (cLl t x) ≤ t.P.theta →
     cSz t (cRr t x) ≤ t.P.theta →
-    cSz t (cLl t x) + cSz t x + cSz t (cRr t x) ≤
-      δ (cLl t x) + δ x + δ (cRr t x) + s₀ x + unitsOf t.P (s₀ x) / (t.P.K_C - 1) →
-    δ (cLl t x) + δ x + δ (cRr t x) ≤ 1 → X t → Y (cremoveState t x)
+    FamBound t δ s₀ x → X t → Y (cremoveState t x)
 
 /-- The chunk drive's invariant after `j` moves of `x`'s split. -/
 structure CDriveInv (X : Core → Prop) (s : Core) (L : List Nat) (δ δu s₀ : Nat → Nat)
@@ -268,7 +276,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
     (hThi : a + b + c ≤ s.P.T + kC s.P s.P.T)
     (hbal0 : a ≤ c + umax s.P + 1 ∧ c ≤ a + umax s.P + 1)
     (hfam0 : a + b + c ≤ δ y + δ x + δ z + s₀ x + unitsOf s.P (s₀ x) / (s.P.K_C - 1))
-    (hδs : δ y + δ x + δ z ≤ 1)
+    (hδs : δ y + δ x + δ z ≤ 1) (hs0T : s₀ x ≤ s.P.T)
     (hD : CDriveInv X s L δ δu s₀ x y z a b c u₀ j t) :
     ∃ t', ((chunkSplitStep x).run t = .ok true t' ∧
         CDriveInv X s L δ δu s₀ x y z a b c u₀ (j + 1) t') ∨
@@ -277,7 +285,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
   obtain ⟨gh, hG⟩ := hD.ginv
   subst hel
   have hPt := hD.P
-  rw [← hPt] at hP hCP hThi hbal0 hfam0
+  rw [← hPt] at hP hCP hThi hbal0 hfam0 hs0T
   have hC := hD.cinv
   have Fx := hC.cfam x hD.live hD.st
   have hxy : cLl t x ≠ x := Fx.lx hI' hD.live
@@ -288,6 +296,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
   have hbal := hD.bal
   rw [← hD.ll, ← hD.rr] at hsum hbal hδ hfam0 hδs
   rw [← hPt] at hbal
+  have hFB : FamBound t δ s₀ x := ⟨by omega, hδs, hs0T⟩
   have hI4 := hCP.I4
   unfold cmax at hI4
   by_cases he : cF t x = NIL
@@ -301,7 +310,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
       hszy hszz
     obtain ⟨hef, A'', hI'', hel''⟩ := Good.ok_inv (good_chunkSplitStep x) hI' hrun
     refine ⟨_, Or.inr ⟨hrun, ⟨Or.inr (hXs.rem t A' gh hI' rfl hG hC hD.live hD.st he hszy hszz
-      (by omega) hδs hD.xx),
+      hFB hD.xx),
       hef.P.trans hPt, hD.ef.trans hef, ⟨A'', hI'', hel''⟩,
       ⟨gh, hG.of_gsame (gsame_cremove t x)⟩, ?_⟩⟩⟩
     exact cinv_cremove hI' hC hD.live hD.st he hδ
@@ -316,7 +325,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
         rcases lu with ⟨-, h⟩ | ⟨p, -, -, -, -, h⟩
         · left; rw [h]; rfl
         · right; exact h
-      obtain ⟨labs, hlabs, hX'⟩ := hXs.moveL t A' gh hI' rfl hG hC hD.live hD.st he hdir hD.xx
+      obtain ⟨labs, hlabs, hX'⟩ := hXs.moveL t A' gh hI' rfl hG hC hD.live hD.st he hdir hFB hD.xx
       have hrun := chunkSplitStep_left he hdir hu Fx.lAdj hlabs
       obtain ⟨hef, A'', hI'', hel''⟩ := Good.ok_inv (good_chunkSplitStep x) hI' hrun
       have hlen : labs.length = (unitCand t x true).length := pushBackLabs_len hlabs
@@ -352,7 +361,7 @@ theorem CDriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s
         · left; rw [h]; rfl
         · right; exact h
       have hdir' : cSz t (cRr t x) < cSz t (cLl t x) := by omega
-      obtain ⟨labs, hlabs, hX'⟩ := hXs.moveR t A' gh hI' rfl hG hC hD.live hD.st he hdir' hD.xx
+      obtain ⟨labs, hlabs, hX'⟩ := hXs.moveR t A' gh hI' rfl hG hC hD.live hD.st he hdir' hFB hD.xx
       have hrun := chunkSplitStep_right he hdir' hu (Fx.radj hI' hD.live) hlabs
       obtain ⟨hef, A'', hI'', hel''⟩ := Good.ok_inv (good_chunkSplitStep x) hI' hrun
       have hlen : labs.length = (unitCand t x false).length := pushFrontLabs_len hlabs
@@ -459,7 +468,7 @@ theorem cinv_drive {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ δu
     ⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hC, hxL, hst, hl, hr, by omega, by omega,
       Or.inl ⟨rfl, ha, hc⟩⟩
     (fun j t hD _ => hD.step hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi hbal0
-      hfam0 hδs)
+      hfam0 hδs (by rw [hσ]; exact hs0T))
   refine ⟨t, hrun, ?_⟩
   rcases hres with hD | hD
   · refine ⟨Or.inl hD.xx, hD.P, hD.ef, hD.inv, hD.ginv, hD.cinv.close hD.live hD.st ?_ ?_⟩
