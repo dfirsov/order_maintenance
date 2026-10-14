@@ -40,7 +40,7 @@ end GsFrame
 /-! ### The pop -/
 
 /-- What starting the split of `x` changes for the label invariant. -/
-structure ResSpec (s s' : Core) (x : Nat) : Prop where
+structure ResSpec' (s s' : Core) (x : Nat) : Prop where
   Gs : s'.Gs = s.Gs
   P : s'.P = s.P
   Csize : s'.C.size = s.C.size + 2
@@ -51,6 +51,12 @@ structure ResSpec (s s' : Core) (x : Nat) : Prop where
     cLl s' x = s.C.size ∧ cRr s' x = s.C.size + 1
   new : ∀ c, c = s.C.size ∨ c = s.C.size + 1 →
     cSz s' c = 0 ∧ cLs s' c = NIL ∧ cSt s' c = .overflow ∧ cSrc s' c = x
+
+/-- … and the chunk list's links. -/
+structure ResSpec (s s' : Core) (x : Nat) : Prop extends ResSpec' s s' x where
+  ylink : cN s' s.C.size = x
+  xlink : cN s' x = s.C.size + 1
+  next : ∀ c, c < s.C.size → c ≠ x → c ≠ cP s x → cN s' c = cN s c
 
 /-- Fresh ghost counters for the chunks `y` and `z`. -/
 def LGh.fresh (lg : LGh) (y z : Nat) : LGh :=
@@ -380,10 +386,55 @@ theorem linkChunkPair_lsame (s : Core) (x y z : Nat) : LSame s (linkChunkPair s 
     linkChunkPair_cSz, linkChunkPair_cSt, linkChunkPair_cSrc, linkChunkPair_cLl, linkChunkPair_cRr,
     linkChunkPair_cLs⟩
 
-/-- **The state after starting the split of `x`**, from the run of `splitChunkStart`. -/
-theorem resSpec_run {s s2 : Core} {x : Nat} {job : Job} (hxs : x < s.C.size)
+theorem INV.cN_cP {s : Core} {A : Abs} (hI : INV s A) {x : Nat} (hx : x ∈ A.chunks)
+    (hp : cP s x ≠ NIL) : cN s (cP s x) = x := by
+  have hnd := hI.cList.nodup
+  obtain ⟨l1, l2, e⟩ := predOf_split (hI.cList.prev x hx).symm hp
+  have hm : cP s x ∈ A.chunks := by rw [e]; simp
+  rw [hI.cList.next _ hm, e, succOf_mid (e ▸ hnd)]; rfl
+
+/-- The linking of two new chunks around `x` does what it should. -/
+theorem linkCOK_push2 {s : Core} {A : Abs} (hI : INV s A) {x : Nat} (hx : x ∈ A.chunks) :
+    LinkCOK (push2 s) x s.C.size (s.C.size + 1) := by
+  have hcnd := hI.cList.nodup
+  have hxs : x < s.C.size := ((hI.cAlloc x).mp hx).2
+  have hx1 : 1 ≤ x := ((hI.cAlloc x).mp hx).1
+  have hp1 : cP (push2 s) x = cP s x := by
+    simp only [cP, push2, Array.getX_push, Array.size_push]; rw [if_neg (by omega), if_neg (by omega)]
+  have hn1 : cN (push2 s) x = cN s x := by
+    simp only [cN, push2, Array.getX_push, Array.size_push]; rw [if_neg (by omega), if_neg (by omega)]
+  have hsz : (push2 s).C.size = s.C.size + 2 := by simp [push2]
+  have hpm : cP s x = NIL ∨ cP s x ∈ A.chunks := by
+    by_cases h : cP s x = NIL
+    · exact Or.inl h
+    · right; obtain ⟨l1, l2, e⟩ := predOf_split (hI.cList.prev x hx).symm h; rw [e]; simp
+  have hnm : cN s x = NIL ∨ cN s x ∈ A.chunks := by
+    by_cases h : cN s x = NIL
+    · exact Or.inl h
+    · right; obtain ⟨l1, l2, e⟩ := succOf_split (hI.cList.next x hx).symm h; rw [e]; simp
+  have hlt : ∀ c, c = NIL ∨ c ∈ A.chunks → c < s.C.size := by
+    intro c hc; rcases hc with h | h
+    · rw [h]; unfold NIL; omega
+    · exact ((hI.cAlloc c).mp h).2
+  have hpy := hlt _ hpm
+  have hny := hlt _ hnm
+  have hpx : cP s x ≠ x := by
+    rw [hI.cList.prev x hx]; exact predOf_ne_self hcnd x (by unfold NIL; omega)
+  have hnx : cN s x ≠ x := by
+    rw [hI.cList.next x hx]; exact succOf_ne_self hcnd x (by unfold NIL; omega)
+  have hpn : cP s x ≠ NIL → cP s x ≠ cN s x := by
+    intro h0; rw [hI.cList.prev x hx, hI.cList.next x hx]
+    exact predOf_ne_succOf hcnd hx (by rw [← hI.cList.prev x hx]; exact h0)
+  refine ⟨by omega, by omega, by omega, fun h => by rw [hp1] at h ⊢; omega,
+    fun h => by rw [hn1] at h ⊢; omega, by omega, by omega, by omega,
+    by rw [hp1]; omega, by rw [hp1]; omega, by rw [hn1]; omega, by rw [hn1]; omega,
+    by rw [hp1]; exact hpx, by rw [hn1]; exact hnx, fun h => by rw [hp1, hn1] at *; exact hpn h⟩
+
+/-- **The state after starting the split of `x`**, from the run of `splitChunkStart`: the fields
+other than the chunk links. -/
+theorem resSpec_run_core {s s2 : Core} {x : Nat} {job : Job} (hxs : x < s.C.size)
     (hT : TopRel (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) s2) :
-    ResSpec s (markState s2 x s.C.size (s.C.size + 1) job) x := by
+    ResSpec' s (markState s2 x s.C.size (s.C.size + 1) job) x := by
   have S := (linkChunkPair_lsame (push2 s) x s.C.size (s.C.size + 1)).trans hT.lsame
   have hsz2 : s2.C.size = s.C.size + 2 := by rw [S.Csize]; simp [push2]
   -- the fields of `push2 s`
@@ -437,6 +488,36 @@ theorem resSpec_run {s s2 : Core} {x : Nat} {job : Job} (hxs : x < s.C.size)
       simp only
       rw [a1, a2, hp, if_pos rfl]
       simp
+
+
+theorem resSpec_run {s s2 : Core} {A : Abs} {x : Nat} {job : Job} (hI : INV s A)
+    (hxA : x ∈ A.chunks)
+    (hT : TopRel (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) s2) :
+    ResSpec s (markState s2 x s.C.size (s.C.size + 1) job) x := by
+  have hxs : x < s.C.size := ((hI.cAlloc x).mp hxA).2
+  have hLk := linkCOK_push2 hI hxA
+  have hcN : ∀ w, cN (markState s2 x s.C.size (s.C.size + 1) job) w =
+      cN (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) w := by
+    intro w
+    have h1 : cN (markState s2 x s.C.size (s.C.size + 1) job) w = cN s2 w := by
+      simp only [cN, markState, Array.getX_modify]; split_ifs <;> rfl
+    have h2 : cN s2 w = cN (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) w := by
+      simp only [cN]; rw [hT.C w]
+    rw [h1, h2]
+  have hp1 : cP (push2 s) x = cP s x := by
+    simp only [cP, push2, Array.getX_push, Array.size_push]; rw [if_neg (by omega), if_neg (by omega)]
+  have hn1 : cN (push2 s) x = cN s x := by
+    simp only [cN, push2, Array.getX_push, Array.size_push]; rw [if_neg (by omega), if_neg (by omega)]
+  have hpw : ∀ w, w < s.C.size → cN (push2 s) w = cN s w := by
+    intro w hw
+    simp only [cN, push2, Array.getX_push, Array.size_push]; rw [if_neg (by omega), if_neg (by omega)]
+  have RS := resSpec_run_core (job := job) hxs hT
+  refine { RS with ylink := ?_, xlink := ?_, next := ?_ }
+  · rw [hcN, hLk.cN']; simp [show s.C.size ≠ x by omega]
+  · rw [hcN, hLk.cN', if_pos rfl]
+  · intro c hc hcx hcp
+    rw [hcN, hLk.cN', if_neg hcx, if_neg (by omega), if_neg (by omega), hp1,
+      if_neg (fun h => hcp h.1), hpw c hc]
 
 end OM.Proof
 
