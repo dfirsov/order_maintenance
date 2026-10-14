@@ -1,7 +1,7 @@
 # Lean Formalization — Design
 
-Status: **draft v0.1** (2026-10-14). This note fixes the design of the Lean 4 development
-before any code is written. It supersedes `docs/SPEC.md` §9–§10 (Lean architecture and
+Status: **v0.2** (2026-10-14); M0 implemented in `lean/`. This note fixes the design of the
+Lean 4 development. It supersedes `docs/SPEC.md` §9–§10 (Lean architecture and
 milestones), which assumed a shallow cost monad.
 
 **Goal.** A convincing, machine-checked proof that the algorithm of `docs/PROOF.md` answers
@@ -63,30 +63,43 @@ program, the deep-embedded one of §3.
 * **Words.** All values are `Nat`. The machine has a word-size parameter `w`. Theorem W proves
   that no value reaches `2^w`, with `w = c_w·L`. The interpreter does not truncate; it records
   the largest value seen, so Theorem W is a separate statement.
-* **Locals.** Each procedure has a finite set of word-valued local variables.
+* **Locals.** Each procedure call has its own frame of word-valued local variables.
+* **Word size.** `State.peak` records the largest value ever computed, including every
+  intermediate value of every expression. Theorem W is a bound on `peak`.
 
 ### 3.2 Instructions (each costs 1)
 
+As implemented in `lean/OM/Machine/Syntax.lean`:
+
 ```
-e ::= n | x | e + e | e − e (guarded e₁ ≥ e₂) | e * e | e / 2^k | e % 2^k | msb e
-    | e < e | e = e | ¬e | e ∧ e
-s ::= skip | x := e | x := A[e] | A[e] := e | s ; s | if e then s else s
-    | for i < e do s            -- the bound e is evaluated once, before the loop
-    | call p(e…) returning x…   -- non-recursive: procedures are ranked, calls go to lower rank
-    | fail                      -- a failed guard: jumps to the caller's FALLBACK handler
+e ::= n | x | A[e] | e op e | ¬e | msb e
+      op ∈ { +, − (machine error if the result would be negative), *, /, %, <<<, >>>,
+             <, ≤, =, ∧, ∨ }           -- comparisons and connectives return 1 or 0
+s ::= skip | x := e | A[e] := e | alloc A e | s ; s | if e then s else s
+    | for x < e do s                    -- the bound e is evaluated once, before the loop
+    | call p(e…) → x…                   -- the callee's body is a subterm of the call
+    | fail | catch s s
 ```
 
-* `msb` (most significant bit) and multiplication are standard unit-cost word-RAM
+* `msb` (most significant bit), multiplication and division are standard unit-cost word-RAM
   operations. They are needed only to compute a new core's parameters (`L' = ⌈log₂ N'⌉`,
-  `T' = 3L'²`, `H'`) in O(1) during a rebuild.
-* There are **no `while` loops and no recursion**. So the interpreter is a total, structurally
-  recursive Lean function `exec : Prog → Stmt → State → Except Err (State × Cost)`. No fuel
-  is needed, and every program terminates by construction.
+  `T' = 3L'²`, the chunk size `⌊⌊T/2⌋/⌊G/2⌋⌋`, `H'`) in O(1) during a rebuild.
+* **No recursion, by construction.** A `call` carries the callee's body as a subterm, so a
+  procedure cannot call itself: its syntax tree would be infinite. No ranking of procedures
+  is needed. Arguments are evaluated in the caller's frame, the body runs in a fresh frame of
+  locals, and the results are copied back.
+* `alloc A e` gives array `A` capacity `e`, all cells reading 0, in one step. An access at an
+  index `≥` the capacity is a machine error.
+* `fail` is a failed algorithmic guard; it propagates, with the state reached, to the
+  nearest `catch`, whose handler runs next (the FALLBACK of `PROOF.md` §2.8).
+* There are **no `while` loops**. So the interpreter is a total, structurally recursive Lean
+  function `exec : Stmt → State → Out`, where `Out` holds the final state, the cost, and a
+  status (`ok`, `fail`, or machine error `err`). No fuel is needed.
 
 ### 3.3 Cost semantics
 
-`exec` charges one unit per evaluated expression node, assignment, array access, branch,
-loop iteration and call. Cost is part of the semantics. There is no way to annotate cost by
+`exec` charges one unit per evaluated expression node, assignment, store, allocation,
+branch, loop iteration, call, returned value and handler entry. Cost is part of the semantics. There is no way to annotate cost by
 hand, and no way to compute outside the interpreter.
 
 **Why this is convincing.** With a deep embedding, the only computation the algorithm can
@@ -170,17 +183,28 @@ that the proofs exclude.
 
 ---
 
-## 6. Program logic (`OM/Machine/WP.lean`)
+## 6. Program logic (`lean/OM/Machine/Logic.lean`)
 
-* `wp : Stmt → (State → Cost → Prop) → (State → Prop)`, proved sound for `exec`.
-* Procedure specifications: `{P} p {Q} [≤ c]`, with `c` an expression in the pre-state.
-* Simp lemmas compute `wp` through straight-line code. Loops use an invariant and a
-  per-iteration cost.
+* `wp c Q s`: from `s`, `c` terminates normally and `Q` holds of the final state and cost.
+  Since `exec` is deterministic and total, this is simply a predicate on `exec c s`.
+* One rule per construct (`wp_assign`, `wp_store`, `wp_alloc`, `wp_seq`, `wp_ite`, `wp_call`,
+  `wp_catch_ok`, `wp_catch_fail`), each an `↔` except the `catch` rules. For straight-line code
+  `simp` with these rules produces the verification condition directly.
+* The loop rule `wp_loop` takes an invariant `I k` indexed by the iteration and a cost bound
+  for one iteration of the body; the loop costs at most `1 + cost(bound) + N·(1 + k_body)`.
+* Triples `⦃P⦄ c ⦃Q⦄≤ k` with sequencing and consequence rules. Cost bounds that depend on
+  the pre-state are expressed through ghost variables quantified outside the triple.
 * The simulation proofs of §4 are triples of the form
-  `{σ_M = enc σ_F ∧ Inv σ_F} p {σ_M' = enc (F.p σ_F)} [≤ cost_p σ_F]`.
+  `∀ σ_F, ⦃σ_M = enc σ_F ∧ Inv σ_F⦄ p ⦃σ_M' = enc (F.p σ_F)⦄≤ cost_p σ_F`.
 
-This is a small, standard Hoare logic. No separation logic is needed: arrays are named
-globals, and every procedure's footprint is a fixed set of array names.
+No separation logic is needed: arrays are named globals; different names never alias, and
+aliasing within one array is a case split on indices.
+
+**`Std.Do` / `mvcgen` (decided in M0).** Not used for now. Our language is deep-embedded and
+deterministic, so `wp` needs no monadic machinery, and the `simp`-driven rules already yield
+the verification conditions (see `OM/Machine/Examples.lean`). Using `mvcgen` would need a
+second, monadic semantics and an adequacy proof. We revisit this in M6 if the Level-M proofs
+turn out to be heavy.
 
 ---
 
@@ -189,7 +213,7 @@ globals, and every procedure's footprint is a fixed set of array names.
 ```
 OM/
   Spec.lean                 list specification: insertAfter, insertFirst, delete, order
-  Machine/Syntax.lean, Exec.lean, WP.lean, Cost.lean
+  Machine/Syntax.lean, Exec.lean, Logic.lean, Examples.lean
   Model/Params.lean         proof parameters; conditions I1–I10 (closed forms, from lower_bounds.py)
   Model/Labels.lean         §2.2 primitives and their guards
   Model/Core.lean           elements, groups, chunks, splits, family moves, reservation, PQ
@@ -208,7 +232,7 @@ OM/
 
 | # | Deliverable | Proof content | Risk |
 |---|---|---|---|
-| M0 | Lake project with Mathlib; `Spec`; machine syntax, `exec`, cost; `wp` with soundness | wp soundness | low |
+| M0 ✅ | Lake project with Mathlib; `Spec`; machine syntax, `exec`, cost; `wp` with soundness | wp soundness | low |
 | M1 | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
 | M2 | **Theorem A** at Level F | INV-S preservation, guards, FALLBACK, Invariant R | medium |
 | M3 | Theorem Z (warm-up, can start in parallel with M1) | standalone combinatorics | low |
@@ -276,7 +300,7 @@ use it:
 | CSLib `TimeM` (`Cslib.Algorithms.Lean.TimeM`) | shallow writer monad, manual `tick` | no; its docs say the time field "is NOT verified against actual cost" | none; this is the weakness §1 avoids |
 | CSLib query models / Algolean `Prog` | free monad over declared queries, costs derived from the queries | yes for queries, but pure Lean code between queries is free | design reference; work in progress |
 | CSLib Boole | Boogie-like imperative language with Lean VCs | no cost semantics yet (on the roadmap) | watch |
-| Lean core `Std.Do` / `mvcgen` | VC generator for monadic `do` code | no cost | candidate proof engine for §6 if `exec` is given a monadic denotation; try in M0 |
+| Lean core `Std.Do` / `mvcgen` | VC generator for monadic `do` code | no cost | considered in M0, not adopted (§6) |
 | Loom / Velvet (VERSE lab) | shallow monadic verifiers, Dafny-style, SMT backed | no cost | not needed |
 | Iris-Lean | separation logic | no time credits yet | not needed (§6) |
 | Isabelle AFP *Hoare Logics for Time Bounds* (Haslbeck, Nipkow) | IMP with time, three logics, sound and complete VCGs | yes | closest design template for §3 and §6 |
@@ -287,5 +311,5 @@ use it:
 Consequences:
 * We build the small deep-embedded machine of §3 ourselves, following the Isabelle IMP-with-time
   design. It is a few hundred lines.
-* M0 tries `Std.Do`/`mvcgen` as the VC engine before writing our own `wp` simp set.
+* M0 considered `Std.Do`/`mvcgen` as the VC engine; our own `wp` rules sufficed (§6).
 * CSLib's roadmap asks for an explicit RAM model; ours could be contributed there later.
