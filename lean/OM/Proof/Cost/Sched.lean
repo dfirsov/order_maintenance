@@ -135,17 +135,18 @@ structure CFrame (s s' : Core) : Prop where
   pq : PQSame s s'
   top : s'.nodes = s.nodes ∧ s'.path = s.path ∧ s'.cin = s.cin ∧ s'.lpar = s.lpar ∧
     s'.resJob = s.resJob ∧ s'.prep = s.prep ∧ s'.ready = s.ready ∧ s'.firstChunk = s.firstChunk
+  count : s'.count = s.count
 
 theorem CFrame.refl (s : Core) : CFrame s s :=
   ⟨fun _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl, PQSame.refl s,
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl⟩
 
 theorem CFrame.trans {a b c : Core} (h1 : CFrame a b) (h2 : CFrame b c) : CFrame a c := by
-  obtain ⟨C1, s1, P1, q1, ⟨t1, t2, t3, t4, t5, t6, t7, t8⟩⟩ := h1
-  obtain ⟨C2, s2, P2, q2, ⟨u1, u2, u3, u4, u5, u6, u7, u8⟩⟩ := h2
+  obtain ⟨C1, s1, P1, q1, ⟨t1, t2, t3, t4, t5, t6, t7, t8⟩, c1⟩ := h1
+  obtain ⟨C2, s2, P2, q2, ⟨u1, u2, u3, u4, u5, u6, u7, u8⟩, c2⟩ := h2
   refine ⟨fun d => ?_, s2.trans s1, P2.trans P1, q1.trans q2,
     ⟨u1.trans t1, u2.trans t2, u3.trans t3, u4.trans t4, u5.trans t5, u6.trans t6, u7.trans t7,
-      u8.trans t8⟩⟩
+      u8.trans t8⟩, c2.trans c1⟩
   obtain ⟨a1, a2, a3, a4, a5, a6, a7, a8⟩ := C1 d
   obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8⟩ := C2 d
   exact ⟨b1.trans a1, b2.trans a2, b3.trans a3, b4.trans a4, b5.trans a5, b6.trans a6, b7.trans a7,
@@ -158,9 +159,9 @@ theorem CFrame.qsame {s s' : Core} (h : CFrame s s') : QSame s s' :=
 theorem CFrame.of_C {s s' : Core} (hC : s'.C = s.C) (hP : s'.P = s.P) (hq : PQSame s s')
     (ht : s'.nodes = s.nodes ∧ s'.path = s.path ∧ s'.cin = s.cin ∧ s'.lpar = s.lpar ∧
       s'.resJob = s.resJob ∧ s'.prep = s.prep ∧ s'.ready = s.ready ∧
-      s'.firstChunk = s.firstChunk) : CFrame s s' :=
+      s'.firstChunk = s.firstChunk) (hcnt : s'.count = s.count) : CFrame s s' :=
   ⟨fun c => by simp only [cSz, cSt, cSrc, cLl, cRr, cN, cP, cT, hC, and_self], by rw [hC], hP, hq,
-    ht⟩
+    ht, hcnt⟩
 
 theorem unlinkGroup_cfields (s : Core) (g z : Nat) :
     cSz (unlinkGroup s g) z = cSz s z ∧ cSt (unlinkGroup s g) z = cSt s z ∧
@@ -183,29 +184,30 @@ theorem cframe_remove (s : Core) (p : Nat) : CFrame s (removeState s p) := by
       (removeState s p).resJob = s.resJob ∧ (removeState s p).prep = s.prep ∧
       (removeState s p).ready = s.ready := by
     unfold removeState unlinkGroup; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hcnt : (removeState s p).count = s.count := by unfold removeState unlinkGroup; rfl
   refine ⟨fun c => ?_, by rw [hC]; exact (unlinkGroup_rest (s := s) (g := p)).2.1, rfl, hpq,
     ⟨htop.1, htop.2.1, htop.2.2.1, htop.2.2.2.1, htop.2.2.2.2.1, htop.2.2.2.2.2.1,
-      htop.2.2.2.2.2.2, hfc.trans hfc'⟩⟩
+      htop.2.2.2.2.2.2, hfc.trans hfc'⟩, hcnt⟩
   simp only [cSz, cSt, cSrc, cLl, cRr, cN, cP, cT, hC]
   exact hu c
 
 theorem cframe_moveL (s : Core) (p : Nat) : CFrame s (moveLState s p) :=
   CFrame.of_C rfl rfl ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ rfl
 
 theorem cframe_moveR (s : Core) (p : Nat) : CFrame s (moveRState s p) :=
   CFrame.of_C rfl rfl ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ rfl
 
 theorem allocGroup_frame (s : Core) (c : Nat) :
     PQSame s (allocGroup s c).2 ∧ (allocGroup s c).2.nodes = s.nodes ∧
       (allocGroup s c).2.path = s.path ∧ (allocGroup s c).2.cin = s.cin ∧
       (allocGroup s c).2.lpar = s.lpar ∧ (allocGroup s c).2.resJob = s.resJob ∧
       (allocGroup s c).2.prep = s.prep ∧ (allocGroup s c).2.ready = s.ready ∧
-      (allocGroup s c).2.firstChunk = s.firstChunk := by
+      (allocGroup s c).2.firstChunk = s.firstChunk ∧ (allocGroup s c).2.count = s.count := by
   unfold allocGroup
   split <;> exact ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
-    rfl⟩
+    rfl, rfl⟩
 
 theorem linkGroupPair_frame (t : Core) (g gl gr labL labR : Nat) :
     PQSame t (linkGroupPair t g gl gr labL labR) ∧ (linkGroupPair t g gl gr labL labR).nodes = t.nodes ∧
@@ -215,21 +217,23 @@ theorem linkGroupPair_frame (t : Core) (g gl gr labL labR : Nat) :
       (linkGroupPair t g gl gr labL labR).resJob = t.resJob ∧
       (linkGroupPair t g gl gr labL labR).prep = t.prep ∧
       (linkGroupPair t g gl gr labL labR).ready = t.ready ∧
-      (linkGroupPair t g gl gr labL labR).firstChunk = t.firstChunk := by
+      (linkGroupPair t g gl gr labL labR).firstChunk = t.firstChunk ∧
+      (linkGroupPair t g gl gr labL labR).count = t.count := by
   unfold linkGroupPair
-  exact ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem cframe_split {s : Core} {A : Abs} {g labL labR : Nat} (hI : INV s A) (hg : LiveG s g) :
     CFrame s (splitState s g labL labR) := by
   have S := splitSpec hI (hI.mem_glist_iff.mpr hg) labL labR
-  obtain ⟨q1, n1, p1, c1, l1, r1, pr1, rd1, f1⟩ := allocGroup_frame s (gC s g)
-  obtain ⟨q2, n2, p2, c2, l2, r2, pr2, rd2, f2⟩ :=
+  obtain ⟨q1, n1, p1, c1, l1, r1, pr1, rd1, f1, k1⟩ := allocGroup_frame s (gC s g)
+  obtain ⟨q2, n2, p2, c2, l2, r2, pr2, rd2, f2, k2⟩ :=
     allocGroup_frame (allocGroup s (gC s g)).2 (gC s g)
-  obtain ⟨q3, n3, p3, c3, l3, r3, pr3, rd3, f3⟩ := linkGroupPair_frame
+  obtain ⟨q3, n3, p3, c3, l3, r3, pr3, rd3, f3, k3⟩ := linkGroupPair_frame
     (allocGroup (allocGroup s (gC s g)).2 (gC s g)).2 g (splitL s g) (splitR s g) labL labR
   refine ⟨fun c => ?_, S.Csize, S.P, q1.trans (q2.trans q3), ⟨(n3.trans n2).trans n1,
     (p3.trans p2).trans p1, (c3.trans c2).trans c1, (l3.trans l2).trans l1, (r3.trans r2).trans r1,
-    (pr3.trans pr2).trans pr1, (rd3.trans rd2).trans rd1, (f3.trans f2).trans f1⟩⟩
+    (pr3.trans pr2).trans pr1, (rd3.trans rd2).trans rd1, (f3.trans f2).trans f1⟩,
+    (k3.trans k2).trans k1⟩
   simp only [cSz, cSt, cSrc, cLl, cRr, cN, cP, cT, S.C]
   split <;> simp
 
@@ -264,17 +268,18 @@ structure DFrame (s s' : Core) : Prop where
   inq : ∀ c, inQC s' c = inQC s c
   qsz : ∀ c, inQC s c = true → cSz s' c = cSz s c
   gv : ∀ c, gval s' c = gval s c
+  count : s'.count = s.count
 
 theorem DFrame.refl (s : Core) : DFrame s s :=
   ⟨rfl, rfl, PQSame.refl s, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ⟨rfl, rfl, rfl⟩,
-    fun _ => rfl, fun _ _ => rfl, fun _ => rfl⟩
+    fun _ => rfl, fun _ _ => rfl, fun _ => rfl, rfl⟩
 
 theorem DFrame.trans {a b c : Core} (h1 : DFrame a b) (h2 : DFrame b c) : DFrame a c := by
-  obtain ⟨s1, P1, q1, ⟨t1, t2, t3, t4, t5, t6, t7, t8⟩, l1, i1, z1, g1⟩ := h1
-  obtain ⟨s2, P2, q2, ⟨u1, u2, u3, u4, u5, u6, u7, u8⟩, l2, i2, z2, g2⟩ := h2
+  obtain ⟨s1, P1, q1, ⟨t1, t2, t3, t4, t5, t6, t7, t8⟩, l1, i1, z1, g1, c1⟩ := h1
+  obtain ⟨s2, P2, q2, ⟨u1, u2, u3, u4, u5, u6, u7, u8⟩, l2, i2, z2, g2, c2⟩ := h2
   refine ⟨s2.trans s1, P2.trans P1, q1.trans q2, ⟨u1.trans t1, u2.trans t2, u3.trans t3,
     u4.trans t4, u5.trans t5, u6.trans t6, u7.trans t7, u8.trans t8⟩, fun d => ?_,
-    fun d => (i2 d).trans (i1 d), fun d hd => ?_, fun d => (g2 d).trans (g1 d)⟩
+    fun d => (i2 d).trans (i1 d), fun d hd => ?_, fun d => (g2 d).trans (g1 d), c2.trans c1⟩
   · exact ⟨(l2 d).1.trans (l1 d).1, (l2 d).2.1.trans (l1 d).2.1, (l2 d).2.2.trans (l1 d).2.2⟩
   · rw [z2 d (by rw [i1 d]; exact hd), z1 d hd]
 
@@ -287,14 +292,15 @@ theorem DFrame.gvec {s s' : Core} (D : DFrame s s') (n : Nat) : gvec n s' = gvec
 theorem DFrame.of_qsame {s s' : Core} (Q : QSame s s') (hq : PQSame s s')
     (ht : s'.nodes = s.nodes ∧ s'.path = s.path ∧ s'.cin = s.cin ∧ s'.lpar = s.lpar ∧
       s'.resJob = s.resJob ∧ s'.prep = s.prep ∧ s'.ready = s.ready ∧ s'.firstChunk = s.firstChunk)
-    (hl : ∀ c, cN s' c = cN s c ∧ cP s' c = cP s c ∧ cT s' c = cT s c) : DFrame s s' :=
+    (hl : ∀ c, cN s' c = cN s c ∧ cP s' c = cP s c ∧ cT s' c = cT s c)
+    (hcnt : s'.count = s.count) : DFrame s s' :=
   ⟨Q.Csize, Q.P, hq, ht, hl, Q.inQC, fun c hc => by
     unfold OM.Proof.inQC at hc; simp only [decide_eq_true_eq] at hc; exact Q.sz c hc.1 hc.2.1,
-    Q.gval⟩
+    Q.gval, hcnt⟩
 
 theorem CFrame.dframe {s s' : Core} (h : CFrame s s') : DFrame s s' :=
-  DFrame.of_qsame h.qsame h.pq h.top fun c => ⟨(h.C c).2.2.2.2.2.1, (h.C c).2.2.2.2.2.2.1,
-    (h.C c).2.2.2.2.2.2.2⟩
+  DFrame.of_qsame h.qsame h.pq h.top (fun c => ⟨(h.C c).2.2.2.2.2.1, (h.C c).2.2.2.2.2.2.1,
+    (h.C c).2.2.2.2.2.2.2⟩) h.count
 
 /-- A chunk-split move leaves the quiet chunks alone. -/
 theorem cmoveL_dframe {s : Core} {x : Nat} {u labs : List Nat} (hxy : x ≠ cLl s x)
@@ -319,7 +325,7 @@ theorem cmoveL_dframe {s : Core} {x : Nat} {u labs : List Nat} (hxy : x ≠ cLl 
     simp [cmoveLState, cmoveSizes, hCs]
   refine DFrame.of_qsame ⟨hCsz, rfl, fun c _ => by rw [(fld c).1], fun c _ hq => ?_⟩
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    fun c => ⟨(fld c).2.1, (fld c).2.2.1, (fld c).2.2.2.1⟩
+    (fun c => ⟨(fld c).2.1, (fld c).2.2.1, (fld c).2.2.2.1⟩) rfl
   refine (fld c).2.2.2.2 ?_ ?_
   · rintro rfl; rw [hxs] at hq; cases hq
   · rintro rfl; rw [hys] at hq; cases hq
@@ -346,7 +352,7 @@ theorem cmoveR_dframe {s : Core} {x : Nat} {u labs : List Nat} (hxz : x ≠ cRr 
     simp [cmoveRState, cmoveSizes, hCs]
   refine DFrame.of_qsame ⟨hCsz, rfl, fun c _ => by rw [(fld c).1], fun c _ hq => ?_⟩
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    fun c => ⟨(fld c).2.1, (fld c).2.2.1, (fld c).2.2.2.1⟩
+    (fun c => ⟨(fld c).2.1, (fld c).2.2.1, (fld c).2.2.2.1⟩) rfl
   refine (fld c).2.2.2.2 ?_ ?_
   · rintro rfl; rw [hxs] at hq; cases hq
   · rintro rfl; rw [hzs] at hq; cases hq
@@ -381,7 +387,7 @@ theorem cremove_dframe {s : Core} {x : Nat} (hx : x < s.C.size) (hl : cLl s x < 
         simp [h1, h2, hn]
       · simp [h1, h2]
   refine ⟨by simp [cremoveState], hP, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, hlk, fun c => ?_, fun c _ => hsz c, fun c => ?_⟩
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, hlk, fun c => ?_, fun c _ => hsz c, fun c => ?_, rfl⟩
   · unfold OM.Proof.inQC
     rw [hsz, hP]
     have := hval c
