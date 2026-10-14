@@ -96,7 +96,7 @@ def famC (s : Core) (x : Nat) : Nat := cSz s (cLl s x) + cSz s x + cSz s (cRr s 
 
 /-! ### The invariant -/
 
-structure LInv (s : Core) (lg : LGh) (s₀ : Nat → Nat) : Prop where
+structure LInv (s : Core) (lg : LGh) (s₀ δ δu : Nat → Nat) : Prop where
   /-- Gaps between consecutive groups of a chunk survive the chunk's halvings. -/
   gaps : ∀ g, LiveG s g → g ≠ cLs s (gC s g) →
     gL s g + s.P.D_g / 2 ^ lg.hv (gC s g) ≤ gL s (gN s g)
@@ -116,11 +116,15 @@ structure LInv (s : Core) (lg : LGh) (s₀ : Nat → Nat) : Prop where
   insS : ∀ c, LiveC s c → cSt s c = .splitting → lg.ins c ≤ famC s c + kC s.P s.P.T
   /-- Arrivals: a source's moved units, and the frozen total afterwards. -/
   arrS : ∀ x, LiveC s x → cSt s x = .splitting →
-    lg.arB (cLl s x) + lg.arF (cLl s x) + lg.arB (cRr s x) + lg.arF (cRr s x) + 3 * units s x ≤
-      3 * (unitsOf s.P (s₀ x) + (famC s x - s₀ x))
+    lg.arB (cLl s x) + lg.arF (cLl s x) + lg.arB (cRr s x) + lg.arF (cRr s x) +
+        3 * (units s x - δu x) ≤
+      3 * (unitsOf s.P (s₀ x) + ((cSz s (cLl s x) - δ (cLl s x)) + (cSz s x - δ x) +
+        (cSz s (cRr s x) - δ (cRr s x)) - s₀ x))
   arrN : ∀ c, LiveC s c → cSt s c ≠ .overflow → lg.arB c + lg.arF c ≤ 3 * Mu s.P
   /-- The quiet size at the start of the quiet period. -/
   e0 : ∀ c, LiveC s c → cSt s c = .quiet → lg.e0 c ≤ cSz s c
+  /-- The two siblings of a family are children of the same split, or both arrived. -/
+  famChild : ∀ p, LiveG s p → gSt s p = .splitting → lg.child (gLl s p) = lg.child (gRr s p)
 
 end OM.Proof
 
@@ -516,11 +520,11 @@ theorem div_two_pow_succ (D k : Nat) : D / 2 ^ (k + 1) = D / 2 ^ k / 2 := by
   rw [Nat.div_div_eq_div_mul, pow_succ]
 
 /-- **The group-label invariant across a split start.** -/
-theorem linv_splitStart {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δ s₀ : Nat → Nat}
-    {ex : Nat} {lg : LGh} {g labL labR : Nat} (hI : INV s A) (hG : GInvE s L gh δ ex)
-    (hL : LInv s lg s₀) (hg : LiveG s g) (hq : gSt s g = .quiet) (hsz : gSz s g = s.P.G)
+theorem linv_splitStart {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ δu : Nat → Nat}
+    {ex : Nat} {lg : LGh} {g labL labR : Nat} (hI : INV s A) (hG : GInvE s L gh δg ex)
+    (hL : LInv s lg s₀ δ δu) (hg : LiveG s g) (hq : gSt s g = .quiet) (hsz : gSz s g = s.P.G)
     (hLb : (labBefore g).run s = .ok labL s) (hLa : (labAfter g).run s = .ok labR s) :
-    LInv (splitState s g labL labR) (lg.split s g (splitL s g) (splitR s g)) s₀ := by
+    LInv (splitState s g labL labR) (lg.split s g (splitL s g) (splitR s g)) s₀ δ δu := by
   have S := splitSpec hI (hI.mem_glist_iff.mpr hg) labL labR
   have hpend := pending_split S hg hq lg
   have hchg := charge_split S hG hg hq hsz lg
@@ -576,7 +580,7 @@ theorem linv_splitStart {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δ s₀ 
   have hgL' : ∀ z, gL s' z = if z = gl then labL else if z = gr then labR else gL s z := S.lab
   refine
     { gaps := ?_, range := ?_, hv := ?_, pb := ?_, pf := ?_, roots := ?_, claim2 := ?_,
-      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_ }
+      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_, famChild := ?_ }
   · -- gaps
     intro h hh hlast
     have hgl' : gL s' gl = labL := by rw [hgL', if_pos rfl]
@@ -770,12 +774,135 @@ theorem linv_splitStart {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δ s₀ 
     rw [hfamC, S.P]; exact hL.insS d hd hds
   · intro x hx hxs
     rw [hLC] at hx; rw [(hcf x).2.1] at hxs
-    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2, hunits, hfamC, S.P]; exact hL.arrS x hx hxs
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2, hunits, (hcf _).1, (hcf x).1, (hcf _).1, S.P]
+    exact hL.arrS x hx hxs
   · intro d hd hds
     rw [hLC] at hd; rw [(hcf d).2.1] at hds
     rw [S.P]; exact hL.arrN d hd hds
   · intro d hd hds
     rw [hLC] at hd; rw [(hcf d).2.1] at hds
     rw [(hcf d).1]; exact hL.e0 d hd hds
+  · intro p hp hps
+    rcases (S.live p).mp hp with rfl | rfl | hpL
+    · rw [S.st, if_neg (Ne.symm S.ggl), if_pos (Or.inl rfl)] at hps; cases hps
+    · rw [S.st, if_neg (Ne.symm S.ggr), if_pos (Or.inr rfl)] at hps; cases hps
+    · by_cases hpg : p = g
+      · subst hpg
+        rw [S.l, S.r, if_pos rfl, if_pos rfl]
+        simp [hlg', LGh.split]
+      · rw [S.st, if_neg hpg, if_neg (not_or.mpr (hne p hpL))] at hps
+        have F := hG.fam p hpL hps
+        rw [S.l, S.r, if_neg hpg, if_neg hpg, if_neg (not_or.mpr (hne p hpL)),
+          if_neg (not_or.mpr (hne p hpL))]
+        simp only [hlg', LGh.split, if_neg (not_or.mpr (hne _ F.lLive)),
+          if_neg (not_or.mpr (hne _ F.rLive))]
+        exact hL.famChild p hpL hps
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Across a split move -/
+
+/-- **The group-label invariant across a split move** (an element moves inside a family). -/
+theorem linv_move {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ δu : Nat → Nat}
+    {ex : Nat} {lg : LGh} {src dst e lab : Nat} (hI : INV s A) (hG : GInvE s L gh δg ex) (hL : LInv s lg s₀ δ δu)
+    (M : MoveSpec s s' src dst e lab) (hsrc : LiveG s src) (hss : gSt s src = .splitting)
+    (hdst : dst = gLl s src ∨ dst = gRr s src) (hne : 1 ≤ gSz s src) : LInv s' lg s₀ δ δu := by
+  have hK := M.links
+  have Fs := hG.fam src hsrc hss
+  have hdst' : dst ≠ src := by
+    rcases hdst with rfl | rfl
+    · intro e; have := Fs.lSt; rw [e, hss] at this; cases this
+    · intro e; have := Fs.rSt; rw [e, hss] at this; cases this
+  have hLv : ∀ z, LiveG s' z ↔ LiveG s z := hK.liveG
+  have hCs : ∀ c, s'.C.getX c = s.C.getX c := fun c => by rw [M.C]
+  have hcf : ∀ d, cSz s' d = cSz s d ∧ cSt s' d = cSt s d ∧ cSrc s' d = cSrc s d ∧
+      cLl s' d = cLl s d ∧ cRr s' d = cRr s d ∧ cLs s' d = cLs s d := by
+    intro d; simp only [cSz, cSt, cSrc, cLl, cRr, cLs, hCs, and_self]
+  have hLC : ∀ d, LiveC s' d ↔ LiveC s d := by intro d; simp only [LiveC, M.C]
+  have hfamC : ∀ x, famC s' x = famC s x := by
+    intro x; simp only [famC, (hcf _).1, (hcf x).2.2.2.1, (hcf x).2.2.2.2.1]
+  have hunits : ∀ d, units s' d = units s d := by
+    intro d; apply units_congr; intro z; unfold UnitG; rw [hLv, hK.chk, hK.st]
+  have hGrps : ∀ c, GrpsC s' c = GrpsC s c := by
+    intro c; ext z; simp only [mem_GrpsC, hLv, hK.chk]
+  -- family sizes are unchanged, and so are quiet groups' sizes
+  have hfamT : ∀ p, LiveG s p → gSt s p = .splitting → famT s' p = famT s p := by
+    intro p hp hps
+    by_cases hpe : p = src
+    · subst hpe
+      have hlr := Fs.lr hI hsrc
+      have hlp := Fs.lp hI hsrc
+      have hrp := Fs.rp hI hsrc
+      have e2 : gSz s' p = gSz s p - 1 := by rw [M.sz, if_pos rfl]
+      unfold famT
+      rw [hK.l, hK.r, e2]
+      rcases hdst with rfl | rfl
+      · have e1 : gSz s' (gLl s p) = gSz s (gLl s p) + 1 := by rw [M.sz, if_neg hlp, if_pos rfl]
+        have e3 : gSz s' (gRr s p) = gSz s (gRr s p) := by
+          rw [M.sz, if_neg hrp, if_neg (Ne.symm hlr)]
+        rw [e1, e3]; omega
+      · have e1 : gSz s' (gLl s p) = gSz s (gLl s p) := by rw [M.sz, if_neg hlp, if_neg hlr]
+        have e3 : gSz s' (gRr s p) = gSz s (gRr s p) + 1 := by rw [M.sz, if_neg hrp, if_pos rfl]
+        rw [e1, e3]; omega
+    · have D := Fs.disjoint (hG.fam p hp hps) (Ne.symm hpe) hss hps
+      obtain ⟨d1, d2, d3, d4, d5, d6, d7, d8⟩ := D
+      have hdl : gLl s p ≠ dst := by rcases hdst with rfl | rfl; exact d3; exact d4
+      have hdr : gRr s p ≠ dst := by rcases hdst with rfl | rfl; exact d6; exact d7
+      have hdp : p ≠ dst := by rcases hdst with rfl | rfl; exact d1; exact d2
+      simp only [famT, hK.l, hK.r, M.sz, if_neg d5, if_neg hdl, if_neg hpe, if_neg hdp, if_neg d8,
+        if_neg hdr]
+  have hqsz : ∀ z, gSt s z = .quiet → gSz s' z = gSz s z := by
+    intro z hz
+    have h1 : z ≠ src := by rintro rfl; rw [hss] at hz; cases hz
+    have h2 : z ≠ dst := by
+      rcases hdst with rfl | rfl
+      · intro e; have := Fs.lSt; rw [← e, hz] at this; cases this
+      · intro e; have := Fs.rSt; rw [← e, hz] at this; cases this
+    rw [M.sz, if_neg h1, if_neg h2]
+  have hcharge : ∀ c, charge s' lg c = charge s lg c := by
+    intro c
+    rw [charge_eq, charge_eq, hGrps]
+    refine Finset.sum_congr rfl fun z hz => ?_
+    have hzL := (mem_GrpsC.mp hz).1
+    unfold chTerm
+    rw [hK.st, hK.l, M.P]
+    by_cases hs : gSt s z = .splitting
+    · rw [hfamT z hzL hs]
+      have hnq : ¬ (gSt s z = .quiet) := by rw [hs]; simp
+      simp only [hnq, false_and, if_false]
+    · by_cases hq : gSt s z = .quiet
+      · rw [hqsz z hq]; simp only [hs, false_and, if_false]
+      · simp only [hs, hq, false_and, if_false]
+  have hpend : ∀ c, pending s' lg c = pending s lg c := by
+    intro c; unfold pending; rw [hGrps]
+    congr 1; apply Finset.filter_congr; intro z _; rw [hK.st]
+  refine
+    { gaps := ?_, range := ?_, hv := hL.hv, pb := hL.pb, pf := hL.pf, roots := ?_, claim2 := ?_,
+      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_, famChild := ?_ }
+  · intro h hh hl
+    rw [hLv] at hh; rw [hK.chk, (hcf _).2.2.2.2.2] at hl; rw [hK.chk]
+    rw [M.lab, M.lab, hK.next, M.P]; exact hL.gaps h hh hl
+  · intro h hh; rw [hLv] at hh; rw [hK.chk, M.lab, M.P]; exact hL.range h hh
+  · intro d hd; rw [hLC] at hd; rw [hpend]; exact hL.roots d hd
+  · intro d hd; rw [hLC] at hd; rw [hcharge, M.P]; exact hL.claim2 d hd
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).1, M.P]
+    exact hL.insQ d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).2.2.1, hfamC]
+    exact hL.insO d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [hfamC, M.P]
+    exact hL.insS d hd hds
+  · intro x hx hxs; rw [hLC] at hx; rw [(hcf x).2.1] at hxs
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2.1, hunits, (hcf _).1, (hcf x).1, (hcf _).1, M.P]
+    exact hL.arrS x hx hxs
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [M.P]; exact hL.arrN d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).1]; exact hL.e0 d hd hds
+  · intro p hp hps; rw [hLv] at hp; rw [hK.st] at hps; rw [hK.l, hK.r]
+    exact hL.famChild p hp hps
 
 end OM.Proof

@@ -126,7 +126,11 @@ theorem cinv_remove {s : Core} {A : Abs} {gh : GGh} {δg δ δu s₀ : Nat → N
   have hp' := hI.mem_glist_iff.mpr hp
   have hpp : gP s p ≠ p := by
     rw [hI.gList.prev p hp']; exact predOf_ne_self hI.gList.nodup p hp.1
+  have hgPl : gP s p = gLl s p := by
+    have := hI.gP_gN (hI.mem_glist_iff.mpr Fp.lLive) (by rw [Fp.lAdj]; exact hp.1)
+    rw [Fp.lAdj] at this; exact this
   have R := removeState_spec hp.2.1 Fp.lLive.2.1 Fp.rLive.2.1 hpp
+    (fun _ => by rw [hgPl]; exact Fp.lLive.2.1)
   have hU : (unlinkGroup s p).C.size = s.C.size := (unlinkGroup_rest (s := s) (g := p)).2.1
   have hcs : gC s p < s.C.size := (hC.gchk p hp).1.2
   generalize removeState s p = s' at R ⊢

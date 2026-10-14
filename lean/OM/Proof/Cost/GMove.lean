@@ -381,6 +381,7 @@ structure MoveSpec (s s' : Core) (src dst e lab : Nat) : Prop where
     (∀ z, (s'.E.getX z).live = (s.E.getX z).live) ∧ (∀ z, (s'.E.getX z).h = (s.E.getX z).h)
   tail : s'.tail = s.tail
   C : s'.C = s.C
+  lab : ∀ z, gL s' z = gL s z
 
 theorem moveLState_spec {s : Core} {p : Nat} (hlp : gLl s p ≠ p) (hp : p < s.Gs.size)
     (hl : gLl s p < s.Gs.size) (he : gF s p < s.E.size) :
@@ -396,7 +397,7 @@ theorem moveLState_spec {s : Core} {p : Nat} (hlp : gLl s p ≠ p) (hp : p < s.G
     intro β f hf z; rw [hGs z]; split_ifs <;> simp [hf]
   refine ⟨⟨by simp [moveLState, sizeAdj, sGs], fun z => ?_, fun z => ?_, fun z => ?_, fun z => ?_,
     fun z => ?_, fun z => ?_, fun z => ?_⟩, fun z => ?_, fun z => ?_, fun z => ?_, sHd, rfl,
-    ⟨sEs, seN, seP, sLive, sH⟩, sT, sCC⟩
+    ⟨sEs, seN, seP, sLive, sH⟩, sT, sCC, fun z => ?_⟩
   · show (_ : Group).st = _; rw [fld Group.st (fun _ _ => rfl)]; exact (F z).1
   · show (_ : Group).src = _; rw [fld Group.src (fun _ _ => rfl)]; exact (F z).2.1
   · show (_ : Group).l = _; rw [fld Group.l (fun _ _ => rfl)]; exact (F z).2.2.1
@@ -422,6 +423,7 @@ theorem moveLState_spec {s : Core} {p : Nat} (hlp : gLl s p ≠ p) (hp : p < s.G
     simp only [eL] at this
     simp only [moveLState, sizeAdj]
     rw [this]; simp [he]
+  · show (_ : Group).lab = _; rw [fld Group.lab (fun _ _ => rfl)]; exact sL z
 
 theorem moveRState_spec {s : Core} {p : Nat} (hrp : gRr s p ≠ p) (hp : p < s.Gs.size)
     (hr : gRr s p < s.Gs.size) (he : gLs s p < s.E.size) :
@@ -437,7 +439,7 @@ theorem moveRState_spec {s : Core} {p : Nat} (hrp : gRr s p ≠ p) (hp : p < s.G
     intro β f hf z; rw [hGs z]; split_ifs <;> simp [hf]
   refine ⟨⟨by simp [moveRState, sizeAdj, sGs], fun z => ?_, fun z => ?_, fun z => ?_, fun z => ?_,
     fun z => ?_, fun z => ?_, fun z => ?_⟩, fun z => ?_, fun z => ?_, fun z => ?_, sHd, rfl,
-    ⟨sEs, seN, seP, sLive, sH⟩, sT, sCC⟩
+    ⟨sEs, seN, seP, sLive, sH⟩, sT, sCC, fun z => ?_⟩
   · show (_ : Group).st = _; rw [fld Group.st (fun _ _ => rfl)]; exact (F z).1
   · show (_ : Group).src = _; rw [fld Group.src (fun _ _ => rfl)]; exact (F z).2.1
   · show (_ : Group).l = _; rw [fld Group.l (fun _ _ => rfl)]; exact (F z).2.2.1
@@ -463,6 +465,7 @@ theorem moveRState_spec {s : Core} {p : Nat} (hrp : gRr s p ≠ p) (hp : p < s.G
     simp only [eL] at this
     simp only [moveRState, sizeAdj]
     rw [this]; simp [he]
+  · show (_ : Group).lab = _; rw [fld Group.lab (fun _ _ => rfl)]; exact sL z
 
 end OM.Proof
 
@@ -937,6 +940,8 @@ structure RemSpec (s s' : Core) (p l r : Nat) : Prop where
   sz : ∀ z, gSz s' z = gSz s z
   chk : ∀ z, gC s' z = gC s z
   next : ∀ z, z ≠ p → z ≠ gP s p → gN s' z = gN s z
+  nextp : gP s p ≠ NIL → gN s' (gP s p) = gN s p
+  lab : ∀ z, gL s' z = gL s z
   E : s'.E = s.E
   head : s'.head = s.head
   P : s'.P = s.P
@@ -959,7 +964,7 @@ theorem removeState_getX {s : Core} {p : Nat} (hl : gLl s p < s.Gs.size)
     · simp [h1, h2, Ne.symm h1, Ne.symm h2]
 
 theorem removeState_spec {s : Core} {p : Nat} (hp : p < s.Gs.size) (hl : gLl s p < s.Gs.size)
-    (hr : gRr s p < s.Gs.size) (hpp : gP s p ≠ p) :
+    (hr : gRr s p < s.Gs.size) (hpp : gP s p ≠ p) (hps : gP s p ≠ NIL → gP s p < s.Gs.size) :
     RemSpec s (removeState s p) p (gLl s p) (gRr s p) := by
   have key := removeState_getX hl hr
   have fld : ∀ {β : Type} (f : Group → β), (∀ X, f (quietG X) = f X) →
@@ -969,7 +974,7 @@ theorem removeState_spec {s : Core} {p : Nat} (hp : p < s.Gs.size) (hl : gLl s p
   have hsize : (removeState s p).Gs.size = s.Gs.size := by
     simp [removeState, unlinkGroup_Gsize]
   refine ⟨fun z => ?_, fun z => ?_, fun z => ?_, fun z => ?_, fun z => ?_, fun z => ?_,
-    fun z => ?_, fun z hz1 hz2 => ?_, rE, rH, rfl, rfl⟩
+    fun z => ?_, fun z hz1 hz2 => ?_, fun hp0 => ?_, fun z => ?_, rE, rH, rfl, rfl⟩
   · simp only [LiveG, gA, hsize]
     rw [fld Group.alive (fun _ => rfl)]
     have := unlinkGroup_gA (s := s) (g := p) z
@@ -993,6 +998,13 @@ theorem removeState_spec {s : Core} {p : Nat} (hp : p < s.Gs.size) (hl : gLl s p
     have := unlinkGroup_gN (s := s) (g := p) hpp z
     simp only [gN] at this; rw [this]
     simp [hz1, hz2]
+  · simp only [gN]; rw [fld Group.next (fun _ => rfl)]
+    have := unlinkGroup_gN (s := s) (g := p) hpp (gP s p)
+    have hps' := hps hp0
+    simp only [gN, gP] at this hpp hp0 hps' ⊢; rw [this]
+    simp [hpp, hp0, hps']
+  · simp only [gL]; rw [fld Group.lab (fun _ => rfl)]
+    have := unlinkGroup_gL (s := s) (g := p) z; simpa only [gL] using this
 
 end OM.Proof
 
@@ -1015,10 +1027,11 @@ theorem ginv_remove {s : Core} {A : Abs} {gh : GGh} {δ : Nat → Nat} {p : Nat}
   have hp' := hI.mem_glist_iff.mpr hp
   have hpp : gP s p ≠ p := by
     rw [hI.gList.prev p hp']; exact predOf_ne_self hI.gList.nodup p hp.1
-  have R := removeState_spec hp.2.1 Fp.lLive.2.1 Fp.rLive.2.1 hpp
   have hgPl : gP s p = gLl s p := by
     have := hI.gP_gN (hI.mem_glist_iff.mpr Fp.lLive) (by rw [Fp.lAdj]; exact hp.1)
     rw [Fp.lAdj] at this; exact this
+  have R := removeState_spec hp.2.1 Fp.lLive.2.1 Fp.rLive.2.1 hpp
+    (fun _ => by rw [hgPl]; exact Fp.lLive.2.1)
   generalize removeState s p = s' at R ⊢
   generalize hldef : gLl s p = l at *
   generalize hrdef : gRr s p = r at *
