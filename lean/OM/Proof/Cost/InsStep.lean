@@ -102,3 +102,173 @@ theorem chunkSize_ok {s : Core} {x lab hh : Nat} (hpq : PQC s) (hcL : LiveC s (g
       simp [this]
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+/-- One undriven insertion at `c`. -/
+def δ1 (c : Nat) : Nat → Nat := fun d => if d = c then 1 else 0
+
+theorem update_zero_eq_δ1 (c : Nat) :
+    Function.update (fun _ => 0) c ((fun (_ : Nat) => 0) c + 1) = δ1 c := by
+  funext d; unfold δ1; by_cases h : d = c
+  · subst h; simp
+  · simp [h]
+
+/-- The invariants right after the insertion of an element into group `g` of chunk `c`. -/
+structure InsPost (TI : Core → Prop) (k J n R : Nat) (μ : Job → Nat) (L : List Nat) (s0 : Core)
+    (g c : Nat) (s2 : Core) : Prop where
+  inv : ∃ A, INV s2 A ∧ A.elist = L
+  ginv : ∃ gh, GInv s2 L gh (δ1 g)
+  cinv : ∃ s₀, CInv s2 L (δ1 c) (fun _ => 0) s₀ ∧ LX s₀ (δ1 c) (fun _ => 0) s2
+  pq : PQC s2
+  cnt : ∃ e pops, CountInv s2 e pops
+  cp : CParams s2.P
+  ti : TI s2
+  game : ∃ y i a ip js, GameInv n R s2 y i a ip ∧ RoundAt k J μ s2.resJob ip js 0
+  count : s2.count = s0.count + 1
+  P : s2.P = s0.P
+  grp : LiveG s2 g ∧ gC s2 g = c ∧ 1 ≤ gSz s2 g
+  csz : 1 ≤ cSz s2 c
+  quiet : cSt s2 c = .quiet → cSz s2 c ≤ s2.P.T + 1
+  cL : LiveC s2 c
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+/-- **The game across an insertion**: one value grows by at most 1, and the round has room for it. -/
+theorem game_ins {n R k J : Nat} {μ : Job → Nat} {s s2 : Core} {y : Fin n → ℝ} {i : Fin n}
+    {a : Fin n → ℝ} {ip js : Nat} (hG : GameInv n R s y i a ip) (hRO : RoundOK k J μ s ip js)
+    (hk : 1 ≤ k) (hR : J / k + 1 ≤ R) (hn : 1 ≤ n) {c : Nat} (hc1 : 1 ≤ c) (hcn : c - 1 < n)
+    (hle : ∀ d, gval s2 d ≤ gval s d + if d = c then 1 else 0) (hres : s2.resJob = s.resJob) :
+    ∃ y' i' a' ip' js', GameInv n R s2 y' i' a' ip' ∧ RoundAt k J μ s2.resJob ip' js' 0 := by
+  have hlev : ∀ j : Fin n, gvec n s2 j ≤ gvec n s j + if j = ⟨c - 1, hcn⟩ then 1 else 0 := by
+    intro j
+    unfold gvec
+    have h := hle (j.val + 1)
+    by_cases hj : j = ⟨c - 1, hcn⟩
+    · rw [if_pos hj]; rw [if_pos (by rw [hj]; simp only; omega)] at h; exact_mod_cast h
+    · rw [if_neg hj]
+      have hne : j.val + 1 ≠ c := by intro e; apply hj; ext; simp only; omega
+      rw [if_neg hne] at h; simp only [add_zero]; exact_mod_cast h
+  have hipR : ∀ m, m * k ≤ J → m + 1 ≤ R := by
+    intro m hm
+    have : m ≤ J / k := (Nat.le_div_iff_mul_le hk).mpr hm
+    omega
+  unfold RoundOK at hRO
+  rw [hres]
+  cases hj : s.resJob with
+  | some job =>
+    rw [hj] at hRO
+    obtain ⟨h1, h2, h3⟩ := hRO
+    exact ⟨y, i, _, ip + 1, js, hG.insert ⟨c - 1, hcn⟩ hlev (hipR ip (by omega)),
+      by show (ip + 1) * k ≤ js + (k - 0) ∧ js + μ job ≤ J ∧ 1 ≤ μ job
+         refine ⟨?_, h2, h3⟩; rw [Nat.add_mul, Nat.one_mul]; omega⟩
+  | none =>
+    rw [hj] at hRO
+    rcases hRO with hz | hip
+    · have hz' : ∀ j : Fin n, gvec n s j = 0 := fun j => by unfold gvec; rw [hz]; simp
+      have hG0 := GameInv.reset (R := R) hz' ⟨0, hn⟩
+      exact ⟨0, ⟨0, hn⟩, _, 0 + 1, 0, hG0.insert ⟨c - 1, hcn⟩ hlev (hipR 0 (by simp)),
+        by show (0 + 1) * k ≤ J + (k - 0); omega⟩
+    · exact ⟨y, i, _, ip + 1, js, hG.insert ⟨c - 1, hcn⟩ hlev (hipR ip hip),
+        by show (ip + 1) * k ≤ J + (k - 0); rw [Nat.add_mul, Nat.one_mul]; omega⟩
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+theorem sizeState_sameLinks (t : Core) (c : Nat) : SameLinks t (sizeState t c) := by
+  refine ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl,
+    fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl,
+    rfl, rfl, rfl, rfl, rfl, by simp [sizeState], fun d => ?_, fun d => ?_, fun d => ?_, fun d => ?_,
+    rfl⟩ <;> simp only [cN, cP, cF, cLs, sizeState, Array.getX_modify] <;> split <;> simp_all
+
+theorem sizeState_cT (t : Core) (c d : Nat) : cT (sizeState t c) d = cT t d := by
+  simp only [cT, sizeState, Array.getX_modify]; split <;> simp_all
+
+/-- **The insertion step**: the element link and the size update succeed; all invariants hold
+with one undriven insertion. -/
+theorem insert_step {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : Nat} {L : List Nat}
+    {s : Core} {y : Fin n → ℝ} {i : Fin n} {a : Fin n → ℝ} {ip js x : Nat}
+    (hTC : TopContract TI μ J cap) (hL : LowInv s L) (hTI : TI s) (hG : GameInv n R s y i a ip)
+    (hRO : RoundOK k J μ s ip js) (hx : x ∈ L) (hk : 1 ≤ k) (hR : J / k + 1 ≤ R) (hn : 1 ≤ n)
+    (hsize : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
+    (hI5 : (s.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat) :
+    ∃ s1 s2, (insertElem x hh).run s = .ok s.E.size s1 ∧
+      (chunkSize (gC s1 (eG s1 s.E.size)) true).run s1 = .ok () s2 ∧
+      InsPost TI k J n R μ (OM.Spec.insertAfterL x s.E.size L) s (eG s x) (gC s (eG s x)) s2 ∧
+      eG s1 s.E.size = eG s x ∧ gC s1 (eG s x) = gC s (eG s x) := by
+  obtain ⟨A, hI, hel⟩ := hL.inv
+  subst hel
+  obtain ⟨gh, hG0⟩ := hL.ginv
+  obtain ⟨s₀, hC, ⟨lg, hLi⟩, hLP, hGP⟩ := hL.cinv
+  obtain ⟨e, pops, hN⟩ := hL.cnt
+  obtain ⟨lab, hrun1, ⟨A', hI1, hel1⟩, gh', hG1⟩ := ins_elem_ok hI hG0 hGP hx hh
+  have hgL : LiveG s (eG s x) := hI.mem_glist_iff.mp (hI.eG_mem hx)
+  have hcL : LiveC s (gC s (eG s x)) := (hC.gchk _ hgL).1
+  obtain ⟨s2, hrun2, hO, hpq2⟩ := chunkSize_ok (lab := lab) (hh := hh) hL.pq hcL
+  have heG : eG (linkElem s x s.E.size lab hh) s.E.size = eG s x := by
+    rw [linkElem_eG, if_pos rfl]
+  have hgC : gC (linkElem s x s.E.size lab hh) (eG s x) = gC s (eG s x) :=
+    (linkElem_glinks s x lab hh).chk _
+  refine ⟨_, s2, hrun1, by rw [heG, hgC]; exact hrun2, ?_, heG, hgC⟩
+  -- the insertion's effect on the chunks
+  have hGs2 : s2.Gs = (linkElem s x s.E.size lab hh).Gs := by rw [hO.Gs]; rfl
+  have hC2 : s2.C = (sizeState (linkElem s x s.E.size lab hh) (gC s (eG s x))).C := hO.C
+  have hP2 : s2.P = s.P := by rw [hO.P]; rfl
+  have hE2 : s2.E = (linkElem s x s.E.size lab hh).E := by rw [hO.E]; rfl
+  have S : InsSpec s s2 (eG s x) := insSpec_link hgL.2.1 hcL.2 hGs2 hC2 hP2
+  obtain ⟨r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15⟩ := hO.rest
+  have hcnt2 : s2.count = s.count + 1 := by rw [r2]; rfl
+  have hhead2 : s2.head = (linkElem s x s.E.size lab hh).head := by rw [r3]; rfl
+  have hcov : cSt s (gC s (eG s x)) = .overflow →
+      cLl s (cSrc s (gC s (eG s x))) = gC s (eG s x) ∨
+        cRr s (cSrc s (gC s (eG s x))) = gC s (eG s x) := by
+    intro ho; obtain ⟨-, -, h⟩ := hC.covf _ hcL ho
+    rcases h with h | h; exact Or.inl h; exact Or.inr h
+  -- Lemma R's size bound before the insertion
+  have hd := hL.cp.I4
+  have hchunks := hN.chunks (by omega)
+  have hcn : gC s (eG s x) - 1 < n := by have := hcL.2; omega
+  refine
+    { inv := ⟨A', hI1.of_sameLinks ?_ ?_, hel1⟩, ginv := ⟨gh', hG1.of_gsame (GSame.of_eq hGs2 hE2 hhead2
+        (by rw [hP2]; rfl))⟩, cinv := ⟨s₀, ?_, ⟨{ lg with ins := Function.update lg.ins (gC s (eG s x)) (lg.ins (gC s (eG s x)) + 1) }, ?_⟩, by rw [hP2]; exact hLP, by rw [hP2]; exact hGP⟩,
+      pq := hpq2, cnt := ⟨e, pops, hN.ins S hcnt2⟩, cp := by rw [hP2]; exact hL.cp,
+      ti := hTC.frame _ _ (topSame_ins hC2 hP2 ⟨by rw [r12]; rfl, by rw [r13]; rfl, by rw [r14]; rfl,
+        by rw [r15]; rfl, by rw [r9]; rfl, by rw [r8]; rfl, by rw [r7]; rfl, by rw [r6]; rfl⟩) hTI,
+      game := ?_, count := hcnt2, P := hP2,
+      grp := ⟨(S.live _).mpr hgL, by rw [S.chk], by rw [S.sz, if_pos rfl]; omega⟩,
+      csz := by rw [S.csz, if_pos rfl]; omega,
+      quiet := fun hq => ?_, cL := by simp only [LiveC, S.Csize]; exact hcL }
+  · exact (sizeState_sameLinks _ _).trans hO.sameLinks
+  · intro d; rw [show cT s2 d = cT (sizeState (linkElem s x s.E.size lab hh) (gC s (eG s x))) d by
+      simp only [cT, hO.C], sizeState_cT]
+  · rw [← update_zero_eq_δ1]
+    exact cinv_ins (lab := lab) (hh := hh) hI hC hx S (fun e => by simp only [eG, hE2])
+  · rw [← update_zero_eq_δ1]
+    exact linv_ins hI hG0 hLi S hgL hcov
+  · refine game_ins hG hRO hk hR hn hcL.1 hcn (fun d => ?_) (by rw [r9]; rfl)
+    unfold gval
+    have hL' : LiveC s2 d ↔ LiveC s d := by simp only [LiveC, S.Csize]
+    rw [S.cst, S.csz, hP2]
+    by_cases hd : LiveC s d ∧ cSt s d = .quiet
+    · rw [if_pos ⟨hL'.mpr hd.1, hd.2⟩, if_pos hd]; split <;> omega
+    · rw [if_neg (fun h => hd ⟨hL'.mp h.1, h.2⟩), if_neg hd]; omega
+  · rw [S.cst] at hq
+    have := cSz_le_T hG hI5 hcL.1 hcn ⟨hcL, hq⟩
+    rw [S.csz, if_pos rfl, hP2]; omega
+
+end OM.Proof
