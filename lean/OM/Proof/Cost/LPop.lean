@@ -439,3 +439,144 @@ theorem resSpec_run {s s2 : Core} {x : Nat} {job : Job} (hxs : x < s.C.size)
       simp
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Units of a chunk, at most -/
+
+/-- A chunk's size is the sum of its groups' sizes. -/
+theorem cSz_eq_sum {s : Core} {A : Abs} {gh : GGh} {δg δ δu s₀ : Nat → Nat} {ex ex' : Nat}
+    (hI : INV s A) (hG : GInvE s A.elist gh δg ex) (hC : CInvE s A.elist δ δu s₀ ex') {x : Nat}
+    (hx : LiveC s x) : cSz s x = ∑ h ∈ GrpsC s x, gSz s h := by
+  rw [hC.csz x hx]; unfold celts
+  have e1 : A.elist.filter (fun e => gC s (eG s e) = x) =
+      A.elist.filter (fun e => decide (eG s e ∈ (GrpsC s x).toList)) := by
+    refine List.filter_congr fun e he => ?_
+    have hl : LiveG s (eG s e) := hI.mem_glist_iff.mp (hI.eG_mem he)
+    by_cases h : gC s (eG s e) = x
+    · simp [Finset.mem_toList, mem_GrpsC, h, hl]
+    · simp [Finset.mem_toList, mem_GrpsC, h]
+  rw [e1, length_filter_mem s _ _ (Finset.nodup_toList _), Finset.sum_map_toList]
+  refine Finset.sum_congr rfl fun h hh => ?_
+  exact (hG.sz h (mem_GrpsC.mp hh).1).symm
+
+/-- The groups a unit covers: a quiet group, or a whole family. -/
+def unitMem (s : Core) (g : Nat) : Finset Nat :=
+  if gSt s g = .splitting then {gLl s g, g, gRr s g} else {g}
+
+/-- **Units at most `size / g_min + 1`**: every unit but the one holding the sentinel has at least
+`g_min` elements. -/
+theorem units_le {s : Core} {A : Abs} {gh : GGh} {δg δ δu s₀ : Nat → Nat} {ex' : Nat}
+    (hI : INV s A) (hG : GInv s A.elist gh δg) (hC : CInvE s A.elist δ δu s₀ ex')
+    (hP : GParams s.P) {x : Nat} (hx : LiveC s x) :
+    units s x * gmin s.P ≤ cSz s x + gmin s.P := by
+  have hgG : gmin s.P ≤ s.P.G := by unfold gmin; omega
+  set U := (Finset.range s.Gs.size).filter (UnitG s x) with hU
+  have hmemU : ∀ g, g ∈ U ↔ UnitG s x g := by
+    intro g; rw [hU, Finset.mem_filter, Finset.mem_range]
+    exact ⟨fun h => h.2, fun h => ⟨h.1.2.1, h⟩⟩
+  -- the covered groups lie in `x`
+  have hsub : U.biUnion (unitMem s) ⊆ GrpsC s x := by
+    intro h hh
+    obtain ⟨g, hg, hm⟩ := Finset.mem_biUnion.mp hh
+    obtain ⟨hgL, hgx, -⟩ := (hmemU g).mp hg
+    unfold unitMem at hm
+    split at hm
+    · next hs =>
+      have F := hG.fam g hgL hs
+      simp only [Finset.mem_insert, Finset.mem_singleton] at hm
+      rcases hm with rfl | rfl | rfl
+      · exact mem_GrpsC.mpr ⟨F.lLive, by rw [F.lC, hgx]⟩
+      · exact mem_GrpsC.mpr ⟨hgL, hgx⟩
+      · exact mem_GrpsC.mpr ⟨F.rLive, by rw [F.rC, hgx]⟩
+    · rw [Finset.mem_singleton] at hm; subst hm; exact mem_GrpsC.mpr ⟨hgL, hgx⟩
+  -- units cover disjoint sets of groups
+  have hdisj : (U : Set Nat).PairwiseDisjoint (unitMem s) := by
+    intro g1 h1 g2 h2 hne
+    have u1 := (hmemU g1).mp h1
+    have u2 := (hmemU g2).mp h2
+    simp only [Function.onFun]
+    rw [Finset.disjoint_left]
+    intro a ha hb
+    unfold unitMem at ha hb
+    by_cases s1 : gSt s g1 = .splitting <;> by_cases s2 : gSt s g2 = .splitting <;>
+      simp only [s1, s2, if_true, if_false, Finset.mem_insert, Finset.mem_singleton] at ha hb
+    · have F1 := hG.fam g1 u1.1 s1
+      have F2 := hG.fam g2 u2.1 s2
+      obtain ⟨d1, d2, d3, d4, d5, d6, d7, d8⟩ := F1.disjoint F2 hne s1 s2
+      rcases ha with rfl | rfl | rfl <;> rcases hb with e | e | e <;> simp_all
+    · have F1 := hG.fam g1 u1.1 s1
+      subst hb
+      rcases ha with e | e | e
+      · have := F1.lSt; rw [← e] at this; exact u2.2.2 this
+      · exact hne e.symm
+      · have := F1.rSt; rw [← e] at this; exact u2.2.2 this
+    · have F2 := hG.fam g2 u2.1 s2
+      subst ha
+      rcases hb with e | e | e
+      · have := F2.lSt; rw [← e] at this; exact u1.2.2 this
+      · exact hne e
+      · have := F2.rSt; rw [← e] at this; exact u1.2.2 this
+    · exact hne (ha.symm.trans hb)
+  have hup : ∑ g ∈ U, ∑ h ∈ unitMem s g, gSz s h ≤ cSz s x := by
+    rw [← Finset.sum_biUnion hdisj, cSz_eq_sum hI hG hC hx]
+    exact Finset.sum_le_sum_of_subset hsub
+  -- every unit but the sentinel's has `g_min` elements
+  have hlow : ∀ g ∈ U.erase (eG s s.head), gmin s.P ≤ ∑ h ∈ unitMem s g, gSz s h := by
+    intro g hg
+    obtain ⟨hgh, hg⟩ := Finset.mem_erase.mp hg
+    obtain ⟨hgL, -, hno⟩ := (hmemU g).mp hg
+    unfold unitMem
+    by_cases hs : gSt s g = .splitting
+    · rw [if_pos hs]
+      have F := hG.fam g hgL hs
+      have hlp := F.lp hI hgL
+      have hrp := F.rp hI hgL
+      have hlr := F.lr hI hgL
+      rw [Finset.sum_insert (by simp [hlp, hlr]), Finset.sum_insert (by simp [Ne.symm hrp]),
+        Finset.sum_singleton]
+      have := (hG.split g hgL hs (by unfold NIL; have := hgL.1; omega)).1
+      omega
+    · rw [if_neg hs, Finset.sum_singleton]
+      have hq : gSt s g = .quiet := by
+        cases h : gSt s g
+        · rfl
+        · exact absurd h hno
+        · exact absurd h hs
+        · exact absurd h (hG.notDead g hgL)
+      obtain ⟨-, -, h3⟩ := hG.quiet g hgL hq
+      rcases h3 with h3 | h3
+      · exact h3
+      · exact absurd (mem_runOf.mp h3).2 (Ne.symm hgh)
+  have h1 : gmin s.P * (U.erase (eG s s.head)).card ≤ ∑ g ∈ U, ∑ h ∈ unitMem s g, gSz s h := by
+    calc gmin s.P * (U.erase (eG s s.head)).card
+        = ∑ g ∈ U.erase (eG s s.head), gmin s.P := by rw [Finset.sum_const, smul_eq_mul, mul_comm]
+      _ ≤ ∑ g ∈ U.erase (eG s s.head), ∑ h ∈ unitMem s g, gSz s h := Finset.sum_le_sum hlow
+      _ ≤ ∑ g ∈ U, ∑ h ∈ unitMem s g, gSz s h :=
+          Finset.sum_le_sum_of_subset (Finset.erase_subset _ _)
+  have h2 : U.card ≤ (U.erase (eG s s.head)).card + 1 := by
+    by_cases h : eG s s.head ∈ U
+    · rw [Finset.card_erase_of_mem h]; have := Finset.card_pos.mpr ⟨_, h⟩; omega
+    · rw [Finset.erase_eq_of_notMem h]; omega
+  have hunits : units s x = U.card := rfl
+  rw [hunits]
+  have : U.card * gmin s.P ≤ (U.erase (eG s s.head)).card * gmin s.P + gmin s.P := by
+    have := Nat.mul_le_mul_right (gmin s.P) h2; rw [Nat.add_mul, Nat.one_mul] at this; exact this
+  rw [mul_comm] at h1
+  omega
+
+theorem units_le_unitsOf {s : Core} {A : Abs} {gh : GGh} {δg δ δu s₀ : Nat → Nat} {ex' : Nat}
+    (hI : INV s A) (hG : GInv s A.elist gh δg) (hC : CInvE s A.elist δ δu s₀ ex')
+    (hP : GParams s.P) {x : Nat} (hx : LiveC s x) : units s x ≤ unitsOf s.P (cSz s x) := by
+  have h := units_le hI hG hC hP hx
+  have hgm : 0 < gmin s.P := by unfold gmin; have := hP.G4; omega
+  unfold unitsOf
+  have : units s x - 1 ≤ cSz s x / gmin s.P := by
+    rw [Nat.le_div_iff_mul_le hgm, Nat.sub_mul, Nat.one_mul]; omega
+  omega
+
+end OM.Proof
