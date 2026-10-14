@@ -106,3 +106,159 @@ theorem prepareStep_low {s : Core} (h : LowInv s initAbs.elist) (hI : INV s init
   exact ⟨b, s', hr, h.lowRel hR ⟨initAbs, hI', rfl⟩, hI', hR⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+section init
+variable (P : Params)
+
+theorem init_liveG (g : Nat) : LiveG (initState P) g ↔ g = 1 := by
+  have hG := getX_two (default : Group)
+    { chk := 1, lab := 1 <<< (P.B_g - 1), first := 1, last := 1, size := 1 }
+  simp only [LiveG, gA, initState, hG]
+  constructor
+  · rintro ⟨h1, h2, -⟩; simp at h2; unfold NIL at h1; omega
+  · rintro rfl; simp [NIL]
+
+theorem init_liveC (c : Nat) : LiveC (initState P) c ↔ c = 1 := by
+  simp only [LiveC, initState]; simp; omega
+
+theorem init_g1 : gSz (initState P) 1 = 1 ∧ gSt (initState P) 1 = .quiet ∧ gC (initState P) 1 = 1 ∧
+    gL (initState P) 1 = cG P ∧ gN (initState P) 1 = NIL := by
+  have hG := getX_two (default : Group)
+    { chk := 1, lab := 1 <<< (P.B_g - 1), first := 1, last := 1, size := 1 }
+  simp [gSz, gSt, gC, gL, gN, initState, hG, cG]
+
+theorem init_c1 : cSz (initState P) 1 = 1 ∧ cSt (initState P) 1 = .quiet ∧ cLs (initState P) 1 = 1 := by
+  have hC := getX_two (default : Chunk) { first := 1, last := 1, size := 1 }
+  simp [cSz, cSt, cLs, initState, hC]
+
+theorem init_e1 : eG (initState P) 1 = 1 ∧ eL (initState P) 1 = cE P := by
+  have hE := getX_two (default : Elem) { grp := 1, lab := 1 <<< (P.B_e - 1), h := 0, live := false }
+  simp [eG, eL, initState, hE, cE]
+
+theorem init_runOf : runOf (initState P) initAbs.elist 1 = [1] := by
+  rw [initAbs_elist]; unfold runOf; simp [(init_e1 P).1]
+
+theorem init_GrpsC (c : Nat) : GrpsC (initState P) c = if c = 1 then {1} else ∅ := by
+  ext g
+  rw [mem_GrpsC, init_liveG]
+  constructor
+  · rintro ⟨rfl, hc⟩; rw [(init_g1 P).2.2.1] at hc; subst hc; simp
+  · intro h; split at h
+    · next hc => simp at h; subst h; subst hc; exact ⟨rfl, (init_g1 P).2.2.1⟩
+    · simp at h
+
+end init
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- **The lower invariants of a fresh core.** -/
+theorem lowinv_initState (P : Params) (hGP : GParams P) (hCP : CParams P) (hLP : LParams P) :
+    LowInv (initState P) initAbs.elist := by
+  obtain ⟨g1sz, g1st, g1c, g1l, g1n⟩ := init_g1 P
+  obtain ⟨c1sz, c1st, c1ls⟩ := init_c1 P
+  obtain ⟨e1g, e1l⟩ := init_e1 P
+  have hrun := init_runOf P
+  have hLv := init_liveG P
+  have hLC := init_liveC P
+  have hP : (initState P).P = P := rfl
+  have hG4 := hGP.G4
+  have hcm : 1 ≤ cmax P := by unfold cmax umax; omega
+  have hθ := hCP.I4
+  refine ⟨⟨initAbs, inv_initState P, rfl⟩, ⟨⟨fun _ => 0, fun _ => 0, fun _ => 0⟩, ?_⟩,
+    ⟨fun _ => 0, ?_, ⟨⟨fun _ => false, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0,
+      fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 1⟩, ?_⟩, hLP, hGP⟩, ?_, ⟨fun _ => 1, 0, ?_⟩, hCP⟩
+  · -- groups
+    refine ⟨fun g hg => ?_, fun g hg hs => ?_, fun g hg hs => ?_, fun g hg => ?_, fun g hg hs => ?_,
+      fun g hg hs _ => ?_, fun g hg => ?_, fun g hg e he => ?_, fun g hg hs => ?_, fun g hg hs => ?_,
+      fun g hg hs => ?_⟩ <;> rw [hLv] at hg <;> subst hg
+    · rw [hrun, g1sz]; rfl
+    · rw [g1st] at hs; cases hs
+    · rw [g1st] at hs; cases hs
+    · rw [g1st]; simp
+    · refine ⟨by rw [g1sz, hP]; omega, by rw [g1sz], Or.inr ?_⟩
+      rw [hrun]; simp [initState]
+    · rw [g1st] at hs; cases hs
+    · rw [hrun]; simp
+    · rw [hrun] at he; simp at he; subst he; rw [e1l, hP]; omega
+    · simp
+    · rw [g1st] at hs; cases hs
+    · rw [g1st] at hs; cases hs
+  · -- chunks
+    refine ⟨fun c hc => ?_, fun x hx hxs => ?_, fun c hc hcs => ?_, fun g hg => ?_,
+      fun x hx hxs _ => ?_, fun _ => le_rfl⟩
+    · rw [hLC] at hc; subst hc
+      rw [c1sz]; unfold celts; rw [initAbs_elist]; simp [e1g, g1c]
+    · rw [hLC] at hx; subst hx; rw [c1st] at hxs; cases hxs
+    · rw [hLC] at hc; subst hc; rw [c1st] at hcs; cases hcs
+    · rw [hLv] at hg; subst hg; rw [g1c, hLC, c1st]; simp
+    · rw [hLC] at hx; subst hx; rw [c1st] at hxs; cases hxs
+  · -- labels
+    refine
+      { gaps := fun g hg hl => ?_, range := fun g hg => ?_, hv := fun _ => by simp,
+        pb := fun _ => by simp, pf := fun _ => by simp, roots := fun c hc => ?_,
+        claim2 := fun c hc => ?_, insQ := fun c hc _ => ?_, insO := fun c hc hcs => ?_,
+        insS := fun c hc hcs => ?_, arrS := fun x hx hxs => ?_, arrN := fun c hc _ => by simp,
+        e0 := fun c hc _ => ?_, famChild := fun p hp hps => ?_ }
+    · rw [hLv] at hg; subst hg; rw [g1c, c1ls] at hl; exact absurd rfl hl
+    · rw [hLv] at hg; subst hg; rw [g1l, hP, g1c]; simp
+    · rw [hLC] at hc; subst hc
+      show 0 + pending (initState P) _ 1 ≤ 0 + 0 + 1
+      unfold pending; rw [init_GrpsC, if_pos rfl]
+      have := Finset.card_filter_le ({1} : Finset Nat)
+        (fun g => (fun _ => false : Nat → Bool) g = false ∧ gSt (initState P) g ≠ .splitting)
+      simp at this ⊢; omega
+    · rw [hLC] at hc; subst hc
+      show 0 * gmin _ + charge (initState P) _ 1 ≤ 0
+      rw [charge_eq, init_GrpsC, if_pos rfl, Finset.sum_singleton]
+      unfold chTerm; rw [g1st]; simp
+    · rw [hLC] at hc; subst hc; show 0 + 1 ≤ _; rw [c1sz]; omega
+    · rw [hLC] at hc; subst hc; rw [c1st] at hcs; cases hcs
+    · rw [hLC] at hc; subst hc; rw [c1st] at hcs; cases hcs
+    · rw [hLC] at hx; subst hx; rw [c1st] at hxs; cases hxs
+    · rw [hLC] at hc; subst hc; show 1 ≤ _; simp only [c1sz, le_refl]
+    · rfl
+  · -- the queue: empty
+    refine ⟨fun _ => [], [], ⟨fun c => ?_, fun c h => ?_, fun b => ?_, fun b c => ?_, ?_, fun b => ?_,
+      List.IsChain.nil, rfl⟩⟩
+    · have : inQC (initState P) c = false := by
+        unfold inQC
+        by_cases hc : c = 1
+        · subst hc; rw [c1sz, hP]; simp; omega
+        · simp [hLC, hc]
+      rw [this]; simp [initState, Array.getX, Array.getD]
+    · exfalso
+      unfold inQC at h; simp only [decide_eq_true_eq] at h
+      rw [hLC] at h; obtain ⟨rfl, -, h3⟩ := h; rw [c1sz, hP] at h3; omega
+    · exact ⟨List.nodup_nil, by simp, by simp [initState, Array.getX, Array.getD, NIL],
+        fun _ h => by simp at h, fun _ h => by simp at h⟩
+    · constructor
+      · intro h; simp at h
+      · rintro ⟨h, -⟩
+        exfalso
+        unfold inQC at h; simp only [decide_eq_true_eq] at h
+        rw [hLC] at h; obtain ⟨rfl, -, h3⟩ := h; rw [c1sz, hP] at h3; omega
+    · exact ⟨List.nodup_nil, by simp, by simp [initState, NIL], fun _ h => by simp at h,
+        fun _ h => by simp at h⟩
+    · simp
+  · -- the chunk count
+    refine ⟨by simp [initState], ?_, fun c hc _ => by rw [hP]; exact hcm⟩
+    have hQ : quietSet (initState P) = {1} := by
+      ext c; rw [mem_quietSet, hLC]
+      constructor
+      · rintro ⟨rfl, -⟩; simp
+      · intro h; simp at h; subst h; exact ⟨rfl, c1st⟩
+    rw [hQ, Finset.sum_singleton, c1sz]; simp [initState]
+
+end OM.Proof
