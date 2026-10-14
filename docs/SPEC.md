@@ -507,7 +507,8 @@ falls back.
   * The defaults (`K_R = 2`, `c_T = 1`) are safe empirically: measured overshoot is about
     60% of the bound. **Proof parameters: `K_R = 4`, `c_T = 2`.** *(Superseded by
     `docs/PROOF.md` §2.9 and §4.4: with the provable job length `(s+3)H`, the condition
-    becomes `c_T·K_R ≳ 0.7(s+3)`; the proof uses `c_T = 3`, `K_R = 4`, `s = 11`.)*
+    becomes `c_T·K_R ≳ 0.7(s+3)`; the proof uses `c_T = 3`, `K_R = 4`, `s = 11`, and
+    `L ≥ 8`; exact conditions in `docs/PROOF.md` §4.7.)*
 * **Rebuild copy speed:** `K_B ≥ 3` keeps the old core's fill ≤ 0.75 at the `N/2` trigger.
 
 ### 7.2 Modelling requirements for the Lean port
@@ -549,6 +550,9 @@ Needed for T1 and T2.
 ---
 
 ## 9. Lean architecture
+
+*(Superseded by `docs/LEAN.md`: a deep-embedded word-RAM with a counting interpreter
+replaces the shallow cost monad below, and the milestones are revised there.)*
 
 ```
 OrderMaintenance/

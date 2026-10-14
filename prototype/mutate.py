@@ -21,7 +21,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILES = ["core.py", "pq.py", "top_wbbt.py", "top_simple.py", "wrapper.py", "guards.py",
          "spec.py", "stress.py", "test_om.py", "top_stress.py", "battery.py", "fuzz.py",
-         "lemmas.py"]
+         "lemmas.py", "top_bounds.py", "lower_bounds.py"]
 
 # (id, file, old, new, description, expected) ; expected = "kill" or "survive"
 MUTANTS = [

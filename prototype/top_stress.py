@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass
 
 from guards import GuardFailure
+import top_bounds
 from top_wbbt import WBBTTop
 
 NIL = -1
@@ -171,6 +172,11 @@ def run(name: str, m: int, check_every: int = 0, seed: int = 1, **kw) -> dict:
         "T4_children": top.max_children,
         "T4_in_tables": top.max_in_tables,
         "T5_bits_used": top.beta - (top.min_gap.bit_length() - 1),
+        # exact per-height bounds (top_bounds.py); judged only if T3's hypotheses hold
+        "exact_ok": top.bounds is not None and top_bounds.summary(top.a, top.s, top.H)["ok"],
+        "exact_violations": [(c, h, v, b) for c, h, v, b in top_bounds.check_top(top) if v > b],
+        "exact_tight": sorted(((round(v / b, 3) if b > 0 else (0 if v <= 0 else 9.0)), c, h, v, b)
+                              for c, h, v, b in top_bounds.check_top(top) if b > 0)[-4:],
         "secs": round(time.time() - t0, 1),
     }
 

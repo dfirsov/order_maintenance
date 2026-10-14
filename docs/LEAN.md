@@ -1,0 +1,291 @@
+# Lean Formalization — Design
+
+Status: **draft v0.1** (2026-10-14). This note fixes the design of the Lean 4 development
+before any code is written. It supersedes `docs/SPEC.md` §9–§10 (Lean architecture and
+milestones), which assumed a shallow cost monad.
+
+**Goal.** A convincing, machine-checked proof that the algorithm of `docs/PROOF.md` answers
+correctly and performs O(1) steps per operation in the worst case. The O(1) bound is the
+priority. The speed of any executable Lean code is not a goal.
+
+---
+
+## 1. The idea in one paragraph
+
+Running time is a property of an algorithm on a *machine model*, not of the language used
+to reason about it. So we define a word RAM inside Lean: memory, instructions, and a cost
+of one per instruction. We write the algorithm as a *program for that machine*: a syntax
+tree in a small imperative language, given meaning by an interpreter that counts steps. We
+then prove two things about that program:
+* its answers match the list specification;
+* starting from any reachable state, every operation finishes within an explicit constant
+  number of machine steps.
+
+Lean is only the meta-language. How fast Lean itself would evaluate the interpreter is
+irrelevant, exactly as a paper proof about a RAM does not depend on the speed of the paper.
+
+---
+
+## 2. Theorems to prove
+
+Fix the proof parameters of `PROOF.md` §2.9: `G = 2L`, `T = 3L²`, `K_G = K_C = K_R = K_B = 4`,
+`a = 8`, `s = 11`, `β = 48`, `L ≥ 8`.
+
+**Theorem A (correctness).** For every operation sequence `ops` whose arguments are live
+elements (`PROOF.md` §1), running the program on `ops` returns the same answers as
+`Spec.run ops`.
+
+**Theorem B (constant time).** There is an explicit constant `C`, a numeral computed from the
+parameters, with the following property. For every valid operation sequence and every
+prefix of it, the machine steps of the next operation are at most `C`.
+
+**Theorem W (word size).** Every value ever stored or computed by the program is below
+`2^(c_w · L)` for an explicit constant `c_w`, where `L = ⌈log₂ N⌉` for the current core.
+This justifies charging one step per word operation: words have `Θ(log N)` bits, and by
+Lemma W, `N` stays within a constant factor of the recent maximum number of live elements.
+
+The statement of B quantifies over all histories. Both A and B are about the *same*
+program, the deep-embedded one of §3.
+
+---
+
+## 3. The machine model (`OM/Machine/`)
+
+### 3.1 Memory and words
+
+* A fixed, finite set of **array names**, one per field of the state layout (§5): for
+  example `elem.next`, `grp.lab`, `top.slot0.label`. Each array maps `Nat → Nat` and has a
+  capacity. Reading or writing outside the capacity is a machine error.
+* **Allocation.** A core's arrays are allocated at capacity `N` (or a proved bound
+  `O(N)`) in O(1) steps, and read as 0 until written. This is the standard assumption of
+  *constant-time-initializable arrays* (Briggs–Torczon; Navarro 2014), which a real word
+  RAM implements with O(1) overhead per access. It is a stated assumption of the model.
+* **Words.** All values are `Nat`. The machine has a word-size parameter `w`. Theorem W proves
+  that no value reaches `2^w`, with `w = c_w·L`. The interpreter does not truncate; it records
+  the largest value seen, so Theorem W is a separate statement.
+* **Locals.** Each procedure has a finite set of word-valued local variables.
+
+### 3.2 Instructions (each costs 1)
+
+```
+e ::= n | x | e + e | e − e (guarded e₁ ≥ e₂) | e * e | e / 2^k | e % 2^k | msb e
+    | e < e | e = e | ¬e | e ∧ e
+s ::= skip | x := e | x := A[e] | A[e] := e | s ; s | if e then s else s
+    | for i < e do s            -- the bound e is evaluated once, before the loop
+    | call p(e…) returning x…   -- non-recursive: procedures are ranked, calls go to lower rank
+    | fail                      -- a failed guard: jumps to the caller's FALLBACK handler
+```
+
+* `msb` (most significant bit) and multiplication are standard unit-cost word-RAM
+  operations. They are needed only to compute a new core's parameters (`L' = ⌈log₂ N'⌉`,
+  `T' = 3L'²`, `H'`) in O(1) during a rebuild.
+* There are **no `while` loops and no recursion**. So the interpreter is a total, structurally
+  recursive Lean function `exec : Prog → Stmt → State → Except Err (State × Cost)`. No fuel
+  is needed, and every program terminates by construction.
+
+### 3.3 Cost semantics
+
+`exec` charges one unit per evaluated expression node, assignment, array access, branch,
+loop iteration and call. Cost is part of the semantics. There is no way to annotate cost by
+hand, and no way to compute outside the interpreter.
+
+**Why this is convincing.** With a deep embedding, the only computation the algorithm can
+do is interpreted instructions, each charged. A shallow embedding (ordinary Lean code in a
+counting monad) would let pure Lean code between primitives do uncounted work. Ruling that
+out would depend on review rather than proof.
+
+### 3.4 What Theorem B reduces to
+
+There is no recursion, and every loop bound is an expression. So the cost of one operation
+is bounded by a sum over its loops of (iterations × body cost), evaluated in the current
+state. The bodies are fixed programs with fixed costs. Theorem B therefore reduces to
+invariants of reachable states:
+* the O(n) paths are never taken: FALLBACK (K1) and the PQ slow path (K2);
+* every data-dependent loop is bounded by a constant (K3). A data-dependent loop is one
+  whose bound is read from the state: scanning a top table (at most 46 entries), copying a
+  table at drain start, or walking a node's live children (at most 26).
+
+These are exactly the facts that `PROOF.md` §4 proves. The counting itself becomes
+mechanical, through a cost lemma for each procedure.
+
+---
+
+## 4. Two levels and a simulation
+
+Reasoning directly about syntax trees for the whole algorithm would be painful. So the
+development has two levels.
+
+* **Level F (functional model, `OM/Model/`).** The algorithm as pure Lean functions on a
+  structured state: records with finite maps or arrays, and explicit job records. It mirrors
+  the Python prototype closely, and it is executable. It carries no cost. **All of the
+  mathematics is proved here:**
+  * INV-S, Theorem A;
+  * invariants F, (P), (W1), (W3), (O), (S), (Q);
+  * Lemmas G1–G4, C1–C3, Z, R, T0–T5, W;
+  * the induction over time of `PROOF.md` §4.7.
+* **Level M (machine program, `OM/Impl/`).** The same algorithm as a program of §3, a
+  straightforward transliteration of Level F.
+* **Simulation theorem.** For an encoding `enc : F.State → M.State`, running the program of
+  operation `op` on `enc σ` yields `enc (F.op σ)`, with cost at most `cost_op(σ)`. Here
+  `cost_op(σ)` is an explicit expression in a few size quantities of `σ`:
+  * table sizes and child counts touched;
+  * whether FALLBACK or the PQ slow path is taken;
+  * the number of elements that FALLBACK scans.
+
+  This is proved procedure by procedure, with a weakest-precondition calculus for the
+  language (§6). Each proof is local and mechanical.
+* **Theorem B** = simulation + Level-F invariants bounding those quantities on reachable
+  states.
+* **Theorem A** at Level M follows from Theorem A at Level F through the simulation.
+
+Level F is executable, so it is differentially tested against the Python prototype before
+any proof (§8). The Level-M interpreter is executable as well, so the transliteration is
+tested too.
+
+---
+
+## 5. State layout (Level M; Level F uses the same fields as records)
+
+The prototype uses Python lists inside nodes and hash maps for handles. The machine version
+replaces every one of these with fixed fields, so that every primitive is O(1):
+
+| Prototype | Machine layout |
+|---|---|
+| element/group/chunk lists | `next`, `prev` arrays (indices), plus per-record fields (`lab`, `size`, `state`, `src`, `l`, `r`, `first`, `last`, …) |
+| priority queue | bucket arrays indexed by size, with doubly linked bucket lists and a doubly linked list of non-empty buckets (as `pq.py`) |
+| a node's live children (Python list) | doubly linked list through `parent`, `child_first`, `child_last`, `sib_next`, `sib_prev` |
+| a table: `order` list + `lab` dict + `side` dict | **entry-centric slots.** By invariant (Q) every entry lies in at most 2 tables, so each entry has two slots `slot[k] = (table, label, side, prev, next)`, linking the table's entries in label order. The table owner keeps `first`/`last`. Looking up an entry's label in a table, or inserting a neighbour, is O(1). The prototype's `order.index(e)` scan disappears. |
+| `in_tables` list | the two slots themselves |
+| chunk paths `p₁ … p_H` | array of size `m_cap × H` |
+| jobs (Python generators) | one job record: phase (copy / walk), level `j`, current node `u`, sweep steps left, and `x, y, z` |
+| wrapper hash maps `cur_idx`, `nxt_idx` | handle arrays with two slots per handle (one per core parity) and an epoch stamp (`PROOF.md` §2.7) |
+
+**Capacities** are proved bounds:
+* elements: at most `N`;
+* groups and chunks: `O(N/G)` and `O(N/T)`;
+* top nodes: at most `1 + 2·(drains) = O(m)`.
+
+These are additional Level-F invariants, and running out of capacity is a machine error
+that the proofs exclude.
+
+---
+
+## 6. Program logic (`OM/Machine/WP.lean`)
+
+* `wp : Stmt → (State → Cost → Prop) → (State → Prop)`, proved sound for `exec`.
+* Procedure specifications: `{P} p {Q} [≤ c]`, with `c` an expression in the pre-state.
+* Simp lemmas compute `wp` through straight-line code. Loops use an invariant and a
+  per-iteration cost.
+* The simulation proofs of §4 are triples of the form
+  `{σ_M = enc σ_F ∧ Inv σ_F} p {σ_M' = enc (F.p σ_F)} [≤ cost_p σ_F]`.
+
+This is a small, standard Hoare logic. No separation logic is needed: arrays are named
+globals, and every procedure's footprint is a fixed set of array names.
+
+---
+
+## 7. Files and milestones
+
+```
+OM/
+  Spec.lean                 list specification: insertAfter, insertFirst, delete, order
+  Machine/Syntax.lean, Exec.lean, WP.lean, Cost.lean
+  Model/Params.lean         proof parameters; conditions I1–I10 (closed forms, from lower_bounds.py)
+  Model/Labels.lean         §2.2 primitives and their guards
+  Model/Core.lean           elements, groups, chunks, splits, family moves, reservation, PQ
+  Model/Top.lean            WBBT with ghost drains, jobs
+  Model/Fallback.lean, Model/Wrapper.lean
+  Proof/Correct/…           INV-S, Lemmas 3.1–3.3, Invariant R, Theorem A (F)
+  Proof/Cost/Zeroing.lean   Theorem Z
+  Proof/Cost/Groups.lean, Chunks.lean, Reservation.lean, Wrapper.lean
+  Proof/Cost/Top/…          T0–T5, (Q)
+  Proof/Cost/Assembly.lean  the induction over time (§4.7)
+  Impl/…                    Level-M programs, one file per Model file
+  Proof/Sim/…               simulation theorems
+  Main.lean                 Theorems A, B, W
+  Test/…                    trace export and import, differential runner
+```
+
+| # | Deliverable | Proof content | Risk |
+|---|---|---|---|
+| M0 | Lake project with Mathlib; `Spec`; machine syntax, `exec`, cost; `wp` with soundness | wp soundness | low |
+| M1 | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
+| M2 | **Theorem A** at Level F | INV-S preservation, guards, FALLBACK, Invariant R | medium |
+| M3 | Theorem Z (warm-up, can start in parallel with M1) | standalone combinatorics | low |
+| M4 | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W | invariant reasoning | medium |
+| M5 | Top-structure lemmas T0–T5, (Q) | the largest proof | **high** |
+| M6 | Level M programs and simulation; assembly; **Theorems B and W** | mechanical, but long | medium |
+
+The order is chosen so that the riskiest mathematics (M5) is attacked on a validated
+model, and the mechanical machine layer (M6) comes last, when Level F is stable.
+
+---
+
+## 8. Validation before proof
+
+1. **Traces.** The Python prototype exports operation sequences with their answers and
+   instrumented maxima as JSON, for every stress workload of `prototype/stress.py`.
+2. **Level F replays them** and must give the same answers, the same structural events
+   (splits, drains, reservations) and the same maxima. This catches transliteration errors
+   before they cost proof effort.
+3. **Level M replays a subset** through the interpreter and checks that the encoding
+   commutes, and that the measured step counts stay within the `cost_op` expressions.
+
+---
+
+## 9. Trusted base and assumptions
+
+* The Lean kernel, and Mathlib.
+* The **definition** of the machine (§3). It is short and must be reviewed carefully. It is
+  the cost model.
+* The word-RAM assumptions:
+  * unit cost per instruction, including `*` and `msb`;
+  * words of `Θ(log n)` bits (justified by Theorem W and Lemma W);
+  * constant-time-initializable arrays.
+* The **user interface**: operations take handles of live elements (`PROOF.md` §1). Invalid
+  calls are outside the theorem.
+
+Not covered:
+* the running time of compiled Lean code;
+* memory reclamation of retired cores (the model simply stops using them);
+* concurrency.
+
+---
+
+## 10. Open choices
+
+1. **Mathlib version.** Pin the release matching Lean 4.35.0.
+2. **Parameters.** Concrete numerals for the proof preset (`a = 8`, `s = 11`, …), with only
+   `L` symbolic. This keeps I1–I10 provable by `omega`/`nlinarith` plus a few closed forms.
+   Generalizing to symbolic `a, s` is possible later.
+3. **`Nat` labels.** Keep the bit-width bound a separate invariant (Theorem W) rather than
+   working in `Fin (2^w)`. This keeps the correctness proofs free of overflow reasoning.
+4. **Default vs proof preset.** Only the proof preset is formalized. The default preset stays
+   an empirical artifact of the prototype.
+
+---
+
+## 11. Existing frameworks (surveyed 2026-10-14)
+
+No existing Lean 4 framework gives what §3 needs: a cost model that holds **by construction**
+for a word-RAM language with arrays, together with a program logic. What exists, and how we
+use it:
+
+| Framework | What it is | Cost by construction? | Use for us |
+|---|---|---|---|
+| CSLib `TimeM` (`Cslib.Algorithms.Lean.TimeM`) | shallow writer monad, manual `tick` | no; its docs say the time field "is NOT verified against actual cost" | none; this is the weakness §1 avoids |
+| CSLib query models / Algolean `Prog` | free monad over declared queries, costs derived from the queries | yes for queries, but pure Lean code between queries is free | design reference; work in progress |
+| CSLib Boole | Boogie-like imperative language with Lean VCs | no cost semantics yet (on the roadmap) | watch |
+| Lean core `Std.Do` / `mvcgen` | VC generator for monadic `do` code | no cost | candidate proof engine for §6 if `exec` is given a monadic denotation; try in M0 |
+| Loom / Velvet (VERSE lab) | shallow monadic verifiers, Dafny-style, SMT backed | no cost | not needed |
+| Iris-Lean | separation logic | no time credits yet | not needed (§6) |
+| Isabelle AFP *Hoare Logics for Time Bounds* (Haslbeck, Nipkow) | IMP with time, three logics, sound and complete VCGs | yes | closest design template for §3 and §6 |
+| Isabelle-LLVM with time (Haslbeck, Lammich) | refinement down to LLVM with resource currencies | yes, real code | gold standard; another prover |
+| CFML / Iris time credits (Rocq) | separation logic with time credits | yes | amortized analyses; not needed for worst case |
+| calf / decalf (Agda) | cost-aware type theory | yes | conceptual reference |
+
+Consequences:
+* We build the small deep-embedded machine of §3 ourselves, following the Isabelle IMP-with-time
+  design. It is a few hundred lines.
+* M0 tries `Std.Do`/`mvcgen` as the VC engine before writing our own `wp` simp set.
+* CSLib's roadmap asks for an explicit RAM model; ours could be contributed there later.

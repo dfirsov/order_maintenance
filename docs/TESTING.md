@@ -402,3 +402,92 @@ alone.
 
 So no reachable corner of the algorithm is left untested.
 
+
+## 9. Exact bounds and the adversarial review (2026-10-14, PROOF.md v0.3)
+
+PROOF.md v0.3 replaces the asymptotic bounds of the top structure and the lower levels with
+exact integer constants. The checks are:
+* `prototype/top_bounds.py` computes the per-height constants of Lemmas T3–T5;
+* `prototype/lower_bounds.py` computes the constants and conditions I1–I10 for each `L`;
+* `top_wbbt.py` records the per-height maximum of every bounded quantity, and `check()` now
+  also verifies the new invariant (Q).
+
+The lemma checker and `top_stress.py` compare the measured maxima with the exact bounds.
+They judge a bound only when the lemma's hypotheses hold for the parameters.
+
+### Exact bounds
+
+| Run | Result |
+|---|---|
+| `lemmas.py 300000 --preset both --seeds 2` (23 workloads, 92 runs; `results/lemmas_exact_3e5.txt`) | **0 violations**, at most 117 steps per operation |
+| top structure alone, 6 adversaries × `s ∈ {9, 11}`, 3·10⁴ chunks (`results/top_exact_3e4.txt`) | 0 fallbacks, **0 violations** of the exact bounds, for `s = 9` too |
+| top structure alone, 6 adversaries × `s ∈ {9, 11}`, 3·10⁵ chunks (`results/top_exact_3e5.txt`) | 0 fallbacks, **0 violations** of the exact bounds (12 runs); job length ≤ 71 steps (s = 11), ≤ 26 children/table entries, ≤ 19 gap bits used; drain start weight W_h + 1 reached at heights 4 and 5 (bound W_h + 2) |
+
+**Attained exactly** (proof preset, `a = 8`, `s = 11`, height 1):
+
+| Bound | Value |
+|---|---|
+| drain start weight | `W_1 + 2 = 18` |
+| funded jobs per drain | `K_1 = 3` |
+| blocked target weight | `Θ_1 = 15` |
+| weight of a target pair | `Π_1 = 24` |
+| fresh target weight | `τ_1 = 9` and `λ_1 = 8` |
+| live children and live table entries | `C_1 = E_1 = 18` |
+| entries of a new table | `n₀_1 = 9` |
+| halving depth | `D_1 = 7` (target-owned table) and `D^c_1 = 10` (chain table) |
+| tables per entry | 2 |
+| Lemma W bounds (`K_B` from 4 to 32, after the wrapper fix) | excess 0 |
+
+The chunk bounds come close but are not attained: C1's insertion count is within 2–5 of its
+bound. C3's group-label depth is far from tight: at most 16 halvings measured against a bound
+of 64.
+
+**Default preset (`s = 8`, I6 false).** The checker reports the bounds there without judging
+them. At height 1 they are exceeded exactly as §4.5.3 predicts:
+* blocked targets reach `Θ_1 = 17` for `s = 8`;
+* fresh targets reach 10 > 9, drain starts 19–20 > 18, and children and table entries
+  19–20 > 18.
+
+This happens once a released target may exceed `W_1`. No fallback occurs.
+
+### Adversarial review
+
+Three independent reviewers, each covering one part of the proof, read PROOF.md v0.3 and
+tried to break it against the code. Each wrote its own scripts, kept outside the repository.
+The findings are in PROOF.md §6.7. Those that concern testing:
+
+* **T5 and C3 gap depth.** The original Claim 1 failed on concrete runs: thousands of gaps
+  violated it, and some were later halved. The exact gap bound that the instrumentation
+  checks (`gap ≥ g₀ >> D`) was never violated. The corrected proofs bound that quantity.
+* **Lemma W.** The old `wrapper.py` lost up to two steps per rebuild, and its own Lemma W
+  checks overshot by 1 for `K_B ≥ 12`. After the fix, `wrapper.py` performs exactly the steps
+  of §2.7, and the bounds hold with excess exactly 0 for `K_B` from 4 to 32.
+  `rebuild_attack.py` still runs with 0 fallbacks, at 86–112 steps per operation.
+* **`β = 3`.** FALLBACK produced equal tags (`Core.check`: "chunk tags unsorted"), which is why
+  §3.4 now states the condition on `β`. All presets use `β ≥ 40`.
+* **No correctness counterexample.** Differential fuzzing aimed at the rebuild cursor found
+  no mismatch:
+  * presets default with both top structures, proof, and tiny labels;
+  * `K_B ∈ {2, 3, 4, 7}`;
+  * inserts just before, at and after the cursor;
+  * FALLBACK in the middle of a rebuild.
+
+### Mutation testing after the fixes
+
+After the wrapper fix, M07 ("reservation serves the emptiest chunk") survived the battery.
+The rebuild timing had shifted, and the 20,000-operation `starve` run no longer pushed
+chunks past `0.95·T`; it still does at 10⁵ operations. Rather than lengthen the run, the
+core now counts reservations that pop a chunk smaller than the PQ's maximum
+(`stats.pop_not_max`). The lemma checker requires this count to be 0, because it is exactly
+the property Lemma R needs. M07 is now killed by that claim. The full suite is **ALL AS
+EXPECTED** (`results/mutation.txt`).
+
+### Reproducing (prototype/)
+
+```
+python3 top_bounds.py 8 11 48          # per-height constants of T3-T5 and the closed forms
+python3 lower_bounds.py 8 200          # conditions I1-I10 for every L (all hold from L = 8)
+python3 lemmas.py 300000 -j 8 --preset both --seeds 2
+python3 -c "import top_stress as t; print(t.run('t3', 30000, check_every=1500, s=11)['exact_violations'])"
+python3 mutate.py -j 6
+```

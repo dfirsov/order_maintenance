@@ -54,15 +54,15 @@ class OrderMaintenance:
     def next_capacity(self) -> int:
         """Capacity of the next core (docs/PROOF.md §2.7, Lemma W).
 
-        The rebuild scans all of cur (tombstones included) at K_B - 1 net steps
-        per operation, after at most H' preparation steps, and every insertion
-        meanwhile may be mirrored into nxt. So nxt receives at most
-        live + ceil((count + H')/(K_B - 1)) elements; size it four times that.
-        H' <= L' <= L + 2 because the new capacity is at most 4N.
+        The rebuild takes H' preparation steps plus one step per element of cur
+        it scans (tombstones included), K_B steps per operation, and every
+        insertion meanwhile may end up in nxt. So nxt receives at most
+        live + floor((count + H')/(K_B - 1)) + 1 elements; size it four times that.
+        H' <= L + 2 because the new capacity is at most 4N (K_B >= 4).
         Sizing by `live` alone is wrong: see rebuild_attack.py.
         """
         prep = self.cur.P.L + 2
-        mirrored = -(-(self.cur.count + prep) // (self.K_B - 1))
+        mirrored = (self.cur.count + prep) // (self.K_B - 1) + 1
         return 4 * max(self.live + mirrored, 16)
 
     def _insert(self, hx: int | None) -> int:
@@ -76,7 +76,7 @@ class OrderMaintenance:
         self.live += 1
         self.max_fill = max(self.max_fill, self.cur.count / self.cur.P.N)
         P = self.cur.P
-        bound = P.N // 2 + -(-(P.N // 2 + P.L + 2) // (self.K_B - 1))
+        bound = P.N // 2 + (P.N // 2 + P.L + 2) // (self.K_B - 1) + 1
         self.max_fill_excess = max(self.max_fill_excess, self.cur.count - bound)
         self._rebuild_step()
         return hy
@@ -90,15 +90,26 @@ class OrderMaintenance:
                 self.cursor_set = False
                 self.rebuilds += 1
             return
-        if not self.cursor_set:
-            # build nxt's initial top structure incrementally, then start copying
-            for _ in range(self.K_B):
+        # exactly K_B steps (docs/PROOF.md §2.7, Lemma W): first H' preparation steps
+        # (the call that finds the preparation finished does no work and costs
+        # nothing), then one step per scanned element; the swap is free and happens
+        # as soon as the cursor passes the last element
+        budget = self.K_B
+        while budget > 0:
+            if not self.cursor_set:
                 if self.nxt.prepare_step():
                     self.cursor = self.cur.E[self.cur.HEAD].next
                     self.cursor_set = True
-                    break
-            return
-        for _ in range(self.K_B):
+                else:
+                    budget -= 1
+                continue
+            if self.cursor != NIL:
+                e = self.cur.E[self.cursor]
+                if e.live:
+                    assert e.h not in self.nxt_idx, "cursor met an already-copied element"
+                    self.nxt_idx[e.h] = self.nxt.insert_after(self.nxt.tail, e.h)
+                self.cursor = e.next
+                budget -= 1
             if self.cursor == NIL:
                 self.max_install_fill = max(self.max_install_fill, self.nxt.count / self.nxt.P.N)
                 self.max_install_excess = max(self.max_install_excess,
@@ -107,11 +118,6 @@ class OrderMaintenance:
                 self.cur, self.cur_idx = self.nxt, self.nxt_idx
                 self.nxt, self.nxt_idx = None, {}
                 return
-            e = self.cur.E[self.cursor]
-            if e.live:
-                assert e.h not in self.nxt_idx, "cursor met an already-copied element"
-                self.nxt_idx[e.h] = self.nxt.insert_after(self.nxt.tail, e.h)
-            self.cursor = e.next
 
     # ------------------------------------------------------------ inspection
     def cores(self) -> list[Core]:

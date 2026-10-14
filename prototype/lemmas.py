@@ -46,8 +46,8 @@ def claims_for(core) -> list[tuple[str, float, float, bool]]:
             out.append(("G4 nested halvings of an element gap", halvings, U_G, True))
             out.append(("G4 element label budget (halvings)", halvings,
                         math.floor(math.log2(P.D_e)) - 1, True))
-    # Chunk level (C1-C3, F); hypotheses: K_C >= 3
-    hc = P.K_C >= 3
+    # Chunk level (C1-C3, F); hypotheses: K_C >= 2 (and G1's)
+    hc = P.K_C >= 2 and k_G is not None and G >= 5
     if st.c1_excess > -(1 << 29):
         out.append(("C1 family insertions - k_C(s0)", st.c1_excess, 0, hc))
     if st.c1_size_excess > -1e8:
@@ -57,8 +57,13 @@ def claims_for(core) -> list[tuple[str, float, float, bool]]:
     out.append(("F element moves across chunks", st.cross_moves, 0, True))
     if st.min_gap_g < (1 << 4000):
         halvings = math.floor(math.log2(P.D_g)) - (st.min_gap_g.bit_length() - 1)
-        out.append(("C3 nested halvings of a group gap", halvings,
-                    2 + math.ceil(8 * T / (3 * G)) + 4, hc))
+        # C3: 2 + (chunk lifetime insertions + k_G) / ceil((G-3)/2), lifetime = quiet max + 2 k_C
+        if hc:
+            units = max(T, st.max_quiet) // -(-(G - 3) // 2) + 1
+            k_C = -(-units // (P.K_C - 1)) + 1
+            I_C = max(T, st.max_quiet) + 2 * k_C
+            out.append(("C3 nested halvings of a group gap", halvings,
+                        2 + I_C // -(-(G - 3) // 2), hc))
     out.append(("no fallbacks", st.fallbacks, 0, True))
     # Reservation (Lemma R) and the top structure (T3-T5)
     if P.top == "wbbt":
@@ -68,6 +73,7 @@ def claims_for(core) -> list[tuple[str, float, float, bool]]:
         R = -(-J // P.K_R) + 1            # Lemma R: a job may start mid-insertion
         T_hard = P.theta + R * (HARMONIC(max(m - 1, 1)) + 1)
         over = max(0, st.max_quiet - P.theta)
+        out.append(("R zeroing pops a largest quiet chunk (count of other pops)", st.pop_not_max, 0, True))
         out.append(("R overshoot above theta <= R(H_m+1) (provable J)", over, T_hard - P.theta, True))
         if st.max_job:
             R_meas = -(-st.max_job // P.K_R) + 1
@@ -86,6 +92,18 @@ def claims_for(core) -> list[tuple[str, float, float, bool]]:
         out.append(("T4 tables per entry <= 2", top.max_in_tables, 2, True))
         if st.max_job:
             out.append(("T4 job length <= (s+3)H", st.max_job, J, True))
+        import top_bounds
+        try:
+            hyp_exact = top_bounds.summary(a, s, H)["ok"] if s >= 3 else False
+        except (ValueError, AssertionError):
+            hyp_exact = False
+        for claim, h, meas, bound in top_bounds.check_top(top):
+            if claim.startswith("T4.4"):
+                continue           # cores step jobs themselves: st.max_job below
+            if bound < 0:          # lower bounds are recorded negated
+                out.append((f"{claim} [exact; lam/min]", -bound, -meas, hyp_exact))
+            else:
+                out.append((f"{claim} [exact]", meas, bound, hyp_exact))
         if top.min_gap < (1 << (beta + 1)):
             used = beta - (top.min_gap.bit_length() - 1)
             out.append(("T5 table label bits used <= 4qa+3+log2(6a+3)", used,
@@ -123,10 +141,10 @@ def run(args):
     # wrapper (Lemma W)
     K_B = om.K_B
     ex = lambda v: 0.0 if v <= 0 else math.inf
-    worst["W1 cur.count - (N/2 + (N/2+L+2)/(K_B-1))"] = (
-        ex(om.max_fill_excess), om.max_fill_excess, 0, K_B >= 2, None)
+    worst["W1 cur.count - (N/2 + floor((N/2+L+2)/(K_B-1)) + 1)"] = (
+        ex(om.max_fill_excess), om.max_fill_excess, 0, K_B >= 4, None)
     worst["W2 nxt.count - (N'/4 + 1) at install"] = (
-        ex(om.max_install_excess), om.max_install_excess, 0, K_B >= 2, None)
+        ex(om.max_install_excess), om.max_install_excess, 0, K_B >= 4, None)
     worst["W max fill cur.count/N (info)"] = (om.max_fill, om.max_fill, None, False, None)
     return {"workload": name, "n": n, "preset": preset, "seed": seed, "max_steps/op": max_steps,
             "secs": round(time.time() - t0, 1), "claims": worst}

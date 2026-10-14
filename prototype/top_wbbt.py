@@ -34,6 +34,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+import top_bounds
 from guards import GuardFailure
 
 NIL = -1
@@ -58,6 +59,8 @@ class Node:
     overflow_of: int = NIL                         # source node while it drains into us
     alive: bool = True
     funded: int = 0                                # instrumentation: jobs that funded our drain (T3)
+    g0: int = 0                                    # instrumentation: initial label gap of the table (T5)
+    kind: str = "drain"                            # instrumentation: "chain", "drain" or "built"
 
 
 class WBBTTop:
@@ -80,9 +83,19 @@ class WBBTTop:
         self.max_target_ratio = 0.0    # max weight / W_h of a target while its source drains
         self.max_start_ratio = 0.0     # max weight / W_h of a node when its drain starts
         self.max_funded_ratio = 0.0    # max funding jobs / ((W_h + 2)/(s - 2) + 1) per drain
+        # per-height maxima for the exact bounds of top_bounds.py (PROOF.md §4.5.2-4.5.4):
+        # hmax[(name, h)] = largest value seen; depth_viol counts label gaps below the T5 bound
+        self.hmax: dict[tuple[str, int], int] = {}
+        self.depth_viol = 0
         P = core.P
-        m_max = 6 * P.N // max(P.theta, 1) + 16
-        self.H = max(2, math.ceil(math.log(m_max, a)) + 1)
+        m_max = getattr(P, "m_max", None) or 6 * P.N // max(P.theta, 1) + 16
+        self.H = 2                      # smallest H >= 2 with a^(H-1) >= m_max (I8), in integers
+        while a ** (self.H - 1) < m_max:
+            self.H += 1
+        try:            # instrumentation only; None when the lemmas' constants are undefined
+            self.bounds = top_bounds.bounds(a, s, self.H) if s >= 3 else None
+        except (ValueError, AssertionError):
+            self.bounds = None
         self._reset()
 
     # ----------------------------------------------------------- utilities
@@ -91,6 +104,11 @@ class WBBTTop:
         self.path: dict[int, list[int]] = {}    # chunk -> [NIL, p1, ..., pH]
         self.cin: dict[int, list[int]] = {}     # chunk -> nodes whose table holds it
         self.lpar: dict[int, int] = {}          # chunk -> live height-1 parent
+
+    def _rec(self, name: str, h: int, val: int) -> None:
+        k = (name, h)
+        if k not in self.hmax or val > self.hmax[k]:
+            self.hmax[k] = val
 
     def _new_node(self, h: int) -> int:
         self.nodes.append(Node(height=h))
@@ -129,6 +147,11 @@ class WBBTTop:
         if lo + 1 >= hi:
             raise GuardFailure("top: table full")
         self.min_gap = min(self.min_gap, hi - lo)
+        if T.kind != "built" and self.bounds is not None and T.height < self.H:
+            D = (self.bounds["Dc"] if T.kind == "chain" else self.bounds["Dt"])[T.height]
+            self._rec("depth_" + T.kind, T.height, T.g0.bit_length() - (hi - lo).bit_length())
+            if hi - lo < (T.g0 >> D):
+                self.depth_viol += 1
         return (lo + hi) // 2
 
     def _table_insert(self, T: Node, e: int, new: int, before: bool, lab: int) -> None:
@@ -138,6 +161,7 @@ class WBBTTop:
         if T.draining:
             T.side[new] = T.side[e]
         self.max_table = max(self.max_table, len(T.order))
+        self._rec("table_ghost" if T.draining else "table_live", T.height, len(T.order))
         self.max_lab = max(self.max_lab, lab)
 
     # ------------------------------------------------------------ build
@@ -162,6 +186,7 @@ class WBBTTop:
             V.lab[below] = center
             V.weight = 1
             V.first = V.last = c
+            V.kind, V.g0 = "chain", center
             if h == 1:
                 self.cin[c] = [v]
                 self.lpar[c] = v
@@ -200,6 +225,7 @@ class WBBTTop:
                 V.children = list(grp)
                 V.order = list(grp)
                 gap = (1 << self.beta) // (len(grp) + 1)
+                V.kind, V.g0 = "built", gap
                 for i, e in enumerate(grp):
                     V.lab[e] = (i + 1) * gap
                     if h == 1:
@@ -258,6 +284,7 @@ class WBBTTop:
         i = lp.children.index(x)
         lp.children[i:i + 1] = [y, x, z]
         self.max_children = max(self.max_children, len(lp.children))
+        self._rec("children", 1, len(lp.children))
         self.max_in_tables = max(self.max_in_tables, len(tabs))
         self.core.C[y].tag = ty
         self.core.C[z].tag = tz
@@ -304,9 +331,13 @@ class WBBTTop:
                 yield
             src = V.overflow_of
             if src != NIL:
-                self.nodes[src].funded += 1
+                S = self.nodes[src]
+                S.funded += 1
                 self.max_target_ratio = max(self.max_target_ratio,
                                             V.weight / (2 * self.a ** V.height))
+                self._rec("target", V.height, V.weight)
+                self._rec("pair", V.height, self.nodes[S.t1].weight + self.nodes[S.t2].weight)
+                self._rec("funded", V.height, S.funded)
                 for _ in range(self.s):
                     if not self._drain_step(src):
                         break
@@ -372,6 +403,8 @@ class WBBTTop:
         V2.in_tables = list(V.in_tables)
         for W, part in ((V1, left), (V2, right)):
             gap = (1 << self.beta) // (len(part) + 1)
+            W.g0 = gap
+            self._rec("n0", h, len(part))
             W.order = list(part)
             for i, e in enumerate(part):
                 W.lab[e] = (i + 1) * gap
@@ -389,16 +422,21 @@ class WBBTTop:
                 else:
                     self.nodes[e].live_parent = w
             W.weight = sum(wt(e) for e in W.children)
+            self._rec("fresh_max", h, W.weight)
+            self._rec("fresh_min_neg", h, -W.weight)
             W.live_parent = V.live_parent
             W.overflow_of = v
         par = self.nodes[V.live_parent]
         i = par.children.index(v)
         par.children[i:i + 1] = [v1, v2]
         self.max_children = max(self.max_children, len(par.children), len(kids))
+        self._rec("children", h, len(kids))
+        self._rec("children", h + 1, len(par.children))
         self.max_in_tables = max(self.max_in_tables, len(V.in_tables),
                                  *(len(self._in_tables(e, h - 1)) for e in entries))
         V.draining, V.t1, V.t2, V.side = True, v1, v2, side
         self.max_start_ratio = max(self.max_start_ratio, V.weight / (2 * self.a ** h))
+        self._rec("start", h, V.weight)
         self.ghosts = getattr(self, "ghosts", 0) + 1
         self.max_ghosts = max(self.max_ghosts, self.ghosts)
         V.live_parent = NIL
@@ -524,6 +562,15 @@ class WBBTTop:
         for (e, h), tabs in member.items():
             have = set(self.cin[e]) if h == 0 else set(self.nodes[e].in_tables)
             assert have == tabs, f"in_tables mismatch for {(e, h)}"
+            # (Q) of PROOF.md §4.5.3: only the tables of par(e) and of par(e)'s source
+            if h == 0:
+                par = self.lpar[e]
+            else:
+                E = self.nodes[e]
+                par = self.nodes[E.t1].live_parent if E.draining else E.live_parent
+            if par != NIL:
+                allowed = {par, self.nodes[par].overflow_of}
+                assert tabs <= allowed, f"Q: entry {(e, h)} in an unexpected table"
         # (W2) ranges are exactly the runs of chunks with p[h] = v. A chunk whose
         # path is still being copied counts at level h only once p[h] is copied
         # (that is when its job updates the range pointers of that level).

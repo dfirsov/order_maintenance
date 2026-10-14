@@ -97,8 +97,8 @@ class Params:
     @staticmethod
     def for_capacity(N: int, *, c_G: int = 2, c_T: int = 1, K_G: int = 4,
                      K_C: int = 4, K_R: int = 2, c_J: int = 1,
-                     top: str = "simple") -> "Params":
-        L = max(4, math.ceil(math.log2(max(N, 2))))
+                     top: str = "simple", L_min: int = 4) -> "Params":
+        L = max(L_min, math.ceil(math.log2(max(N, 2))))
         G = c_G * L
         T = c_T * L * L
         theta = (2 * T) // 3
@@ -117,9 +117,11 @@ class Params:
     @staticmethod
     def proof(N: int) -> "Params":
         """The conservative parameters of docs/PROOF.md §2.9, for which every
-        inequality of §4.7 is claimed to hold (c_1 = 0 here)."""
-        P = Params.for_capacity(N, c_T=3, K_R=4, top="wbbt")
+        inequality of §4.7 holds (prototype/lower_bounds.py: from L = 8 on)."""
+        P = Params.for_capacity(N, c_T=3, K_R=4, top="wbbt", L_min=8)
         P.top_s, P.top_beta = 11, 48
+        import lower_bounds                 # chunk-count bound of PROOF.md §4.4 (sets H)
+        P.m_max = lower_bounds.lower(P.L, N=max(N, 2))["m_max"]
         return P
 
 
@@ -140,6 +142,7 @@ class Stats:
     max_pq: int = 0           # max number of chunks waiting in the PQ
     reservations: int = 0
     cross_moves: int = 0      # element moves between chunks (0 under invariant F)
+    pop_not_max: int = 0      # reservations that popped a chunk smaller than the PQ maximum
     # lemma checker (docs/PROOF.md §4); "excess" = measured minus proved bound
     g_ins: int = 0            # max user insertions into one group over its life (G3)
     g_arr: int = 0            # max arrivals into one group (G3)
@@ -589,8 +592,10 @@ class Core:
         X.st = DEAD
         st, P = self.stats, self.P  # instrumentation: Lemmas C1, C2
         k_C = None
-        if P.K_C > 2:
-            k_C = -(-(5 * X.s0 + 3 * P.G) // (P.G * (P.K_C - 2))) + 1
+        if P.K_C >= 2 and P.K_G >= 2 and P.G >= 5:
+            # Lemma C1: units = families and quiet groups (>= ceil((G-3)/2) elements each)
+            units = X.s0 // -(-(P.G - 3) // 2) + 1
+            k_C = -(-units // (P.K_C - 1)) + 1
             st.c1_excess = max(st.c1_excess, X.fam_ins - k_C)
         for s in (X.l, X.r):
             S = self.C[s]
@@ -598,7 +603,8 @@ class Core:
                 st.c1_fresh = max(st.c1_fresh, S.size)
                 st.max_quiet = max(st.max_quiet, S.size)
                 if k_C is not None:
-                    bound = (X.s0 + k_C) / 2 + 2 * (-(-4 * P.G // 3) + 3)
+                    u_max = P.G + -(-P.G // (P.K_G - 1)) + 1      # largest unit: a family
+                    bound = (X.s0 + k_C + u_max + 2) // 2
                     st.c1_size_excess = max(st.c1_size_excess, S.size - bound)
                 S.st, S.src = QUIET, NIL
                 self.pq.enter_if_above(s)
@@ -615,6 +621,8 @@ class Core:
                 self.stats.max_pq = max(self.stats.max_pq, len(self.pq.where))
                 self.stats.reservations += 1
                 x = self.pq.pop_max()
+                if not self.pq.empty() and self.pq.hi > self.C[x].size:
+                    self.stats.pop_not_max += 1     # Lemma R: the pop must take a largest chunk
                 y = self._new_chunk()
                 z = self._new_chunk()
                 X, Y, Z = self.C[x], self.C[y], self.C[z]

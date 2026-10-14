@@ -1,0 +1,190 @@
+default  starve         n=300000 seed=1 steps/op<=98 129.0s  OK
+default  group_end      n=300000 seed=1 steps/op<=99 15.5s  OK
+default  chunk_end      n=300000 seed=1 steps/op<=99 16.2s  OK
+default  narrow_gap     n=300000 seed=1 steps/op<=97 26.2s  OK
+default  zigzag         n=300000 seed=1 steps/op<=88 9.8s  OK
+default  delete_burst   n=300000 seed=1 steps/op<=104 4.9s  OK
+default  harmonic       n=300000 seed=1 steps/op<=115 136.4s  OK
+default  harmonic_half  n=300000 seed=1 steps/op<=103 127.4s  OK
+default  random         n=300000 seed=1 steps/op<=105 11.5s  OK
+default  insert_random  n=300000 seed=1 steps/op<=96 15.8s  OK
+default  front          n=300000 seed=1 steps/op<=103 10.2s  OK
+default  append         n=300000 seed=1 steps/op<=89 9.3s  OK
+default  hammer         n=300000 seed=1 steps/op<=103 10.6s  OK
+default  spread64       n=300000 seed=1 steps/op<=113 15.6s  OK
+default  spread1k       n=300000 seed=1 steps/op<=98 15.3s  OK
+default  churn          n=300000 seed=1 steps/op<=73 7.4s  OK
+default  rebuild_cycle  n=300000 seed=1 steps/op<=104 5.7s  OK
+default  yoyo           n=300000 seed=1 steps/op<=104 8.2s  OK
+default  fifo           n=300000 seed=1 steps/op<=76 3.3s  OK
+default  cursor_chase   n=300000 seed=1 steps/op<=100 29.6s  OK
+default  shrink_only    n=300000 seed=1 steps/op<=98 6.4s  OK
+default  flicker        n=300000 seed=1 steps/op<=17 70.0s  OK
+default  family_edge    n=300000 seed=1 steps/op<=100 16.8s  OK
+proof    starve         n=300000 seed=1 steps/op<=104 133.6s  OK
+proof    group_end      n=300000 seed=1 steps/op<=103 15.8s  OK
+proof    chunk_end      n=300000 seed=1 steps/op<=105 15.8s  OK
+proof    narrow_gap     n=300000 seed=1 steps/op<=101 25.1s  OK
+proof    zigzag         n=300000 seed=1 steps/op<=105 9.0s  OK
+proof    delete_burst   n=300000 seed=1 steps/op<=110 4.8s  OK
+proof    harmonic       n=300000 seed=1 steps/op<=104 122.6s  OK
+proof    harmonic_half  n=300000 seed=1 steps/op<=108 115.0s  OK
+proof    random         n=300000 seed=1 steps/op<=107 11.2s  OK
+proof    insert_random  n=300000 seed=1 steps/op<=105 15.2s  OK
+proof    front          n=300000 seed=1 steps/op<=117 8.6s  OK
+proof    append         n=300000 seed=1 steps/op<=100 7.8s  OK
+proof    hammer         n=300000 seed=1 steps/op<=117 8.8s  OK
+proof    spread64       n=300000 seed=1 steps/op<=114 13.1s  OK
+proof    spread1k       n=300000 seed=1 steps/op<=112 14.4s  OK
+proof    churn          n=300000 seed=1 steps/op<=69 7.0s  OK
+proof    rebuild_cycle  n=300000 seed=1 steps/op<=106 5.3s  OK
+proof    yoyo           n=300000 seed=1 steps/op<=105 7.8s  OK
+proof    fifo           n=300000 seed=1 steps/op<=60 3.3s  OK
+proof    cursor_chase   n=300000 seed=1 steps/op<=110 29.9s  OK
+proof    shrink_only    n=300000 seed=1 steps/op<=105 6.6s  OK
+proof    flicker        n=300000 seed=1 steps/op<=20 80.4s  OK
+proof    family_edge    n=300000 seed=1 steps/op<=106 15.3s  OK
+default  starve         n=300000 seed=2 steps/op<=102 136.4s  OK
+default  group_end      n=300000 seed=2 steps/op<=95 16.7s  OK
+default  chunk_end      n=300000 seed=2 steps/op<=103 16.9s  OK
+default  narrow_gap     n=300000 seed=2 steps/op<=98 27.1s  OK
+default  zigzag         n=300000 seed=2 steps/op<=88 10.6s  OK
+default  delete_burst   n=300000 seed=2 steps/op<=115 5.3s  OK
+default  harmonic       n=300000 seed=2 steps/op<=111 136.8s  OK
+default  harmonic_half  n=300000 seed=2 steps/op<=94 125.4s  OK
+default  random         n=300000 seed=2 steps/op<=105 11.9s  OK
+default  insert_random  n=300000 seed=2 steps/op<=97 17.2s  OK
+default  front          n=300000 seed=2 steps/op<=103 10.5s  OK
+default  append         n=300000 seed=2 steps/op<=89 9.4s  OK
+default  hammer         n=300000 seed=2 steps/op<=103 8.9s  OK
+default  spread64       n=300000 seed=2 steps/op<=97 15.6s  OK
+default  spread1k       n=300000 seed=2 steps/op<=96 14.9s  OK
+default  churn          n=300000 seed=2 steps/op<=93 7.4s  OK
+default  rebuild_cycle  n=300000 seed=2 steps/op<=104 4.6s  OK
+default  yoyo           n=300000 seed=2 steps/op<=96 6.3s  OK
+default  fifo           n=300000 seed=2 steps/op<=76 3.4s  OK
+default  cursor_chase   n=300000 seed=2 steps/op<=99 31.8s  OK
+default  shrink_only    n=300000 seed=2 steps/op<=98 6.5s  OK
+default  flicker        n=300000 seed=2 steps/op<=20 70.4s  OK
+default  family_edge    n=300000 seed=2 steps/op<=96 13.6s  OK
+proof    starve         n=300000 seed=2 steps/op<=114 119.3s  OK
+proof    group_end      n=300000 seed=2 steps/op<=106 15.5s  OK
+proof    chunk_end      n=300000 seed=2 steps/op<=108 12.1s  OK
+proof    narrow_gap     n=300000 seed=2 steps/op<=108 25.6s  OK
+proof    zigzag         n=300000 seed=2 steps/op<=105 7.9s  OK
+proof    delete_burst   n=300000 seed=2 steps/op<=107 4.8s  OK
+proof    harmonic       n=300000 seed=2 steps/op<=114 114.7s  OK
+proof    harmonic_half  n=300000 seed=2 steps/op<=113 101.3s  OK
+proof    random         n=300000 seed=2 steps/op<=105 11.3s  OK
+proof    insert_random  n=300000 seed=2 steps/op<=101 13.9s  OK
+proof    front          n=300000 seed=2 steps/op<=117 9.0s  OK
+proof    append         n=300000 seed=2 steps/op<=100 7.7s  OK
+proof    hammer         n=300000 seed=2 steps/op<=117 8.7s  OK
+proof    spread64       n=300000 seed=2 steps/op<=110 10.5s  OK
+proof    spread1k       n=300000 seed=2 steps/op<=103 14.5s  OK
+proof    churn          n=300000 seed=2 steps/op<=65 6.6s  OK
+proof    rebuild_cycle  n=300000 seed=2 steps/op<=106 4.4s  OK
+proof    yoyo           n=300000 seed=2 steps/op<=111 7.5s  OK
+proof    fifo           n=300000 seed=2 steps/op<=60 3.2s  OK
+proof    cursor_chase   n=300000 seed=2 steps/op<=110 20.8s  OK
+proof    shrink_only    n=300000 seed=2 steps/op<=109 6.3s  OK
+proof    flicker        n=300000 seed=2 steps/op<=20 71.8s  OK
+proof    family_edge    n=300000 seed=2 steps/op<=102 15.3s  OK
+
+Worst ratio measured/bound per claim (<= 1: claim held; * = hypotheses not met, not judged)
+
+  preset default
+     0.000  C1 family insertions - k_C(s0)                       -2 / 0   (starve, N=64)
+     0.000  C1 fresh chunk size - bound                          -10 / 0   (starve, N=64)
+     0.000  C2 PQ slow-path scans                                0 / 0   (starve, N=64)
+     0.750  C2 freshly quiet chunk size <= theta                 18 / 24   (yoyo, N=64)
+     0.273  C3 nested halvings of a group gap                    6 / 22   (harmonic, N=179992)
+     0.000  F element moves across chunks                        0 / 0   (starve, N=64)
+     0.000  G1 family insertions - k_G(s0)                       -2 / 0   (starve, N=64)
+     0.667  G1 sibling imbalance                                 1 / 1.5   (starve, N=1324)
+     0.733  G2 freshly quiet group size < G                      11 / 15   (narrow_gap, N=180)
+     0.977  G2 max group size                                    42 / 43   (starve, N=1280036)
+     0.809  G3 lifetime arrivals per group                       55 / 68   (harmonic, N=1280036)
+     0.778  G3 lifetime insertions per group                     14 / 18   (yoyo, N=64)
+     0.379  G4 element label budget (halvings)                   22 / 58   (churn, N=5808)
+     0.629  G4 nested halvings of an element gap                 22 / 35   (churn, N=5808)
+     1.000  R insertions per round <= ceil(J/K_R)+1              6 / 6   (starve, N=492)
+     0.245  R overshoot above theta <= R(H_m+1) (measured J)     28 / 114.2   (harmonic_half, N=25300)
+     0.143  R overshoot above theta <= R(H_m+1) (provable J)     45 / 313.7   (harmonic_half, N=179992)
+     0.806  R quiet chunk size <= T (I5 target)                  261 / 324   (harmonic_half, N=179992)
+     1.062*  T3 blocked target weight / W_h (claim: q + O(1/W))   1.062 / 1   (harmonic, N=480004)
+     1.056*  T3 drain start weight / W_h                          1.188 / 1.125   (harmonic, N=480004)
+     1.111*  T3 fresh target weight <= tau_h [exact]              10 / 9   (harmonic, N=480004)
+     1.000*  T3 funding jobs / ((W_h+2)/(s-2)+1)                  1 / 1   (starve, N=25300)
+     1.056*  T3.1 drain start weight <= W_h + 2 [exact]           19 / 18   (harmonic, N=480004)
+     1.000*  T3.2 funded jobs per drain <= K_h [exact]            4 / 4   (starve, N=25300)
+     1.000*  T3.3 blocked target weight <= Theta_h [exact]        17 / 17   (harmonic, N=480004)
+     1.000*  T3.3 weight of a target pair <= Pi_h [exact]         26 / 26   (starve, N=25300)
+     0.636  T4 job length <= (s+3)H                              35 / 55   (random, N=120540)
+     0.576*  T4 live children <= 4a+1                             19 / 33   (harmonic, N=480004)
+     0.520*  T4 table entries <= 6a+2                             26 / 50   (starve, N=25300)
+     1.000  T4 tables per entry <= 2                             2 / 2   (starve, N=492)
+     1.000*  T4.1 fresh target weight >= lam_h [exact; lam/min]   8 / 8   (starve, N=492)
+     1.056*  T4.1 live children <= C_h [exact]                    19 / 18   (harmonic, N=480004)
+     0.929*  T4.2 ghost table entries <= Eg_h [exact]             26 / 28   (starve, N=25300)
+     1.056*  T4.2 live table entries <= E_h [exact]               19 / 18   (harmonic, N=480004)
+     1.000*  T4.3 tables per entry <= 2 [exact]                   2 / 2   (starve, N=492)
+     1.111*  T5 entries of a new table <= n0_h [exact]            10 / 9   (harmonic, N=480004)
+     0.909*  T5 halving depth, chain table <= Dc_h [exact]        10 / 11   (starve, N=3548)
+     0.875*  T5 halving depth, target-owned table <= Dt_h [exact] 7 / 8   (zigzag, N=3548)
+     0.000*  T5 label gaps below g0 >> D (count) [exact]          0 / 0   (starve, N=64)
+     0.438*  T5 table label bits used <= 4qa+3+log2(6a+3)         19 / 43.34   (starve, N=67488)
+     0.475  T5 table label bits used <= beta                     19 / 40   (starve, N=67488)
+     0.688*  W max fill cur.count/N (info)                        0.6875   (append, N=None)
+     0.000  W1 cur.count - (N/2 + floor((N/2+L+2)/(K_B-1)) + 1)  -3 / 0   (starve, N=None)
+     0.000  W2 nxt.count - (N'/4 + 1) at install                 -3 / 0   (starve, N=None)
+     0.000  no fallbacks                                         0 / 0   (starve, N=64)
+
+  preset proof
+     0.000  C1 family insertions - k_C(s0)                       -5 / 0   (starve, N=504)
+     0.000  C1 fresh chunk size - bound                          -13 / 0   (starve, N=504)
+     0.000  C2 PQ slow-path scans                                0 / 0   (starve, N=64)
+     0.574  C2 freshly quiet chunk size <= theta                 93 / 162   (yoyo, N=480)
+     0.250  C3 nested halvings of a group gap                    16 / 64   (starve, N=491300)
+     0.000  F element moves across chunks                        0 / 0   (starve, N=64)
+     0.000  G1 family insertions - k_G(s0)                       -3 / 0   (starve, N=64)
+     0.667  G1 sibling imbalance                                 1 / 1.5   (starve, N=1356)
+     0.733  G2 freshly quiet group size < G                      11 / 15   (narrow_gap, N=184)
+     0.977  G2 max group size                                    42 / 43   (starve, N=1310160)
+     0.806  G3 lifetime arrivals per group                       50 / 62   (starve, N=491300)
+     0.792  G3 lifetime insertions per group                     19 / 24   (yoyo, N=64)
+     0.379  G4 element label budget (halvings)                   22 / 58   (churn, N=4228)
+     0.629  G4 nested halvings of an element gap                 22 / 35   (churn, N=4228)
+     1.000  R insertions per round <= ceil(J/K_R)+1              6 / 6   (starve, N=3632)
+     0.257  R overshoot above theta <= R(H_m+1) (measured J)     30 / 116.8   (harmonic, N=491300)
+     0.152  R overshoot above theta <= R(H_m+1) (provable J)     30 / 197.6   (harmonic, N=491300)
+     0.694  R quiet chunk size <= T (I5 target)                  752 / 1083   (harmonic, N=491300)
+     0.938  T3 blocked target weight / W_h (claim: q + O(1/W))   0.9375 / 1   (starve, N=184228)
+     1.000  T3 drain start weight / W_h                          1.125 / 1.125   (starve, N=9704)
+     1.000  T3 fresh target weight <= tau_h [exact]              9 / 9   (starve, N=3632)
+     1.000  T3 funding jobs / ((W_h+2)/(s-2)+1)                  1 / 1   (starve, N=25896)
+     1.000  T3.1 drain start weight <= W_h + 2 [exact]           18 / 18   (starve, N=9704)
+     1.000  T3.2 funded jobs per drain <= K_h [exact]            3 / 3   (starve, N=25896)
+     1.000  T3.3 blocked target weight <= Theta_h [exact]        15 / 15   (starve, N=184228)
+     1.000  T3.3 weight of a target pair <= Pi_h [exact]         24 / 24   (starve, N=25896)
+     0.548  T4 job length <= (s+3)H                              46 / 84   (starve, N=491300)
+     0.545  T4 live children <= 4a+1                             18 / 33   (starve, N=9704)
+     0.480  T4 table entries <= 6a+2                             24 / 50   (starve, N=25896)
+     1.000  T4 tables per entry <= 2                             2 / 2   (starve, N=3632)
+     1.000  T4.1 fresh target weight >= lam_h [exact; lam/min]   8 / 8   (starve, N=3632)
+     1.000  T4.1 live children <= C_h [exact]                    18 / 18   (starve, N=9704)
+     0.923  T4.2 ghost table entries <= Eg_h [exact]             24 / 26   (starve, N=25896)
+     1.000  T4.2 live table entries <= E_h [exact]               18 / 18   (starve, N=9704)
+     1.000  T4.3 tables per entry <= 2 [exact]                   2 / 2   (starve, N=3632)
+     1.000  T5 entries of a new table <= n0_h [exact]            9 / 9   (starve, N=3632)
+     0.900  T5 halving depth, chain table <= Dc_h [exact]        9 / 10   (starve, N=9704)
+     0.857  T5 halving depth, target-owned table <= Dt_h [exact] 6 / 7   (zigzag, N=9704)
+     0.000  T5 label gaps below g0 >> D (count) [exact]          0 / 0   (starve, N=64)
+     0.452  T5 table label bits used <= 4qa+3+log2(6a+3)         18 / 39.78   (starve, N=491300)
+     0.375  T5 table label bits used <= beta                     18 / 48   (starve, N=491300)
+     0.688*  W max fill cur.count/N (info)                        0.6875   (append, N=None)
+     0.000  W1 cur.count - (N/2 + floor((N/2+L+2)/(K_B-1)) + 1)  -4 / 0   (starve, N=None)
+     0.000  W2 nxt.count - (N'/4 + 1) at install                 -4 / 0   (starve, N=None)
+     0.000  no fallbacks                                         0 / 0   (starve, N=64)
+
+0 violations
