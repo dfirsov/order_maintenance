@@ -4,3 +4,4 @@ import OM.Machine.Exec
 import OM.Machine.Logic
 import OM.Machine.Examples
 import OM.Model
+import OM.Proof.Cost.Zeroing

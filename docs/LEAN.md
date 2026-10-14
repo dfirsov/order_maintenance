@@ -243,7 +243,7 @@ OM/
 | M0 ✅ | Lake project with Mathlib; `Spec`; machine syntax, `exec`, cost; `wp` with soundness | wp soundness | low |
 | M1 ✅ | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
 | M2 | **Theorem A** at Level F | INV-S preservation, guards, FALLBACK, Invariant R | medium |
-| M3 | Theorem Z (warm-up, can start in parallel with M1) | standalone combinatorics | low |
+| M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
 | M4 | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W | invariant reasoning | medium |
 | M5 | Top-structure lemmas T0–T5, (Q) | the largest proof | **high** |
 | M6 | Level M programs and simulation; assembly; **Theorems B and W** | mechanical, but long | medium |
