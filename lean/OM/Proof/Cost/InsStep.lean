@@ -210,7 +210,7 @@ theorem insert_step {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : Nat} 
     ∃ s1 s2, (insertElem x hh).run s = .ok s.E.size s1 ∧
       (chunkSize (gC s1 (eG s1 s.E.size)) true).run s1 = .ok () s2 ∧
       InsPost TI k J n R μ (OM.Spec.insertAfterL x s.E.size L) s (eG s x) (gC s (eG s x)) s2 ∧
-      eG s1 s.E.size = eG s x ∧ gC s1 (eG s x) = gC s (eG s x) := by
+      eG s1 s.E.size = eG s x ∧ gC s1 (eG s x) = gC s (eG s x) ∧ s2.E = s1.E ∧ s1.P = s.P := by
   obtain ⟨A, hI, hel⟩ := hL.inv
   subst hel
   obtain ⟨gh, hG0⟩ := hL.ginv
@@ -224,7 +224,7 @@ theorem insert_step {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : Nat} 
     rw [linkElem_eG, if_pos rfl]
   have hgC : gC (linkElem s x s.E.size lab hh) (eG s x) = gC s (eG s x) :=
     (linkElem_glinks s x lab hh).chk _
-  refine ⟨_, s2, hrun1, by rw [heG, hgC]; exact hrun2, ?_, heG, hgC⟩
+  refine ⟨_, s2, hrun1, by rw [heG, hgC]; exact hrun2, ?_, heG, hgC, by rw [hO.E]; rfl, rfl⟩
   -- the insertion's effect on the chunks
   have hGs2 : s2.Gs = (linkElem s x s.E.size lab hh).Gs := by rw [hO.Gs]; rfl
   have hC2 : s2.C = (sizeState (linkElem s x s.E.size lab hh) (gC s (eG s x))).C := hO.C
