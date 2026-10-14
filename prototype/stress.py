@@ -12,6 +12,7 @@ import random
 import sys
 import time
 
+from core import NIL
 from wrapper import OrderMaintenance
 
 
@@ -367,6 +368,179 @@ def make_mix(genome: dict):
     return wl
 
 
+# ---------------------------------------------------------------------------
+# Corner cases suggested by the proof sketch (docs/PROOF.md). Several peek
+# into the structure to aim at the exact situation a lemma is about.
+
+def make_rebuild_cycle():
+    """Lemma W / §6.1, repeated: fill cur to N/2 - 1 with live just above N/8,
+    trigger the rebuild, delete everything while it copies, then insert at the
+    front for N/8 operations; repeat, with a target capacity that grows 4x per
+    cycle (1k, 4k, ..., 1M, then 1k again)."""
+    st = {"phase": "fill", "left": 0, "target": 1024}
+
+    def wl(rng, om, live, i):
+        N = om.cur.P.N
+        ph = st["phase"]
+        if ph == "fill":
+            if om.nxt is None and N >= st["target"] and om.cur.count >= N // 2 - 1:
+                st["phase"] = "thin"
+                st["target"] = st["target"] * 4 if st["target"] < 1 << 20 else 1024
+            else:
+                live.append(om.insert_first())
+                return
+        if st["phase"] == "thin":
+            if om.nxt is None and om.live > N // 8 + 2 and live:
+                om.delete(live.pop(0))
+                return
+            live.append(om.insert_first())          # triggers the rebuild (or is harmless)
+            st["phase"] = "kill" if om.nxt is not None else "fill"
+            return
+        if ph == "kill":
+            if om.nxt is not None:
+                if live:
+                    om.delete(live.pop())
+                else:
+                    h = om.insert_first()
+                    om.delete(h)
+                return
+            st["phase"], st["left"] = "front", max(1, N // 8)
+        if st["phase"] == "front":
+            live.append(om.insert_first())
+            st["left"] -= 1
+            if st["left"] <= 0:
+                st["phase"] = "fill"
+    return wl
+
+
+def make_yoyo():
+    """Grow to k elements, delete all of them, repeat with k cycling through
+    1, 3, 10, ..., 30000. The list is empty again and again; the wrapper sees
+    shrink and growth rebuilds back to back."""
+    sizes = [1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000]
+    st = {"k": 0, "growing": True}
+
+    def wl(rng, om, live, i):
+        target = sizes[st["k"] % len(sizes)]
+        if st["growing"]:
+            live.append(om.insert_after(rng.choice(live)) if live and rng.random() < 0.7
+                        else om.insert_first())
+            if len(live) >= target:
+                st["growing"] = False
+            return
+        j = rng.randrange(len(live))
+        live[j], live[-1] = live[-1], live[j]
+        om.delete(live.pop())
+        if not live:
+            st["growing"] = True
+            st["k"] += 1
+    return wl
+
+
+def make_fifo(window: int = 1000):
+    """Queue: append at the tail, delete at the head. live stays at `window`
+    while count grows, so every rebuild copies a core that is mostly tombstones."""
+    def wl(rng, om, live, i):
+        if len(live) > window:
+            om.delete(live.pop(0))
+        else:
+            live.append(om.insert_after(live[-1]) if live else om.insert_first())
+    return wl
+
+
+def make_cursor_chase():
+    """While a rebuild copies, insert right after the last copied element (the
+    mirroring boundary) and delete the element under the cursor; otherwise
+    insert at random. Exercises Invariant R at its edge."""
+    def wl(rng, om, live, i):
+        if om.nxt is not None and om.cursor_set and om.cursor != NIL:
+            cur = om.cur
+            e = cur.E[om.cursor]
+            if e.live and e.h in om.cur_idx and rng.random() < 0.3:
+                om.delete(e.h)
+                live.remove(e.h)
+                return
+            p = cur.E[om.cursor].prev
+            while p != NIL and not cur.E[p].live:
+                p = cur.E[p].prev
+            if p == NIL or p == cur.HEAD:
+                live.append(om.insert_first())
+            else:
+                live.append(om.insert_after(cur.E[p].h))
+            return
+        live.append(om.insert_after(rng.choice(live)) if live else om.insert_first())
+    return wl
+
+
+def make_shrink_only(grow: int = 20000):
+    """Grow, then delete every element without inserting: rebuilds triggered by
+    live < N/8 only, cascading down to the minimum capacity; then grow again."""
+    st = {"growing": True}
+
+    def wl(rng, om, live, i):
+        if st["growing"]:
+            live.append(om.insert_after(rng.choice(live)) if live else om.insert_first())
+            st["growing"] = len(live) < grow
+            return
+        j = rng.randrange(len(live))
+        live[j], live[-1] = live[-1], live[j]
+        om.delete(live.pop())
+        st["growing"] = not live
+    return wl
+
+
+def make_flicker():
+    """Insert and immediately delete, so the list is empty or has one element;
+    occasionally a burst of front inserts. count grows with live ~ 0."""
+    def wl(rng, om, live, i):
+        if live and (len(live) > 50 or rng.random() < 0.9):
+            om.delete(live.pop())
+        else:
+            live.append(om.insert_first())
+    return wl
+
+
+def make_family_edge():
+    """Aim at the families at the ends of the chunk that the reservation will
+    split next (the PQ maximum), or of the chunk being split: keep their end
+    groups splitting while the chunk split moves them (invariant F, fix 3)."""
+    from core import SPLITTING
+
+    def anchor(om, c, left):
+        core = om.cur
+        C = core.C[c]
+        g = C.first if left else C.last
+        for _ in range(3):
+            if g == NIL:
+                return None
+            e = core.Gs[g].first
+            for _ in range(4):
+                if e == NIL:
+                    break
+                if core.E[e].live and core.E[e].h in om.cur_idx:
+                    return core.E[e].h
+                e = core.E[e].next
+            g = core.Gs[g].next if left else core.Gs[g].prev
+        return None
+
+    def wl(rng, om, live, i):
+        core = om.cur
+        if len(live) > 500:
+            cands = []
+            if core.res_job is not None:
+                cands = [c for c in range(len(core.C))
+                         if core.C[c].alive and core.C[c].st == SPLITTING][:4]
+            if not cands and core.pq.hi is not None:
+                cands = list(core.pq.bucket[core.pq.hi])[:1]
+            for c in cands:
+                h = anchor(om, c, rng.random() < 0.5)
+                if h is not None:
+                    live.append(om.insert_after(h))
+                    return
+        live.append(om.insert_after(rng.choice(live)) if live else om.insert_first())
+    return wl
+
+
 WORKLOADS = {
     "starve": make_starve,
     "group_end": lambda: make_boundary("group"),
@@ -384,6 +558,13 @@ WORKLOADS = {
     "spread64": lambda: make_spread(64),
     "spread1k": lambda: make_spread(1024),
     "churn": make_churn,
+    "rebuild_cycle": make_rebuild_cycle,
+    "yoyo": make_yoyo,
+    "fifo": make_fifo,
+    "cursor_chase": make_cursor_chase,
+    "shrink_only": make_shrink_only,
+    "flicker": make_flicker,
+    "family_edge": make_family_edge,
 }
 
 

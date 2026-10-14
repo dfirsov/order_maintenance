@@ -1,0 +1,7 @@
+rebuild_cycle  max= 2428 p99.9= 1954 p50=  95 by_decade={'1e0': 95, '1e1': 1247, '1e2': 1806, '1e3': 2083, '1e4': 2428, '1e5': 2391} fallbacks=0
+yoyo           max= 2359 p99.9= 1759 p50=  95 by_decade={'1e0': 95, '1e1': 1003, '1e2': 1704, '1e3': 2309, '1e4': 2254, '1e5': 2359} fallbacks=0
+fifo           max= 1953 p99.9= 1489 p50=  94 by_decade={'1e0': 94, '1e1': 1445, '1e2': 1906, '1e3': 1953, '1e4': 1785, '1e5': 1785} fallbacks=0
+cursor_chase   max= 2934 p99.9= 1850 p50=  95 by_decade={'1e0': 95, '1e1': 1154, '1e2': 1972, '1e3': 2196, '1e4': 2934, '1e5': 2519} fallbacks=0
+shrink_only    max= 2769 p99.9= 2001 p50=  95 by_decade={'1e0': 95, '1e1': 1156, '1e2': 1905, '1e3': 2159, '1e4': 2769, '1e5': 2614} fallbacks=0
+flicker        max=  570 p99.9=  515 p50=  95 by_decade={'1e0': 95, '1e1': 515, '1e2': 515, '1e3': 515, '1e4': 570, '1e5': 570} fallbacks=0
+family_edge    max= 2423 p99.9= 1766 p50= 212 by_decade={'1e0': 95, '1e1': 1156, '1e2': 1645, '1e3': 2255, '1e4': 2423, '1e5': 2296} fallbacks=0

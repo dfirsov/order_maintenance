@@ -50,13 +50,16 @@ def random_params(rng: random.Random, top: str):
     return make, desc
 
 
+LONG = False      # --long: 5k-30k operations per trial, full check every 97 ops
+
+
 def trial(seed: int) -> tuple[int, str | None, dict]:
     import test_om
     rng = random.Random(seed)
     top = rng.choice(["simple", "wbbt", "wbbt"])
     make, desc = random_params(rng, top)
     desc["top"] = top
-    ops = rng.randint(200, 1500)
+    ops = rng.randint(5000, 30000) if LONG else rng.randint(200, 1500)
     p_first = rng.choice([0.0, 0.02, 0.2])
     p_del = rng.choice([0.0, 0.05, 0.2, 0.45])
     p_ins = rng.uniform(0.3, 0.95 - p_del) if p_del < 0.6 else 0.3
@@ -68,14 +71,32 @@ def trial(seed: int) -> tuple[int, str | None, dict]:
         "mixed": lambda r, live: live[0] if r.random() < 0.3 else
                  (live[-1] if r.random() < 0.5 else r.choice(live)),
     }
-    desc.update(ops=ops, p_first=p_first, p_del=p_del, p_ins=round(p_ins, 2), mode=mode)
+    K_B = rng.choice([2, 2, 3, 4, 6])
+    # phase schedules: steady, grow-then-delete-all (empty list, shrink rebuilds),
+    # or alternating insert and delete bursts
+    sched_kind = rng.choice(["steady", "steady", "wipe", "bursts"])
+    period = rng.choice([50, 200, 600])
+    schedule = {
+        "steady": None,
+        "wipe": lambda i: (0.9, 0.05, 0.0) if (i // period) % 2 == 0 else (0.0, 0.0, 0.95),
+        "bursts": lambda i: (0.6, 0.3, 0.0) if (i // period) % 3 == 0 else
+                            ((0.1, 0.0, 0.8) if (i // period) % 3 == 1 else (0.45, 0.05, 0.4)),
+    }[sched_kind]
+    desc.update(ops=ops, p_first=p_first, p_del=p_del, p_ins=round(p_ins, 2), mode=mode,
+                K_B=K_B, sched=sched_kind, period=period)
     try:
         om = test_om.run_diff(seed, ops, p_ins=p_ins, p_first=p_first, p_del=p_del,
-                              check_every=1, pick=picks[mode], params=make)
+                              check_every=97 if LONG else 1, pick=picks[mode], params=make, K_B=K_B,
+                              schedule=schedule)
         desc["fallbacks"] = sum(c.stats.fallbacks for c in om.cores())
         return seed, None, desc
     except Exception:
         return seed, traceback.format_exc(limit=4), desc
+
+
+def _set_long(v: bool) -> None:
+    global LONG
+    LONG = v
 
 
 def main() -> None:
@@ -83,9 +104,11 @@ def main() -> None:
     trials = int(args[0]) if args and args[0].isdigit() else 500
     jobs = int(args[args.index("-j") + 1]) if "-j" in args else 8
     start = int(args[args.index("--start") + 1]) if "--start" in args else 0
+    global LONG
+    LONG = "--long" in args
     fails = 0
     fb_trials = 0
-    with cf.ProcessPoolExecutor(jobs) as ex:
+    with cf.ProcessPoolExecutor(jobs, initializer=_set_long, initargs=(LONG,)) as ex:
         for seed, err, desc in ex.map(trial, range(start, start + trials), chunksize=4):
             if err:
                 fails += 1

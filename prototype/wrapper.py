@@ -15,6 +15,7 @@ N_MIN = 64
 
 class OrderMaintenance:
     def __init__(self, *, K_B: int = 4, params=Params.for_capacity) -> None:
+        assert K_B >= 2, "the rebuild must outpace insertions (Lemma W)"
         self.params = params
         self.K_B = K_B
         self.cur = Core(params(N_MIN))
@@ -28,6 +29,9 @@ class OrderMaintenance:
         self.rebuilds = 0
         self.retired: list[Core] = []      # finished cores, kept only for statistics
         self.max_fill = 0.0                # max over time of cur.count / cur.P.N
+        self.max_install_fill = 0.0        # max nxt.count / nxt.P.N when nxt replaces cur
+        self.max_fill_excess = -(1 << 60)  # max cur.count - Lemma W(1) bound (lemmas.py)
+        self.max_install_excess = -(1 << 60)   # max nxt.count - (N'/4 + 1) at install
 
     # ------------------------------------------------------------- interface
     def insert_first(self) -> int:
@@ -47,6 +51,20 @@ class OrderMaintenance:
         return self.cur.order(self.cur_idx[x], self.cur_idx[y])
 
     # -------------------------------------------------------------- internals
+    def next_capacity(self) -> int:
+        """Capacity of the next core (docs/PROOF.md §2.7, Lemma W).
+
+        The rebuild scans all of cur (tombstones included) at K_B - 1 net steps
+        per operation, after at most H' preparation steps, and every insertion
+        meanwhile may be mirrored into nxt. So nxt receives at most
+        live + ceil((count + H')/(K_B - 1)) elements; size it four times that.
+        H' <= L' <= L + 2 because the new capacity is at most 4N.
+        Sizing by `live` alone is wrong: see rebuild_attack.py.
+        """
+        prep = self.cur.P.L + 2
+        mirrored = -(-(self.cur.count + prep) // (self.K_B - 1))
+        return 4 * max(self.live + mirrored, 16)
+
     def _insert(self, hx: int | None) -> int:
         hy = self.next_handle
         self.next_handle += 1
@@ -57,6 +75,9 @@ class OrderMaintenance:
             self.nxt_idx[hy] = self.nxt.insert_after(xn, hy)
         self.live += 1
         self.max_fill = max(self.max_fill, self.cur.count / self.cur.P.N)
+        P = self.cur.P
+        bound = P.N // 2 + -(-(P.N // 2 + P.L + 2) // (self.K_B - 1))
+        self.max_fill_excess = max(self.max_fill_excess, self.cur.count - bound)
         self._rebuild_step()
         return hy
 
@@ -64,7 +85,7 @@ class OrderMaintenance:
         if self.nxt is None:
             N = self.cur.P.N
             if self.cur.count >= N // 2 or (N > N_MIN and self.live < N // 8):
-                self.nxt = Core(self.params(4 * max(self.live, 16)), lazy=True)
+                self.nxt = Core(self.params(self.next_capacity()), lazy=True)
                 self.nxt_idx = {}
                 self.cursor_set = False
                 self.rebuilds += 1
@@ -79,6 +100,9 @@ class OrderMaintenance:
             return
         for _ in range(self.K_B):
             if self.cursor == NIL:
+                self.max_install_fill = max(self.max_install_fill, self.nxt.count / self.nxt.P.N)
+                self.max_install_excess = max(self.max_install_excess,
+                                              self.nxt.count - (self.nxt.P.N // 4 + 1))
                 self.retired.append(self.cur)
                 self.cur, self.cur_idx = self.nxt, self.nxt_idx
                 self.nxt, self.nxt_idx = None, {}

@@ -1,6 +1,6 @@
 # Testing and measurement report
 
-Status: 2026-10-13. Prototype code: `prototype/`. Raw results: `prototype/results/`.
+Status: 2026-10-14 (§8 added after the proof-driven fixes). Prototype code: `prototype/`. Raw results: `prototype/results/`.
 Design: `docs/SPEC.md`.
 
 ## Summary
@@ -276,4 +276,128 @@ python3 callprofile.py 200000 hammer harmonic    # per-call / per-op structural 
 python3 scaling.py -j 8                          # headroom vs n, up to 3e6
 python3 sweep.py 100000 -j 8                     # parameter sensitivity
 python3 search.py 320 -j 8                       # adversary search
+python3 rebuild_attack.py                        # §8: rebuild-sizing adversary
+python3 lemmas.py 1000000 -j 23                  # §8: every bound of docs/PROOF.md §4
+python3 lemmas.py 300000 --seeds 4 -j 23
+python3 fuzz.py 20000 -j 23; python3 fuzz.py 2000 --long -j 23
+python3 linecov.py 300                           # §8: lines the suites never execute
 ```
+
+## 8. Re-test after the proof-driven fixes (2026-10-14)
+
+Writing the pen-and-paper proof sketch (`docs/PROOF.md`) found one real cost bug and two
+proof gaps that the campaign above had missed (`docs/PROOF.md` §6). All three are fixed:
+
+| Fix | Change | Evidence |
+|---|---|---|
+| 1. Rebuild sizing | the next core is sized `4·max(live + ⌈(count + L + 2)/(K_B − 1)⌉, 16)` instead of `4·max(live, 16)` | `rebuild_attack.py` at n = 2²⁰: before, 4 fallbacks, 4,115 steps/op, a capacity-64 core holding 76,809 elements; after, 0 fallbacks, ≈ 100 steps/op |
+| 2. Element label width | `B_e = 2G + …` instead of `G + …` | not observable at testable n (as predicted) |
+| 3. Family moves | a chunk-split step moves a whole family `(g⁻, g, g⁺)`, keeping invariant F | F checked in `Core.check()`; zero element moves across chunks in every run |
+
+### The lemma checker (`lemmas.py`)
+
+The campaign above measured *outcomes* (no fallbacks, flat cost). The lemma checker
+measures the *intermediate quantities* that the proof sketch bounds. For every core of
+every run, it compares each instrumented maximum with the bound claimed in `docs/PROOF.md`
+§4, evaluated for that core's own parameters:
+* group-split length and sibling balance (G1);
+* group sizes (G2);
+* lifetime insertions and arrivals per group (G3);
+* nested halvings per label gap (G4, C3);
+* chunk-split length and fresh sibling size (C1);
+* freshly quiet chunk size (C2);
+* invariant F;
+* chunk overshoot above `θ` against the zeroing-game bound, with both the provable and the
+  measured job length (R);
+* insertions per reservation round (R);
+* weights at drain start, blocked target weights and drain funding (T3);
+* fanout, table size, tables per entry and job length (T4);
+* label bits per table (T5);
+* fill of `cur` and of `nxt` at installation (W).
+
+A claim is *judged* only when its hypotheses hold for the preset. For example, Lemma T3
+assumes `q = 1/2 + 2/a + 2/(s−2) < 1`, which holds for the proof preset (`s = 11`) but not
+for the default `s = 8`.
+
+Two presets: `default` (`Params.for_capacity`) and `proof` (`Params.proof`: `c_T = 3`,
+`K_R = 4`, `s = 11`, `β = 48`).
+
+| Run | Result |
+|---|---|
+| 23 workloads × 2 presets, 10⁶ ops (`results/lemmas_1e6.txt`) | **0 violations**; max 137 steps/op (proof preset), 117 (default) |
+| 23 workloads × 2 presets × 4 seeds, 3·10⁵ ops (`results/lemmas_3e5_seeds.txt`) | **0 violations** in 184 runs |
+| top level alone, 5 adversaries × `s ∈ {8, 11}`, 3·10⁴ and 3·10⁵ chunks (`results/top_lemmas.txt`) | 0 fallbacks; with `s = 11` every T3/T4/T5 claim holds; tables per entry ≤ 2, ≤ 19 of 40 label bits used |
+
+Worst ratios measured/bound at 10⁶ ops, proof preset (1 = the bound is attained):
+
+| Claim | Worst ratio | Note |
+|---|---|---|
+| G1 split length − k_G | ≤ 0 (−2) | |
+| G2 group size ≤ G + 1 | 0.98 | groups reach `G` exactly |
+| G3 lifetime arrivals | 0.82 | |
+| G4 nested halvings of an element gap | 0.61 | 28 halvings, bound 46; budget of the *new* `B_e`: 74 |
+| C2 freshly quiet chunk ≤ θ | 0.58 | the PQ slow path is never taken |
+| R overshoot above θ (provable J) | 0.14 | 24 elements, bound 171 |
+| R insertions per round ≤ ⌈J/K_R⌉ + 1 | **1.00** | attained: this found the off-by-one in the first draft of Lemma R |
+| T3 drain start weight ≤ W_h + 2 | **1.00** | attained at height 1 |
+| T3 blocked target weight / W_h | 0.94 | with `s = 8` (hypothesis false): **1.06**, i.e. targets do exceed the threshold, as the theory predicts |
+| T3 funding jobs per drain | **1.00** | attained |
+| T4 tables per entry ≤ 2 | **1.00** | attained |
+| T4 job length ≤ (s+3)H | 0.63 | |
+| T5 table label bits | 0.45 | 18 of 48 bits |
+| W1, W2 core fill | ≤ 0 | `nxt` reaches `N'/4 − 3` at installation |
+
+The attained bounds (ratio exactly 1) are a good sign: they show that the lemmas are tight
+where the proof says they are, rather than loose bounds that the tests never approach.
+
+### New corner-case adversaries (`stress.py`)
+
+| Workload | Corner case | Aimed at |
+|---|---|---|
+| `rebuild_cycle` | §6.1's attack repeated, with target capacity growing 1k → 1M | Lemma W, fix 1 |
+| `yoyo` | grow to k ∈ {1, 3, 10, …, 30000}, delete everything, repeat: the list is empty again and again | shrink/grow rebuilds back to back |
+| `fifo` | queue: append at tail, delete at head; `live` constant, `count` grows | rebuilds copying mostly tombstones |
+| `cursor_chase` | during a rebuild, insert right after the last copied element and delete the element under the cursor | Invariant R at its edge (mirroring boundary) |
+| `shrink_only` | grow, then delete everything without inserting | `live < N/8` cascades down to the minimum capacity |
+| `flicker` | insert and immediately delete: `live` ∈ {0, 1}, `count` grows | ~1000 rebuilds per 60k ops |
+| `family_edge` | insert into the end groups of the next chunk to be split | fix 3 (family moves at both ends) |
+| `t3` (`top_stress.py`) | find a draining node, insert at the far edge of its unswept LEFT part | Lemma T3's worst case |
+
+All run with 0 fallbacks and 0 slow PQ scans, under both presets, with full invariant
+checks. Executed lines per operation at 2·10⁵ ops (`results/lines_new_2e5.txt`): at most
+2,934, within the campaign's previous maximum (3,034), and flat across decades.
+
+The `t3` adversary is the strongest found against drain timing. With `s = 8` it pushes
+blocked targets to 1.125 × `W_h` and drain starts to 1.25 × `W_h`, against 1.06 for the
+other workloads. With `s = 11` the worst is 0.94, so Lemma T3 holds.
+
+### Fuzzing and mutation testing after the fixes
+
+* **Fuzzing.** `fuzz.py` now also draws `K_B ∈ {2, 3, 4, 6}` and a phase schedule: steady,
+  "wipe" (grow, then delete everything) or alternating bursts.
+  * 6,000 + 20,000 short trials: **0 failures**, with fallbacks in 79%.
+  * 2,000 long trials (5k–30k ops, full check every 97 ops): **0 failures**.
+* **Mutation testing** (`results/mutation.txt`).
+  * The four new mutants for the fixes behave as expected. Reverting fix 1 (M21) is caught by
+    the lemma checker's Lemma W. Reverting fix 3 fully (M22) or at one end (M23), or
+    mislabeling a family moved right (M24), is caught by invariant F or label order.
+    Reverting fix 2 (M25) survives, as expected for a proof-only margin.
+  * M19 ("queue not told about chunk shrinkage") now survives. It is **equivalent** since fix 3:
+    under invariant F, quiet chunks never shrink.
+
+### Coverage (`linecov.py`)
+
+`linecov.py` records which lines of the algorithm files the suites execute: unit tests,
+fuzzing (short and long), every stress workload under three presets, and the top level
+alone.
+* All but 38 executable lines are covered.
+* Every uncovered line is one of three kinds:
+  * a guard that `docs/PROOF.md` says never fires: tag guards, adjacency guards, and the
+    sweep's side and table-entry guards;
+  * a path the proof says is unreachable: `StartDrain`'s give-up branches, the cross-chunk
+    element move, the queue's decrement path, the chunk-boundary fix-ups in group removal
+    (all unreachable under invariant F), and drain steps on a finished node;
+  * dead code: the chunk free list, which has been removed.
+
+So no reachable corner of the algorithm is left untested.
+

@@ -20,7 +20,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILES = ["core.py", "pq.py", "top_wbbt.py", "top_simple.py", "wrapper.py", "guards.py",
-         "spec.py", "stress.py", "test_om.py", "top_stress.py", "battery.py", "fuzz.py"]
+         "spec.py", "stress.py", "test_om.py", "top_stress.py", "battery.py", "fuzz.py",
+         "lemmas.py"]
 
 # (id, file, old, new, description, expected) ; expected = "kill" or "survive"
 MUTANTS = [
@@ -80,10 +81,26 @@ MUTANTS = [
      "top weights undercount insertions", "kill"),
     ("M19", "core.py", "        if C.st == QUIET:\n            self.pq.adjust(c, old, C.size)",
      "        if C.st == QUIET and d > 0:\n            self.pq.adjust(c, old, C.size)",
-     "PQ not told about chunk shrinkage", "kill"),
+     "EQUIVALENT since fix 3: under invariant F quiet chunks never shrink", "survive"),
     ("M20", "core.py", "            if self.Gs[s].size >= self.P.G:\n                self._start_group_split(s)",
      "            pass",
      "EQUIVALENT: newly quiet oversized groups start splitting on their next insert anyway", "survive"),
+    # the fixes of docs/PROOF.md §6: reverting each must be caught (except fix 2)
+    ("M21", "wrapper.py", "        return 4 * max(self.live + mirrored, 16)",
+     "        return 4 * max(self.live, 16)",
+     "fix 1 reverted: next core sized by the live count only", "kill"),
+    ("M22", "core.py", "        G0 = self.Gs[g0]\n        if G0.st == OVERFLOW:",
+     "        G0 = self.Gs[g0]\n        if False:",
+     "fix 3 reverted: chunk splits move single groups (families split across chunks)", "kill"),
+    ("M23", "core.py", "            elif not left and S.r == g0:",
+     "            elif False:",
+     "fix 3 half-done: families moved as units only from the left end", "kill"),
+    ("M24", "core.py", "                labs.append(nxt)\n            labs.reverse()",
+     "                labs.append(nxt)",
+     "family moved to the right sibling gets its labels in reverse order", "kill"),
+    ("M25", "core.py", "        B_e = 2 * G + math.ceil(math.log2(8 * G + 8)) + 8",
+     "        B_e = G + math.ceil(math.log2(8 * G + 8)) + 8",
+     "PROOF-ONLY: fix 2 reverted; the narrower label is never exhausted at testable n", "survive"),
     # controls: guards a correct algorithm never trips
     ("C01", "top_wbbt.py", "        tag = self.core.C[y].tag - old + new\n        self._guard_tag(y, tag)",
      "        tag = self.core.C[y].tag - old + new",

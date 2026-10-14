@@ -1,6 +1,6 @@
 # Order Maintenance in O(1) Worst Case — Algorithm and Proof Sketch
 
-Status: **draft v0.1** (2026-10-14). Companion to `docs/SPEC.md` (engineering specification
+Status: **draft v0.2** (2026-10-14; fixes applied and re-tested, see §6 and `docs/TESTING.md` §8). Companion to `docs/SPEC.md` (engineering specification
 and Lean plan) and `docs/TESTING.md` (empirical results). This document describes the
 algorithm in conventional terms and sketches pen-and-paper proofs of correctness and of
 the O(1) worst-case bound. It is the blueprint for the Lean proofs (milestones M2 and
@@ -8,8 +8,9 @@ M4–M6).
 
 Writing the proofs exposed three problems that the testing campaign missed. One of them
 is a real cost bug, confirmed by a new adversary. They are collected in §6 with fixes.
-The prototype has **not** been changed yet; §2 describes the algorithm *with* the fixes,
-and marks each changed step with **[fix]**.
+§2 describes the algorithm *with* the fixes, and marks each changed step with **[fix]**.
+All three are now applied to the prototype and re-tested, including a *lemma checker* that
+measures every quantitative bound of §4 (`docs/TESTING.md` §8).
 
 ---
 
@@ -558,8 +559,8 @@ maximum count. ∎
 The proof also shows that zeroing a value within `δ` of the maximum gives the bound
 `(R + δ)(H_{n−1} + 1)`. This is the variant that fix 3 avoids needing.
 
-**Lemma R (chunk sizes).** Let `J` bound the length of a top job (Lemma T4), and let
-`R := ⌈(J + 1)/K_R⌉`. Let `m` bound the number of chunks in the core. Then every quiet chunk
+**Lemma R (chunk sizes).** Let `J` bound the length of a top job in steps (Lemma T4), and
+let `R := ⌈J/K_R⌉ + 1`. Let `m` bound the number of chunks in the core. Then every quiet chunk
 has size at most
 
 ```
@@ -567,8 +568,12 @@ T_hard := θ + R · (H_{m−1} + 1).
 ```
 
 *Proof.* A *round* is the lifetime of one reservation job, from popping a chunk to the job's
-end. It lasts at most `R` core insertions, since each insertion advances the job by `K_R`
-steps. The game's variables are `x_c = max(0, size(c) − θ)` for quiet chunks `c`.
+end. Each core insertion advances the job by `K_R` steps. But the pop can happen in the
+middle of an insertion's reservation, right after the previous job ends, so the first
+insertion contributes fewer steps. A round therefore spans at most `⌈J/K_R⌉ + 1 = R`
+insertions. (The first draft had `⌈(J+1)/K_R⌉`; the lemma checker measured rounds of exactly
+`⌈J/K_R⌉ + 1`, see `docs/TESTING.md` §8.) The game's variables are
+`x_c = max(0, size(c) − θ)` for quiet chunks `c`.
 * **Zeroing.** The pop removes a chunk of maximal size, hence of maximal `x_c`, which is the
   player's zeroing. A splitting chunk leaves the game.
 * **New variables.** Chunks entering the quiet state enter at `x = 0` by Lemma C2.
@@ -887,12 +892,38 @@ Alternatives:
   table entry" are unreachable. Lemma G2 shows the same for `_remove_group`'s immediate
   re-split.
 
+### 6.5 After the fixes (2026-10-14)
+
+All three fixes are applied to the prototype. Details and numbers are in `docs/TESTING.md`
+§8.
+
+* **Fix 1.** `rebuild_attack.py` now runs with 0 fallbacks and about 100 steps per op at
+  n = 2²⁰ (previously 4,115). Reverting the fix (mutant M21) is caught by the lemma checker
+  through Lemma W.
+* **Fix 2.** Not observable at testable sizes, as predicted. Reverting it (M25) survives
+  the battery and is classified "proof-only".
+* **Fix 3.** Invariant F is checked by `Core.check()`. Reverting the fix (M22), or applying
+  it at one end only (M23), is caught immediately.
+* **A consequence of fix 3.** A quiet chunk's size now only grows. So the priority queue's
+  decrement path and the group-removal code that fixes a chunk's `first`/`last` are
+  unreachable. Mutation M19 ("queue not told about shrinkage") became equivalent. The Lean
+  port can drop these paths.
+* **Off-by-one in Lemma R.** The lemma checker found that a round can span `⌈J/K_R⌉ + 1`
+  insertions, one more than the first draft allowed, because a job can start mid-insertion.
+  Corrected in §4.4.
+* **Coverage.** The suites execute every line of the algorithm except 38 (`linecov.py`).
+  Each of those lines is one of:
+  * a guard that the proof says never fires (tag, adjacency, sweep-side and table-entry
+    guards: Lemmas T1, T2, 3.2);
+  * a path that the proof says is unreachable (`StartDrain`'s give-up branches: §4.5.2; the
+    cross-chunk move and the queue decrement: invariant F; drain steps on a finished node);
+  * dead code (the chunk free list, since removed: chunks are never freed).
+
 ---
 
 ## 7. Next steps
 
-1. **Apply the fixes to the prototype and re-run the battery.** Add the rebuild-sizing
-   adversary of §6.1 to `stress.py`, and add a test that checks invariant F.
+1. ~~Apply the fixes to the prototype and re-run the battery.~~ Done (§6.5).
 2. **Check the remaining sketch-level arguments in more detail.** Lemma T3 (drain timing) and
    T5 (table label room) are the most delicate. They should be written out in full on paper
    before M6. The other lemmas are routine to formalize.

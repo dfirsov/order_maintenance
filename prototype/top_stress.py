@@ -104,8 +104,41 @@ def pick_hotspots(rng, core, i, st):
     return st["spots"][i % 4]
 
 
+def pick_t3(rng, core, i, st):
+    """Lemma T3's worst case (docs/PROOF.md §4.5.2): find a recent draining node
+    (highest height first) and insert at the far edge of the unswept LEFT part of
+    its range, so every insertion grows the range *and* lands on one target.
+    Without a drain to attack, insert next to the newest chunk to provoke one."""
+    top = core.top
+    nodes = top.nodes
+    best = st.get("ghost")
+    if best is None or not (nodes[best].alive and nodes[best].draining and nodes[best].first != NIL):
+        best = None
+        if i % 16 == 0 or st.get("scan_hint"):      # rescan rarely: O(400) nodes
+            for v in range(len(nodes) - 1, max(-1, len(nodes) - 400), -1):
+                V = nodes[v]
+                if V.alive and V.draining and V.first != NIL and \
+                        (best is None or V.height > nodes[best].height):
+                    best = v
+        st["ghost"] = best
+    if best is None:
+        return len(core.C) - 1
+    V = nodes[best]
+    h = V.height
+    c, pick = V.first, None
+    for _ in range(64):
+        below = c if h == 1 else top.path[c][h - 1]
+        if V.side.get(below) != 0:          # 0 = LEFT
+            break
+        pick = c
+        if c == V.last:
+            break
+        c = core.C[c].next
+    return pick if pick is not None else V.last
+
+
 WORKLOADS = {"random": pick_random, "hammer": pick_hammer, "newest": pick_newest,
-             "leftward": pick_oldest_left, "hotspots": pick_hotspots}
+             "leftward": pick_oldest_left, "hotspots": pick_hotspots, "t3": pick_t3}
 
 
 def run(name: str, m: int, check_every: int = 0, seed: int = 1, **kw) -> dict:
@@ -130,6 +163,14 @@ def run(name: str, m: int, check_every: int = 0, seed: int = 1, **kw) -> dict:
         "max_table": top.max_table,
         "min_gap_bits": top.min_gap.bit_length(),
         "beta": top.beta,
+        "s": top.s,
+        # lemma checker (docs/PROOF.md T3-T5)
+        "T3_target/W": round(top.max_target_ratio, 3),
+        "T3_start/W": round(top.max_start_ratio, 3),
+        "T3_funded": round(top.max_funded_ratio, 3),
+        "T4_children": top.max_children,
+        "T4_in_tables": top.max_in_tables,
+        "T5_bits_used": top.beta - (top.min_gap.bit_length() - 1),
         "secs": round(time.time() - t0, 1),
     }
 

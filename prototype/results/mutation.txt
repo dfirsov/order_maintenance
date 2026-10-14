@@ -1,25 +1,30 @@
-ok  ORIG survived    37.3s  unmodified prototype
+ok  ORIG survived    32.2s  unmodified prototype
 ok  M01 killed       1.0s  label averaging allows equal labels  [AssertionError: elem labels unsorted]
-ok  M02 killed       0.9s  push-label guard removed (labels may exceed B bits)  [AssertionError]
+ok  M02 killed       1.1s  push-label guard removed (labels may exceed B bits)  [AssertionError]
 ok  M03 killed       0.1s  group split moves the wrong element left  [AssertionError: group range runs off the list]
 ok  M04 killed       0.1s  chunk split forgets to decrease the source size  [AssertionError: chunk size]
 ok  M05 killed       0.1s  insert after a group's last element does not extend the group  [AssertionError: group size 2 != 1]
 ok  M06 killed       2.3s  PQ increment links the bucket in the wrong place  [fuzz seed 10000 {'G': 6, 'T': 8, 'K_G': 1, 'K_C': 1, 'K_R': 1, 'J': 5, 'se': 6, 'sg': 4, 'a': 7, 's': 3, 'bs':]
-ok  M07 killed      15.8s  reservation serves the emptiest instead of the fullest chunk  [stress starve: max_chunk/T=1.40]
-ok  M08 killed      15.0s  inserts into overflow groups no longer drive the source's split  [stress hammer: fallbacks=543, pq_scan=19559, max_chunk/T=1.33, max_group/G=7.00]
+ok  M07 killed      11.9s  reservation serves the emptiest instead of the fullest chunk  [stress starve: max_chunk/T=1.43]
+ok  M08 killed      11.5s  inserts into overflow groups no longer drive the source's split  [stress hammer: fallbacks=314, pq_scan=80543, max_chunk/T=2.08, max_group/G=8.45]
 ok  M09 killed       0.1s  rebuild mirrors inserts after the wrong elements  [KeyError: 30]
-ok  M10 killed      13.6s  growth rebuild triggers too late  [stress hammer: max_fill=1.281]
-ok  M11 killed      14.4s  top drain sends LEFT chunks to the right target  [stress hammer: fallbacks=99]
-ok  M12 killed       9.0s  top drain partition may separate an active drain's targets  [fuzz seed 10009 {'G': 5, 'T': 27, 'K_G': 1, 'K_C': 1, 'K_R': 4, 'J': 7, 'se': 2, 'sg': 3, 'a': 5, 's': 5, 'bs']
+ok  M10 killed      10.7s  growth rebuild triggers too late  [stress hammer: max_fill=1.281]
+ok  M11 killed      10.9s  top drain sends LEFT chunks to the right target  [stress hammer: fallbacks=73]
+ok  M12 killed       4.9s  top drain partition may separate an active drain's targets  [fuzz seed 10009 {'G': 5, 'T': 27, 'K_G': 1, 'K_C': 1, 'K_R': 4, 'J': 7, 'se': 2, 'sg': 3, 'a': 5, 's': 5, 'bs']
 ok  M13 killed       1.4s  finished drain stays in its parents' tables  [AssertionError: in_tables mismatch for (0, 1)]
-ok  M14 killed      12.7s  top drains get 1 sweep step per insertion instead of s  [stress hammer: fallbacks=12]
+ok  M14 killed      11.0s  top drains get 1 sweep step per insertion instead of s  [stress hammer: fallbacks=8]
 ok  M15 killed       1.1s  top job forgets to extend ranges to the right  [AssertionError: W2: range pointers of 0]
-ok  M16 killed      16.1s  new left chunk gets the right chunk's label  [stress hammer: fallbacks=903]
+ok  M16 killed      11.8s  new left chunk gets the right chunk's label  [stress hammer: fallbacks=705]
 ok  M17 killed       1.4s  entries added to a draining table get no side  [KeyError: 17]
 ok  M18 killed       1.1s  top weights undercount insertions  [AssertionError: weight of 0: 2 != 3]
-ok  M19 killed       2.3s  PQ not told about chunk shrinkage  [fuzz seed 10000 {'G': 6, 'T': 8, 'K_G': 1, 'K_C': 1, 'K_R': 1, 'J': 5, 'se': 6, 'sg': 4, 'a': 7, 's': 3, 'bs':]
-ok  M20 survived    33.8s  EQUIVALENT: newly quiet oversized groups start splitting on their next insert anyway
-ok  C01 survived    25.9s  CONTROL: drain-step tag guard removed
-ok  C02 survived    28.8s  CONTROL: group-split adjacency guard removed
-ok  C03 survived    34.9s  CONTROL: chunk-split adjacency guard removed
+ok  M19 survived    40.0s  EQUIVALENT since fix 3: under invariant F quiet chunks never shrink
+ok  M20 survived    39.2s  EQUIVALENT: newly quiet oversized groups start splitting on their next insert anyway
+ok  M21 killed      16.4s  fix 1 reverted: next core sized by the live count only  [lemmas rebuild_cycle: violated ['W1 cur.count - (N/2 + (N/2+L+2)/(K_B-1))', "W2 nxt.count - (N'/4 + 1) at inst]
+ok  M22 killed       0.1s  fix 3 reverted: chunk splits move single groups (families split across chunks)  [AssertionError: F: family split across chunks]
+ok  M23 killed       0.1s  fix 3 half-done: families moved as units only from the left end  [AssertionError: F: family split across chunks]
+ok  M24 killed       0.1s  family moved to the right sibling gets its labels in reverse order  [AssertionError: group labels unsorted]
+ok  M25 survived    27.3s  PROOF-ONLY: fix 2 reverted; the narrower label is never exhausted at testable n
+ok  C01 survived    29.6s  CONTROL: drain-step tag guard removed
+ok  C02 survived    33.1s  CONTROL: group-split adjacency guard removed
+ok  C03 survived    32.8s  CONTROL: chunk-split adjacency guard removed
 ALL AS EXPECTED

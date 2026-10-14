@@ -53,6 +53,20 @@ def main() -> int:
         if bad:
             print(f"stress {wl}: " + ", ".join(bad))
             return 1
+    # corner cases from the proof sketch (docs/PROOF.md), full invariant checks
+    for wl in ("rebuild_cycle", "family_edge", "fifo", "yoyo", "cursor_chase", "flicker"):
+        r = stress.run(wl, 20000, params=params, check_every=1000)
+        if r["fallbacks"] or r["pq_scan"]:
+            print(f"stress {wl}: fallbacks={r['fallbacks']} pq_scan={r['pq_scan']}")
+            return 1
+    # every quantitative lemma bound, proof preset (lemmas.py)
+    import lemmas
+    for wl in ("rebuild_cycle", "harmonic", "starve", "family_edge", "hammer"):
+        r = lemmas.run((wl, 20000, "proof", 3))
+        bad = [c for c, v in r["claims"].items() if v[0] > 1 and v[3]]
+        if bad:
+            print(f"lemmas {wl}: violated {bad}")
+            return 1
     # top structure alone
     for wl in ("hotspots", "newest", "random"):
         r = top_stress.run(wl, 20000, check_every=2500)

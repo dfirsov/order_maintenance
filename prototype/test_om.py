@@ -21,18 +21,21 @@ def tiny_labels(N: int) -> Params:
 
 
 def run_diff(seed: int, ops: int, *, p_ins=0.6, p_first=0.05, p_del=0.15,
-             check_every=1, pick=None, params=None) -> OrderMaintenance:
+             check_every=1, pick=None, params=None, K_B=4, schedule=None) -> OrderMaintenance:
     """Random operations on both structures; compare every answer.
 
     `pick(rng, live)` chooses the anchor for insert_after (default: uniform).
+    `schedule(i)`, if given, returns (p_ins, p_first, p_del) for operation i.
     Handles coincide because both structures allocate them sequentially.
     """
     rng = random.Random(seed)
     if params is None:
         params = lambda N: Params.for_capacity(N, top=TOP)
-    om, sp = OrderMaintenance(params=params), SpecOM()
+    om, sp = OrderMaintenance(params=params, K_B=K_B), SpecOM()
     live: list[int] = []
     for i in range(ops):
+        if schedule is not None:
+            p_ins, p_first, p_del = schedule(i)
         r = rng.random()
         if not live or r < p_first:
             a, b = om.insert_first(), sp.insert_first()

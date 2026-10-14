@@ -49,6 +49,11 @@ class Group:
     l: int = NIL              # SPLITTING: overflow siblings
     r: int = NIL
     alive: bool = True
+    # instrumentation for lemmas.py (no effect on the algorithm)
+    ins: int = 0              # user insertions over the group's lifetime (Lemma G3)
+    arr: int = 0              # arrivals: insertions plus moves in (Lemma G3)
+    s0: int = 0               # size when the split started (Lemma G1)
+    fam_ins: int = 0          # insertions into the family while splitting (Lemma G1)
 
 
 @dataclass(slots=True)
@@ -64,6 +69,8 @@ class Chunk:
     r: int = NIL
     tag: int = 0              # written only by the top structure
     alive: bool = True
+    s0: int = 0               # instrumentation: size when popped (Lemma C1)
+    fam_ins: int = 0          # instrumentation: insertions into the family while splitting
 
 
 @dataclass
@@ -95,9 +102,10 @@ class Params:
         G = c_G * L
         T = c_T * L * L
         theta = (2 * T) // 3
-        # A group receives O(G) insertions in its lifetime; averaging can halve a
-        # gap once per insertion, so B_e must exceed G plus the push budget.
-        B_e = G + math.ceil(math.log2(8 * G + 8)) + 8
+        # A group receives at most 4G/3 + 6 user insertions in its lifetime, all
+        # possibly into one gap (docs/PROOF.md Lemmas G3-G4); each halves the gap,
+        # on top of the push step D_e. 2G bits of halving room covers it.
+        B_e = 2 * G + math.ceil(math.log2(8 * G + 8)) + 8
         groups_per_chunk = max(1, (3 * T) // G)
         B_g = 2 * groups_per_chunk + math.ceil(math.log2(8 * groups_per_chunk + 8)) + 8
         B_t = 3 * L + 8
@@ -105,6 +113,14 @@ class Params:
         D_g = (1 << (B_g - 1)) // (8 * groups_per_chunk + 8)
         return Params(N=N, L=L, G=G, T=T, theta=theta, B_e=B_e, B_g=B_g, B_t=B_t,
                       D_e=D_e, D_g=D_g, K_G=K_G, K_C=K_C, K_R=K_R, J=c_J * L, top=top)
+
+    @staticmethod
+    def proof(N: int) -> "Params":
+        """The conservative parameters of docs/PROOF.md §2.9, for which every
+        inequality of §4.7 is claimed to hold (c_1 = 0 here)."""
+        P = Params.for_capacity(N, c_T=3, K_R=4, top="wbbt")
+        P.top_s, P.top_beta = 11, 48
+        return P
 
 
 @dataclass
@@ -123,6 +139,19 @@ class Stats:
     min_gap_g: int = 1 << 4096
     max_pq: int = 0           # max number of chunks waiting in the PQ
     reservations: int = 0
+    cross_moves: int = 0      # element moves between chunks (0 under invariant F)
+    # lemma checker (docs/PROOF.md §4); "excess" = measured minus proved bound
+    g_ins: int = 0            # max user insertions into one group over its life (G3)
+    g_arr: int = 0            # max arrivals into one group (G3)
+    g1_excess: int = -1 << 30     # max (family insertions - k_G(s0)) at split end (G1)
+    g1_imbalance: float = 0.0     # max |sibling size - (s0 + ins)/2| at split end (G1: <= 1.5)
+    g1_fresh: int = 0             # max size of a freshly quiet group sibling (G2: < G)
+    c1_excess: int = -1 << 30     # max (family insertions - k_C(s0)) at split end (C1)
+    c1_size_excess: float = -1e9  # max (fresh sibling size - C1's bound) (C1)
+    c1_fresh: int = 0             # max size of a freshly quiet chunk (C2: <= theta)
+    max_quiet: int = 0            # max size of a quiet chunk (Lemma R: <= T_hard)
+    max_job: int = 0              # longest reservation job, in top steps (T4: <= (s+3)H)
+    max_round: int = 0            # most core insertions during one job (Lemma R premise)
 
 
 class Core:
@@ -134,13 +163,14 @@ class Core:
         self.Gs: list[Group] = []
         self.C: list[Chunk] = []
         self.free_g: list[int] = []
-        self.free_c: list[int] = []
         self.stats = Stats()
         self.count = 0
         self.pq = BucketPQ(self)
         self.top = (WBBTTop(self, a=P.top_a, s=P.top_s, beta=P.top_beta)
                     if P.top == "wbbt" else SimpleTop(self))
         self.res_job = None       # None = reservation idle
+        self.res_steps = 0        # instrumentation: top steps of the current job
+        self.res_round = 0        # instrumentation: core insertions during the current job
         # sentinel H = element 0, alone in group 0, in chunk 0
         c = self._new_chunk()
         g = self._new_group(c)
@@ -187,13 +217,10 @@ class Core:
         return i
 
     def _new_chunk(self) -> int:
-        if self.free_c:
-            i = self.free_c.pop()
-            self.C[i] = Chunk()
-        else:
-            self.C.append(Chunk())
-            i = len(self.C) - 1
-        return i
+        # chunks are never freed: emptied ones stay as DEAD tombstones until the
+        # next rebuild (see _remove_chunk), so there is no free list
+        self.C.append(Chunk())
+        return len(self.C) - 1
 
     # ------------------------------------------------------- label primitives
     def _between(self, a: int, b: int, why: str) -> int:
@@ -269,6 +296,20 @@ class Core:
         G.size += 1
         self.count += 1
         self._chunk_size(G.chk, +1)
+        st = self.stats             # instrumentation (lemmas.py)
+        G.ins += 1
+        G.arr += 1
+        st.g_ins = max(st.g_ins, G.ins)
+        st.g_arr = max(st.g_arr, G.arr)
+        if G.st == SPLITTING:
+            G.fam_ins += 1
+        elif G.st == OVERFLOW:
+            self.Gs[G.src].fam_ins += 1
+        C = self.C[G.chk]
+        if C.st == SPLITTING:
+            C.fam_ins += 1
+        elif C.st == OVERFLOW:
+            self.C[C.src].fam_ins += 1
         self.stats.max_group = max(self.stats.max_group, G.size)
         self.stats.max_lab_e = max(self.stats.max_lab_e, lab)
         self.stats.min_lab_e = min(self.stats.min_lab_e, lab)
@@ -290,6 +331,7 @@ class Core:
         C.size += d
         if C.st == QUIET:
             self.pq.adjust(c, old, C.size)
+            self.stats.max_quiet = max(self.stats.max_quiet, C.size)
         self.stats.max_chunk = max(self.stats.max_chunk, C.size)
 
     # ---------------------------------------------------------- group split
@@ -331,6 +373,7 @@ class Core:
         if C.last == g:
             C.last = gr
         G.st, G.l, G.r = SPLITTING, gl, gr
+        G.s0, G.fam_ins = G.size, 0
         self.stats.max_lab_g = max(self.stats.max_lab_g, lab_r)
         self.stats.min_lab_g = min(self.stats.min_lab_g, lab_l)
 
@@ -388,11 +431,14 @@ class Core:
             R_.first = e
             dst = gr
         D = self.Gs[dst]
+        D.arr += 1
+        self.stats.g_arr = max(self.stats.g_arr, D.arr)
         self.E[e].grp = dst
         self.E[e].lab = lab
         G.size -= 1
         D.size += 1
-        if D.chk != G.chk:
+        if D.chk != G.chk:          # unreachable under invariant F (family moves)
+            self.stats.cross_moves += 1
             self._chunk_size(D.chk, +1)
             self._chunk_size(G.chk, -1)
         self.stats.max_group = max(self.stats.max_group, D.size)
@@ -417,9 +463,16 @@ class Core:
         elif C.last == g:
             C.last = G.prev
         quiet = []
+        st = self.stats             # instrumentation: Lemma G1
+        if self.P.K_G >= 2:
+            k_G = -(-G.s0 // (self.P.K_G - 1)) + 1
+            st.g1_excess = max(st.g1_excess, G.fam_ins - k_G)
+        total = self.Gs[G.l].size + self.Gs[G.r].size
         for s in (G.l, G.r):
             S = self.Gs[s]
+            st.g1_imbalance = max(st.g1_imbalance, abs(S.size - total / 2))
             if S.st == OVERFLOW and S.src == g:
+                st.g1_fresh = max(st.g1_fresh, S.size)
                 S.st, S.src = QUIET, NIL
                 quiet.append(s)
         G.alive = False
@@ -442,6 +495,28 @@ class Core:
             if not self._chunk_split_step(s):
                 return
 
+    def _unit(self, x: int, left: bool) -> list[int]:
+        """The groups that one chunk-split move takes from the left/right end of
+        chunk x: a whole family (gl, g, gr) of a splitting group, or one group.
+        Moving families as units keeps every family inside one chunk
+        (invariant F, docs/PROOF.md §4.3), so element moves never cross chunks."""
+        X = self.C[x]
+        g0 = X.first if left else X.last
+        G0 = self.Gs[g0]
+        if G0.st == OVERFLOW:
+            S = self.Gs[G0.src]
+            if left and S.l == g0:
+                unit = [g0, G0.src, S.r]
+            elif not left and S.r == g0:
+                unit = [S.l, G0.src, g0]
+            else:
+                return [g0]
+            for a, b in zip(unit, unit[1:]):
+                if self.Gs[a].next != b or self.Gs[b].chk != x:
+                    raise GuardFailure("chunk split: family not contiguous in chunk")
+            return unit
+        return [g0]
+
     def _chunk_split_step(self, x: int) -> bool:
         P = self.P
         X = self.C[x]
@@ -451,45 +526,58 @@ class Core:
         y, z = X.l, X.r
         Y, Z = self.C[y], self.C[z]
         center = 1 << (P.B_g - 1)
-        if Y.size <= Z.size:
+        left = Y.size <= Z.size
+        unit = self._unit(x, left)
+        labs = []
+        if left:
             if Y.next != x:
                 raise GuardFailure("chunk split: left sibling not adjacent")
-            gg = X.first
-            lab = center if Y.first == NIL else \
-                self._after(self.Gs[Y.last].lab, P.D_g, P.B_g, "group: push-back room")
-            self.stats.steps += 1
-            if X.last == gg:
-                X.first = X.last = NIL
-            else:
-                X.first = self.Gs[gg].next
-            if Y.first == NIL:
-                Y.first = gg
-            Y.last = gg
-            dst = y
+            prev = None if Y.first == NIL else self.Gs[Y.last].lab
+            for _ in unit:              # appended in order at the end of y
+                prev = center if prev is None else \
+                    self._after(prev, P.D_g, P.B_g, "group: push-back room")
+                labs.append(prev)
         else:
             if Z.prev != x:
                 raise GuardFailure("chunk split: right sibling not adjacent")
-            gg = X.last
-            lab = center if Z.first == NIL else \
-                self._before(self.Gs[Z.first].lab, P.D_g, "group: push-front room")
-            self.stats.steps += 1
-            if X.first == gg:
+            nxt = None if Z.first == NIL else self.Gs[Z.first].lab
+            for _ in unit:              # prepended in reverse at the front of z
+                nxt = center if nxt is None else \
+                    self._before(nxt, P.D_g, "group: push-front room")
+                labs.append(nxt)
+            labs.reverse()
+        # -- mutate
+        self.stats.steps += len(unit)
+        first, last = unit[0], unit[-1]
+        if left:
+            if X.last == last:
                 X.first = X.last = NIL
             else:
-                X.last = self.Gs[gg].prev
+                X.first = self.Gs[last].next
+            if Y.first == NIL:
+                Y.first = first
+            Y.last = last
+            dst = y
+        else:
+            if X.first == first:
+                X.first = X.last = NIL
+            else:
+                X.last = self.Gs[first].prev
             if Z.first == NIL:
-                Z.last = gg
-            Z.first = gg
+                Z.last = last
+            Z.first = first
             dst = z
-        Gg = self.Gs[gg]
-        Gg.chk = dst
-        Gg.lab = lab
-        s = Gg.size
+        s = 0
+        for gg, lab in zip(unit, labs):
+            Gg = self.Gs[gg]
+            Gg.chk = dst
+            Gg.lab = lab
+            s += Gg.size
+            self.stats.max_lab_g = max(self.stats.max_lab_g, lab)
+            self.stats.min_lab_g = min(self.stats.min_lab_g, lab)
         X.size -= s            # x is SPLITTING, dst is OVERFLOW: neither is in the PQ
         self.C[dst].size += s
         self.stats.max_chunk = max(self.stats.max_chunk, self.C[dst].size)
-        self.stats.max_lab_g = max(self.stats.max_lab_g, lab)
-        self.stats.min_lab_g = min(self.stats.min_lab_g, lab)
         return True
 
     def _remove_chunk(self, x: int) -> None:
@@ -499,14 +587,26 @@ class Core:
         self.stats.steps += 1
         X = self.C[x]
         X.st = DEAD
+        st, P = self.stats, self.P  # instrumentation: Lemmas C1, C2
+        k_C = None
+        if P.K_C > 2:
+            k_C = -(-(5 * X.s0 + 3 * P.G) // (P.G * (P.K_C - 2))) + 1
+            st.c1_excess = max(st.c1_excess, X.fam_ins - k_C)
         for s in (X.l, X.r):
             S = self.C[s]
             if S.st == OVERFLOW and S.src == x:
+                st.c1_fresh = max(st.c1_fresh, S.size)
+                st.max_quiet = max(st.max_quiet, S.size)
+                if k_C is not None:
+                    bound = (X.s0 + k_C) / 2 + 2 * (-(-4 * P.G // 3) + 3)
+                    st.c1_size_excess = max(st.c1_size_excess, S.size - bound)
                 S.st, S.src = QUIET, NIL
                 self.pq.enter_if_above(s)
 
     # ----------------------------------------------------------- reservation
     def _reservation(self, k: int) -> None:
+        if self.res_job is not None:
+            self.res_round += 1
         for _ in range(k):
             self.stats.steps += 1
             if self.res_job is None:
@@ -518,6 +618,8 @@ class Core:
                 y = self._new_chunk()
                 z = self._new_chunk()
                 X, Y, Z = self.C[x], self.C[y], self.C[z]
+                X.s0, X.fam_ins = X.size, 0
+                self.res_steps, self.res_round = 0, 1
                 Y.prev, Y.next = X.prev, x
                 if X.prev != NIL:
                     self.C[X.prev].next = y
@@ -533,8 +635,12 @@ class Core:
                 Y.st, Y.src = OVERFLOW, x
                 Z.st, Z.src = OVERFLOW, x
                 self.res_job = job
-            elif not self.top.step(self.res_job):
-                self.res_job = None
+            else:
+                self.res_steps += 1
+                if not self.top.step(self.res_job):
+                    self.res_job = None
+                    self.stats.max_job = max(self.stats.max_job, self.res_steps)
+                    self.stats.max_round = max(self.stats.max_round, self.res_round)
 
     # -------------------------------------------------------------- fallback
     def _fallback(self, reason: str) -> None:
@@ -547,7 +653,7 @@ class Core:
         while e != NIL:
             seq.append(e)
             e = self.E[e].next
-        self.Gs, self.C, self.free_g, self.free_c = [], [], [], []
+        self.Gs, self.C, self.free_g = [], [], []
         self.pq = BucketPQ(self)
         self.res_job = None
         gs = max(1, P.G // 2)
@@ -684,6 +790,7 @@ class Core:
                 for s in (G.l, G.r):
                     assert self.Gs[s].alive and self.Gs[s].st == OVERFLOW and self.Gs[s].src == g
                 assert self.Gs[G.l].next == g and self.Gs[G.r].prev == g, "group siblings"
+                assert self.Gs[G.l].chk == G.chk == self.Gs[G.r].chk, "F: family split across chunks"
             elif G.st == OVERFLOW:
                 assert self.Gs[G.src].st == SPLITTING
         for c in chunks:

@@ -21,7 +21,9 @@ Lean port is mechanical.
 | `callprofile.py` | max lines per call × max calls per operation, giving a structural bound per operation |
 | `scaling.py`, `summarize_scaling.py` | headroom metrics vs n, up to 3·10⁶ |
 | `sweep.py`, `search.py` | parameter sensitivity; automated adversary search |
-| `rebuild_attack.py` | adversary for the rebuild sizing rule (`docs/PROOF.md` §6.1); breaks the O(1) bound at n = 2²⁰ |
+| `rebuild_attack.py` | adversary for the rebuild sizing rule (`docs/PROOF.md` §6.1); broke the O(1) bound at n = 2²⁰ before fix 1 |
+| `lemmas.py` | lemma checker: measures every quantitative bound of `docs/PROOF.md` §4 per core (presets `default`, `proof`) |
+| `linecov.py` | line coverage of the algorithm under all suites; every uncovered line should be a provably unreachable path |
 | `results/` | raw outputs of the campaign (see `docs/TESTING.md`) |
 
 ```

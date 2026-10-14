@@ -1,6 +1,6 @@
 # Order Maintenance in O(1) Worst Case — Design Specification
 
-Status: **draft v0.3** (2026-10-13; §5.6 rewritten after prototyping; §7.1–7.2 added from the testing campaign, see `docs/TESTING.md`). This is the pseudocode specification that the Lean
+Status: **draft v0.4** (2026-10-14; §5.4, §5.5, §5.7 updated with the three fixes found by the proof sketch, `docs/PROOF.md` §6; earlier: §5.6 rewritten after prototyping, §7.1–7.2 added from the testing campaign, see `docs/TESTING.md`). This is the pseudocode specification that the Lean
 implementation and proofs will follow. The Python prototype in `prototype/` implements all of it.
 
 ---
@@ -221,8 +221,8 @@ proc SplitStep(g)  with g.st = Splitting(gl, gr):
       guard gl.next = g
       e := g.first ; ℓ := if gl.size = 0 then labEmpty else labAfter(gl.last)
       g.first := e.next (or none) ; gl.last := e (and gl.first if it was empty)
-      e.grp := gl ; e.lab := ℓ ; transfer 1 from g to gl  (sizes; chunk sizes if
-                                                           chunks differ; PQ.adjust ±1)
+      e.grp := gl ; e.lab := ℓ ; transfer 1 from g to gl  (gl and g are in the same
+                                                           chunk by invariant F, §5.4)
   else                                             -- move last element right (mirror image)
       guard g.next = gr ; e := g.last ; ℓ := if gr.size = 0 then labEmpty else labBefore(gr.first) …
 ```
@@ -239,10 +239,19 @@ proc SplitStep(x)  with x.st = Splitting(y, z):
       unlink x from the chunk list ; Top.remove(x) ; y.st := z.st := Quiet
       PQ.enterIfAbove(y) ; PQ.enterIfAbove(z) ; free x ; return
   if y.size ≤ z.size then
-      guard y.next = x ; gg := x.first ; ℓ := if y empty then labEmpty else labAfter(y.last)
-      move gg to the end of y with label ℓ ; y.size += gg.size ; x.size −= gg.size
-  else  mirror image with z, x.last, labBefore
+      guard y.next = x
+      U := unit(x.first)          -- the whole family (gl, g, gr) if x.first is the left sibling
+                                  -- of a splitting group, otherwise just x.first
+      append U's groups in order to the end of y, labels labEmpty/labAfter(y.last), then labAfter
+      y.size += size(U) ; x.size −= size(U)
+  else  mirror image with z, unit(x.last), labBefore (labels assigned right to left)
 ```
+
+**Invariant F (families stay together).** The three groups of a family lie in one chunk.
+Moving families as units keeps it (fix 3 of `docs/PROOF.md` §6.3; the prototype before
+2026-10-14 moved single groups). Consequences: element moves never cross chunks, a quiet
+chunk's size only ever grows, and the group-removal code never has to fix a chunk's
+`first`/`last`.
 
 Moving a group costs O(1), however large the group: its elements point to the group, not to
 the chunk.
@@ -264,8 +273,9 @@ proc Reservation.run(k):
 ```
 
 `PQ` is a bucket queue over sizes in `(θ, T_hard]`. It keeps a sorted doubly linked list of
-non-empty buckets. Sizes of quiet chunks change by ±1 per step, so `adjust`, `remove` and
-`popMax` are O(1).
+non-empty buckets. By invariant F, sizes of quiet chunks only change by +1 per step (user
+insertions), so `adjust`, `remove` and `popMax` are O(1), and the decrement path of `adjust`
+is unreachable (mutation M19 in `docs/TESTING.md` is equivalent since the fix).
 
 There is one slow path: `enterIfAbove(c)`, when a chunk becomes quiet with `size > θ`. It
 scans for the bucket's neighbors, which costs O(T). The cost proof must show this never
@@ -401,10 +411,14 @@ insertAfter(x):   y := cur.insertAfter(x)
                   if nxt active ∧ x already copied then nxt.insertAfter(x′) ; mark y copied
                   RebuildStep(K_B)
 RebuildStep(k):   if nxt = none ∧ (cur.inserted ≥ N/2 ∨ live < N/8) then
-                      nxt := (Core.empty(capacity = 4·max(live,16)), cursor = cur.H)
+                      nxt := (Core.empty(capacity = N'), cursor = cur.H)   -- see below
                   copy up to k live elements at the cursor into nxt (append at the end)
                   if the cursor reaches the end then cur := nxt.core ; nxt := none
 ```
+
+`N' = 4·max(live + ⌈(cur.count + L + 2)/(K_B − 1)⌉, 16)`: the copy scans every element of
+`cur`, tombstones included, and every insertion meanwhile may be mirrored into `nxt`
+(fix 1 of `docs/PROOF.md` §6.1; sizing by `live` alone let an adversary overload `nxt`).
 
 Each element record keeps its node in `cur` and its node in `nxt`. Constants are chosen so
 that the copy finishes well before `cur` reaches capacity.

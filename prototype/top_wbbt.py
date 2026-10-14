@@ -57,6 +57,7 @@ class Node:
     side: dict = field(default_factory=dict)       # entry -> LEFT/RIGHT while draining
     overflow_of: int = NIL                         # source node while it drains into us
     alive: bool = True
+    funded: int = 0                                # instrumentation: jobs that funded our drain (T3)
 
 
 class WBBTTop:
@@ -75,6 +76,10 @@ class WBBTTop:
         self.max_children = 0      # longest live-children list (C-level list ops)
         self.max_in_tables = 0     # longest "tables containing" list
         self.max_ghosts = 0        # most ghosts alive at once
+        # lemma checker (docs/PROOF.md §4.5.2, Lemma T3)
+        self.max_target_ratio = 0.0    # max weight / W_h of a target while its source drains
+        self.max_start_ratio = 0.0     # max weight / W_h of a node when its drain starts
+        self.max_funded_ratio = 0.0    # max funding jobs / ((W_h + 2)/(s - 2) + 1) per drain
         P = core.P
         m_max = 6 * P.N // max(P.theta, 1) + 16
         self.H = max(2, math.ceil(math.log(m_max, a)) + 1)
@@ -299,6 +304,9 @@ class WBBTTop:
                 yield
             src = V.overflow_of
             if src != NIL:
+                self.nodes[src].funded += 1
+                self.max_target_ratio = max(self.max_target_ratio,
+                                            V.weight / (2 * self.a ** V.height))
                 for _ in range(self.s):
                     if not self._drain_step(src):
                         break
@@ -390,6 +398,7 @@ class WBBTTop:
         self.max_in_tables = max(self.max_in_tables, len(V.in_tables),
                                  *(len(self._in_tables(e, h - 1)) for e in entries))
         V.draining, V.t1, V.t2, V.side = True, v1, v2, side
+        self.max_start_ratio = max(self.max_start_ratio, V.weight / (2 * self.a ** h))
         self.ghosts = getattr(self, "ghosts", 0) + 1
         self.max_ghosts = max(self.max_ghosts, self.ghosts)
         V.live_parent = NIL
@@ -452,6 +461,9 @@ class WBBTTop:
     def _finish_drain(self, v: int) -> None:
         V = self.nodes[v]
         h = V.height
+        if self.s > 2:
+            bound = (2 * self.a ** h + 2) / (self.s - 2) + 1
+            self.max_funded_ratio = max(self.max_funded_ratio, V.funded / bound)
         for e in V.order:
             tabs = self._in_tables(e, h - 1)
             if v in tabs:
