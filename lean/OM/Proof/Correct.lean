@@ -11,3 +11,5 @@ import OM.Proof.Correct.Reservation
 import OM.Proof.Correct.Fallback
 import OM.Proof.Correct.CoreInsert
 import OM.Proof.Correct.Init
+import OM.Proof.Correct.Handles
+import OM.Proof.Correct.Wrapper

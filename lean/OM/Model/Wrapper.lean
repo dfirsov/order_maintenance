@@ -1,4 +1,5 @@
 import OM.Model.Core
+import OM.Spec
 
 /-!
 # Level F: the full structure (`prototype/wrapper.py`)
@@ -102,40 +103,74 @@ def OM.rebuildStep (mk : Nat → Params) (om : OM) : WM OM := do
     return om
   | some nxt0 => rebuildLoop { om with nxt := none } nxt0 (om.KB + 1) om.KB
 
+/-- Mirror an insertion into `nxt`, if its anchor is already copied. -/
+def OM.mirrorInsert (om : OM) (hx : Option Nat) (hy : Nat) : WM OM :=
+  match om.nxt with
+  | none => return om
+  | some nxt =>
+    let copied := match hx with
+      | none => true
+      | some x => om.nxtIdx.getX x != 0
+    if om.cursorSet && copied then do
+      let om := { om with nxt := none }
+      let xn := match hx with
+        | none => nxt.head
+        | some x => om.nxtIdx.getX x
+      let (y', n') ← runCore nxt (insertAfter xn hy)
+      return { om with nxt := some n', nxtIdx := om.nxtIdx.setX hy y' }
+    else return om
+
+/-- Mirror a deletion into `nxt`, if the element is already copied. -/
+def OM.mirrorDelete (om : OM) (x : Nat) : WM OM :=
+  match om.nxt with
+  | none => return om
+  | some nxt =>
+    let xn := om.nxtIdx.getX x
+    if xn != 0 then do
+      let om := { om with nxt := none }
+      let (_, n') ← runCore nxt (markDead xn)
+      return { om with nxt := some n', nxtIdx := om.nxtIdx.setX x 0 }
+    else return om
+
 def OM.insert (mk : Nat → Params) (om : OM) (hx : Option Nat) : WM (Nat × OM) := do
   let hy := om.nextHandle
   let xi := match hx with
     | none => om.cur.head
     | some x => om.curIdx.getX x
   let (y, om) ← om.onCur (insertAfter xi hy)
-  let mut om := { om with nextHandle := hy + 1, curIdx := om.curIdx.setX hy y }
-  if let some nxt := om.nxt then
-    let copied := match hx with
-      | none => true
-      | some x => om.nxtIdx.getX x != 0
-    if om.cursorSet && copied then
-      om := { om with nxt := none }
-      let xn := match hx with
-        | none => nxt.head
-        | some x => om.nxtIdx.getX x
-      let (y', n') ← runCore nxt (insertAfter xn hy)
-      om := { om with nxt := some n', nxtIdx := om.nxtIdx.setX hy y' }
-  om := { om with live := om.live + 1 }
-  return (hy, ← om.rebuildStep mk)
+  let om ← { om with nextHandle := hy + 1, curIdx := om.curIdx.setX hy y }.mirrorInsert hx hy
+  return (hy, ← { om with live := om.live + 1 }.rebuildStep mk)
 
 def OM.delete (mk : Nat → Params) (om : OM) (x : Nat) : WM OM := do
   let (_, om) ← om.onCur (markDead (om.curIdx.getX x))
-  let mut om := { om with curIdx := om.curIdx.setX x 0 }
-  if let some nxt := om.nxt then
-    let xn := om.nxtIdx.getX x
-    if xn != 0 then
-      om := { om with nxt := none }
-      let (_, n') ← runCore nxt (markDead xn)
-      om := { om with nxt := some n', nxtIdx := om.nxtIdx.setX x 0 }
-  om := { om with live := om.live - 1 }
-  om.rebuildStep mk
+  let om ← { om with curIdx := om.curIdx.setX x 0 }.mirrorDelete x
+  { om with live := om.live - 1 }.rebuildStep mk
 
 def OM.order (om : OM) (x y : Nat) : WM Bool :=
   Prod.fst <$> runCore om.cur (OM.Model.order (om.curIdx.getX x) (om.curIdx.getX y))
+
+/-- One operation of the specification's interface. The `k`-th insertion returns handle `k`,
+which is the specification's name for the new element. -/
+def OM.apply (mk : Nat → Params) (om : OM) : _root_.OM.Spec.Op → WM (_root_.OM.Spec.Ans × OM)
+  | .insertFirst => do
+    let (_, om) ← om.insert mk none
+    return (.inserted, om)
+  | .insertAfter x => do
+    let (_, om) ← om.insert mk (some x)
+    return (.inserted, om)
+  | .delete x => do
+    let om ← om.delete mk x
+    return (.deleted, om)
+  | .order x y => do
+    let b ← om.order x y
+    return (.bool b, om)
+
+/-- The answers to a sequence of operations. -/
+def OM.runOps (mk : Nat → Params) : OM → List _root_.OM.Spec.Op → WM (List _root_.OM.Spec.Ans)
+  | _, [] => pure []
+  | om, op :: ops => do
+    let (a, om) ← om.apply mk op
+    let as ← OM.runOps mk om ops
+    return a :: as
 
 end OM.Model
