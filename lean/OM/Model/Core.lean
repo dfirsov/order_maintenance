@@ -11,29 +11,17 @@ namespace OM.Model
 
 /-! ### Allocation -/
 
-def newElem (g lab h : Nat) : CM Nat := do
-  let s ← get
-  let i := s.E.size
-  set { s with E := s.E.push { grp := g, lab := lab, h := h } }
-  return i
+def newElem (g lab h : Nat) : CM Nat :=
+  modifyGet fun s => (s.E.size, { s with E := s.E.push { grp := g, lab := lab, h := h } })
 
-def newGroup (c : Nat) : CM Nat := do
-  let s ← get
-  match s.freeG with
-  | i :: rest =>
-    set { s with freeG := rest, Gs := s.Gs.set! i { chk := c } }
-    return i
-  | [] =>
-    let i := s.Gs.size
-    set { s with Gs := s.Gs.push { chk := c } }
-    return i
+def newGroup (c : Nat) : CM Nat :=
+  modifyGet fun s => match s.freeG with
+    | i :: rest => (i, { s with freeG := rest, Gs := s.Gs.set! i { chk := c } })
+    | [] => (s.Gs.size, { s with Gs := s.Gs.push { chk := c } })
 
 /-- Chunks are never freed: emptied ones stay as DEAD tombstones until the next rebuild. -/
-def newChunk : CM Nat := do
-  let s ← get
-  let i := s.C.size
-  set { s with C := s.C.push {} }
-  return i
+def newChunk : CM Nat :=
+  modifyGet fun s => (s.C.size, { s with C := s.C.push {} })
 
 /-! ### Label primitives (guarded) -/
 

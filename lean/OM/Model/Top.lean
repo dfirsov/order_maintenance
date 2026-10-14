@@ -29,11 +29,8 @@ decreasing_by simp; omega
 def resetTop : CM Unit :=
   modify fun s => { s with nodes := #[default], path := #[], cin := #[], lpar := #[] }
 
-def newNode (h : Nat) : CM Nat := do
-  let s ← get
-  let i := s.nodes.size
-  set { s with nodes := s.nodes.push { height := h } }
-  return i
+def newNode (h : Nat) : CM Nat :=
+  modifyGet fun s => (s.nodes.size, { s with nodes := s.nodes.push { height := h } })
 
 def getPath (c : Nat) : CM (Array Nat) := return (← get).path.getX c
 def setPath (c : Nat) (p : Array Nat) : CM Unit :=
