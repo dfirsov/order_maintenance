@@ -406,3 +406,31 @@ theorem cremove_dframe {s : Core} {x : Nat} (hx : x < s.C.size) (hl : cLl s x < 
     · simp [hc, (hLC c).not.mpr hc]
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- **The chunk drive leaves the queue, the game and the top structure alone**, threaded next to
+an invariant `X`. -/
+theorem cxsteps_dframe {X Y : Core → Prop} {L : List Nat} {δ δu s₀ : Nat → Nat} {x : Nat}
+    (h : CXSteps X Y L δ δu s₀ x) (t₀ : Core) :
+    CXSteps (fun t => X t ∧ DFrame t₀ t) (fun t => Y t ∧ DFrame t₀ t) L δ δu s₀ x := by
+  refine h.and ?_ ?_ ?_
+  · intro t A gh labs hI hel hG hC hxL hst hX
+    subst hel
+    have Fx := hC.cfam x hxL hst
+    exact hX.trans (cmoveL_dframe (Ne.symm (Fx.lx hI hxL)) hxL.2 Fx.lLive.2 hst Fx.lSt)
+  · intro t A gh labs hI hel hG hC hxL hst hX
+    subst hel
+    have Fx := hC.cfam x hxL hst
+    exact hX.trans (cmoveR_dframe (Ne.symm (Fx.rx hI hxL)) hxL.2 Fx.rLive.2 hst Fx.rSt)
+  · intro t A gh hI hel hG hC hxL hst hl hr hX
+    subst hel
+    have Fx := hC.cfam x hxL hst
+    exact hX.trans (cremove_dframe hxL.2 Fx.lLive.2 Fx.rLive.2 (Fx.lx hI hxL) (Fx.rx hI hxL) hst
+      Fx.lSt Fx.rSt hl hr)
+
+end OM.Proof

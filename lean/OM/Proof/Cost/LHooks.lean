@@ -30,21 +30,27 @@ theorem XGroup.and {X Y X' Y' : Core → Prop} {L : List Nat} {c : Nat} (h1 : XG
       h2.split s A gh g labL labR hI hel hG hg hq hsz hL hR hX.2⟩
 
 theorem CXSteps.and {X Y X' Y' : Core → Prop} {L : List Nat} {δ δu s₀ : Nat → Nat} {x : Nat}
-    (h1 : CXSteps X Y L δ δu s₀ x) (h2 : ∀ t labs, X t → X' t →
-      (∀ u, X (cmoveLState t x u labs) → X' (cmoveLState t x u labs)) ∧
-      (∀ u, X (cmoveRState t x u labs) → X' (cmoveRState t x u labs)))
-    (h3 : ∀ t, X t → X' t → Y (cremoveState t x) → Y' (cremoveState t x)) :
+    (h1 : CXSteps X Y L δ δu s₀ x)
+    (h2L : ∀ t A gh labs, INV t A → A.elist = L → GInv t L gh (fun _ => 0) →
+      CInvE t L δ δu s₀ x → LiveC t x → cSt t x = .splitting → X' t →
+      X' (cmoveLState t x (unitCand t x true) labs))
+    (h2R : ∀ t A gh labs, INV t A → A.elist = L → GInv t L gh (fun _ => 0) →
+      CInvE t L δ δu s₀ x → LiveC t x → cSt t x = .splitting → X' t →
+      X' (cmoveRState t x (unitCand t x false) labs))
+    (h3 : ∀ t A gh, INV t A → A.elist = L → GInv t L gh (fun _ => 0) →
+      CInvE t L δ δu s₀ x → LiveC t x → cSt t x = .splitting →
+      cSz t (cLl t x) ≤ t.P.theta → cSz t (cRr t x) ≤ t.P.theta → X' t → Y' (cremoveState t x)) :
     CXSteps (fun t => X t ∧ X' t) (fun t => Y t ∧ Y' t) L δ δu s₀ x := by
   refine ⟨?_, ?_, ?_⟩
   · intro t A gh hI hel hG hC hxL hst hne hdir hFB hX
     obtain ⟨labs, hrun, hX1⟩ := h1.moveL t A gh hI hel hG hC hxL hst hne hdir hFB hX.1
-    exact ⟨labs, hrun, hX1, (h2 t labs hX.1 hX.2).1 _ hX1⟩
+    exact ⟨labs, hrun, hX1, h2L t A gh labs hI hel hG hC hxL hst hX.2⟩
   · intro t A gh hI hel hG hC hxL hst hne hdir hFB hX
     obtain ⟨labs, hrun, hX1⟩ := h1.moveR t A gh hI hel hG hC hxL hst hne hdir hFB hX.1
-    exact ⟨labs, hrun, hX1, (h2 t labs hX.1 hX.2).2 _ hX1⟩
+    exact ⟨labs, hrun, hX1, h2R t A gh labs hI hel hG hC hxL hst hX.2⟩
   · intro t A gh hI hel hG hC hxL hst hne hl hr hFB hX
-    have hY := h1.rem t A gh hI hel hG hC hxL hst hne hl hr hFB hX.1
-    exact ⟨hY, h3 t hX.1 hX.2 hY⟩
+    exact ⟨h1.rem t A gh hI hel hG hC hxL hst hne hl hr hFB hX.1,
+      h3 t A gh hI hel hG hC hxL hst hl hr hX.2⟩
 
 /-- Lemma C3's invariant, with the parameter conditions it needs. -/
 def LX (s₀ δ δu : Nat → Nat) (t : Core) : Prop :=
