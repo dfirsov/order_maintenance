@@ -145,19 +145,30 @@ def moveLastRight (s : Core) (g gr e lab : Nat) : Core :=
     Gs := A1.modify gr fun X => { X with last := if X.first == NIL then e else X.last, first := e }
     E := s.E.modify e fun X => { X with grp := gr, lab := lab } }
 
-def startGroupSplit (g : Nat) : CM Unit := do
+/-- A label for a new group right before `g` in its chunk. -/
+def labBefore (g : Nat) : CM Nat := do
   let P ← getP
   let G ← getG g
-  if g == NIL || !G.alive then guard "group: split of a dead group"
-  let c := G.chk
-  let C ← getC c
-  let labL ← if g == C.first then before G.lab P.D_g "group: no room before first"
-    else between (← getG G.prev).lab G.lab "group: no room left"
-  let labR ← if g == C.last then after G.lab P.D_g P.B_g "group: no room after last"
-    else between G.lab (← getG G.next).lab "group: no room right"
+  let C ← getC G.chk
+  if g == C.first then before G.lab P.D_g "group: no room before first"
+  else between (← getG G.prev).lab G.lab "group: no room left"
+
+/-- A label for a new group right after `g` in its chunk. -/
+def labAfter (g : Nat) : CM Nat := do
+  let P ← getP
+  let G ← getG g
+  let C ← getC G.chk
+  if g == C.last then after G.lab P.D_g P.B_g "group: no room after last"
+  else between G.lab (← getG G.next).lab "group: no room right"
+
+def startGroupSplit (g : Nat) : CM Unit := do
+  let G ← getG g
+  require (g != NIL && g < (← get).Gs.size && G.alive) "group: split of a dead group"
+  let labL ← labBefore g
+  let labR ← labAfter g
   -- mutate
-  let gl ← newGroup c
-  let gr ← newGroup c
+  let gl ← newGroup G.chk
+  let gr ← newGroup G.chk
   modify (linkGroupPair · g gl gr labL labR)
 
 def removeGroup (g : Nat) : CM Unit := do
@@ -177,7 +188,7 @@ def removeGroup (g : Nat) : CM Unit := do
 def groupSplitStep (g : Nat) : CM Bool := do
   let P ← getP
   let G ← getG g
-  if g == NIL || !G.alive then guard "group split: dead group"
+  require (g != NIL && g < (← get).Gs.size && G.alive) "group split: dead group"
   if G.first == NIL then
     removeGroup g
     return false
@@ -187,13 +198,13 @@ def groupSplitStep (g : Nat) : CM Bool := do
   let Rg ← getG gr
   let center := 1 <<< (P.B_e - 1)
   let dst ← if Lg.size ≤ Rg.size then do
-      if Lg.next != g then guard "group split: left sibling not adjacent"
+      require (Lg.next == g) "group split: left sibling not adjacent"
       let lab ← if Lg.first == NIL then pure center
         else after (← getE Lg.last).lab P.D_e P.B_e "elem: push-back room"
       modify (moveFirstLeft · g gl G.first lab)
       pure gl
     else do
-      if Rg.prev != g then guard "group split: right sibling not adjacent"
+      require (Rg.prev == g) "group split: right sibling not adjacent"
       let lab ← if Rg.first == NIL then pure center
         else before (← getE Rg.first).lab P.D_e "elem: push-front room"
       modify (moveLastRight · g gr G.last lab)
@@ -311,13 +322,13 @@ def chunkSplitStep (x : Nat) : CM Bool := do
   let left := Y.size ≤ Z.size
   let u ← unit x left
   if left then
-    if Y.next != x then guard "chunk split: left sibling not adjacent"
+    require (Y.next == x) "chunk split: left sibling not adjacent"
     let yl := (← getG Y.last).lab
     let labs ← pushBackLabs center P.D_g P.B_g (if Y.first == NIL then none else some yl) u.length
     modify (moveGroupsLeft · x y u labs)
     moveSizes x y u
   else
-    if Z.prev != x then guard "chunk split: right sibling not adjacent"
+    require (Z.prev == x) "chunk split: right sibling not adjacent"
     let zf := (← getG Z.first).lab
     let labs ← pushFrontLabs center P.D_g (if Z.first == NIL then none else some zf) u.length
     modify (moveGroupsRight · x z u labs)
@@ -354,7 +365,7 @@ def reservation (k : Nat) : CM Unit := do
     | none =>
       if ← pqEmpty then return
       let x ← pqPopMax
-      if x == NIL || x ≥ (← get).C.size then guard "reservation: invalid chunk"
+      require (x != NIL && x < (← get).C.size) "reservation: invalid chunk"
       let y ← newChunk
       let z ← newChunk
       modify (linkChunkPair · x y z)

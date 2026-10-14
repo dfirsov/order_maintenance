@@ -85,6 +85,7 @@ structure INV (s : Core) (A : Abs) : Prop where
   -- groups
   gList : LList (gN s) (gP s) s.firstGroup A.glist
   gAlloc : ∀ g ∈ A.glist, g < s.Gs.size
+  gPos : 1 ≤ s.Gs.size
   gAlive : ∀ g, 1 ≤ g → g < s.Gs.size → (gA s g = true ↔ g ∈ A.glist)
   gOut : ∀ g, g ∉ A.glist → gN s g = NIL ∧ gP s g = NIL
   free : ∀ g ∈ s.freeG, 1 ≤ g ∧ g < s.Gs.size ∧ g ∉ A.glist
@@ -164,7 +165,7 @@ theorem INV.of_sameLinks' {s s' : Core} {A : Abs} (h : INV s A) (hs : SameLinks 
   have e8 : eL s' = eL s := funext hs.eL
   have e9 : gL s' = gL s := funext hs.gL
   refine
-    { eList := ?_, eAlloc := ?_, tail := ?_, gList := ?_, gAlloc := ?_, gAlive := ?_,
+    { eList := ?_, eAlloc := ?_, tail := ?_, gList := ?_, gAlloc := ?_, gPos := ?_, gAlive := ?_,
       gOut := ?_, free := ?_, freeNodup := ?_, cList := ?_, cAlloc := ?_, cOut := ?_,
       gEnds := ?_, cEnds := ?_, grp := ?_, chk := ?_, eSorted := ?_, gSorted := ?_,
       cSorted := hsorted }
@@ -173,6 +174,7 @@ theorem INV.of_sameLinks' {s s' : Core} {A : Abs} (h : INV s A) (hs : SameLinks 
   · rw [hs.tail]; exact h.tail
   · rw [e3, e4, hs.firstGroup]; exact h.gList
   · rw [hs.Gsize]; exact h.gAlloc
+  · rw [hs.Gsize]; exact h.gPos
   · intro g; rw [hs.gA, hs.Gsize]; exact h.gAlive g
   · intro g; rw [e3, e4]; exact h.gOut g
   · rw [hs.freeG, hs.Gsize]; exact h.free

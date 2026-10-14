@@ -327,7 +327,7 @@ theorem inv_linkElem {s : Core} {A : Abs} (hI : INV s A) {x lab h : Nat} (hx : x
         exact (List.nodup_cons.mp (List.nodup_append.mp hrnd).2.1).1 hm
     · rintro rfl; simp
   refine
-    { eList := ?_, eAlloc := ?_, tail := ?_, gList := ?_, gAlloc := ?_, gAlive := ?_,
+    { eList := ?_, eAlloc := ?_, tail := ?_, gList := ?_, gAlloc := ?_, gPos := ?_, gAlive := ?_,
       gOut := ?_, free := ?_, freeNodup := ?_, cList := ?_, cAlloc := ?_, cOut := ?_,
       gEnds := ?_, cEnds := ?_, grp := ?_, chk := ?_, eSorted := ?_, gSorted := ?_,
       cSorted := ?_ }
@@ -378,6 +378,7 @@ theorem inv_linkElem {s : Core} {A : Abs} (hI : INV s A) {x lab h : Nat} (hx : x
     have h2 : gP (linkElem s x y lab h) = gP s := funext gP'
     rw [this, h2]; exact hI.gList
   · intro b hb; rw [hGsize]; exact hI.gAlloc b hb
+  · rw [hGsize]; exact hI.gPos
   · intro b hb1 hb2; rw [gA', hgl]; rw [hGsize] at hb2; exact hI.gAlive b hb1 hb2
   · intro b hb; rw [gN', gP']; exact hI.gOut b hb
   · intro b hb; rw [hGsize]; exact hI.free b hb

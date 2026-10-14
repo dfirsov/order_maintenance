@@ -571,4 +571,59 @@ theorem mem_insert_iff {l1 l2 : List Nat} {x y e : Nat} :
     · exact Or.inr (Or.inl h)
     · exact Or.inr (Or.inr (Or.inr h))
 
+theorem succOf_ne_self {l : List Nat} (hnd : l.Nodup) (x : Nat) (hx : x ≠ NIL) :
+    succOf l x ≠ x := by
+  by_cases hm : x ∈ l
+  · obtain ⟨l1, l2, rfl⟩ := List.mem_iff_append.mp hm
+    rw [succOf_mid hnd]
+    intro e
+    cases l2 with
+    | nil => exact hx e.symm
+    | cons a t =>
+      simp at e; subst e
+      exact (List.nodup_cons.mp (List.nodup_append.mp hnd).2.1).1 (by simp)
+  · rw [succOf_not_mem hm]; exact Ne.symm hx
+
+theorem predOf_ne_self {l : List Nat} (hnd : l.Nodup) (x : Nat) (hx : x ≠ NIL) :
+    predOf l x ≠ x :=
+  succOf_ne_self (List.nodup_reverse.mpr hnd) x hx
+
+theorem predOf_ne_succOf {l : List Nat} (hnd : l.Nodup) {x : Nat} (hx : x ∈ l)
+    (hp : predOf l x ≠ NIL) : predOf l x ≠ succOf l x := by
+  obtain ⟨l1, l2, rfl⟩ := List.mem_iff_append.mp hx
+  rw [predOf_mid hnd, succOf_mid hnd] at *
+  intro e
+  rcases l1.eq_nil_or_concat with h | ⟨l1', a, rfl⟩
+  · subst h; exact hp rfl
+  · simp only [List.concat_eq_append, List.getLastD_concat] at e hp
+    cases l2 with
+    | nil => exact hp e
+    | cons b t =>
+      simp at e; subst e
+      have := (List.nodup_append.mp hnd).2.2 a (by simp) a (by simp)
+      exact this rfl
+
+theorem mem_around_iff {l1 l2 : List Nat} {g a b z : Nat} :
+    z ∈ l1 ++ a :: g :: b :: l2 ↔ z = a ∨ z = b ∨ z ∈ l1 ++ g :: l2 := by
+  simp only [List.mem_append, List.mem_cons]
+  constructor
+  · rintro (h | h | h | h | h)
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inl h
+    · exact Or.inr (Or.inr (Or.inr (Or.inl h)))
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr (Or.inr (Or.inr h)))
+  · rintro (h | h | h | h | h)
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr (Or.inr (Or.inl h)))
+    · exact Or.inl h
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inr (Or.inr (Or.inr (Or.inr h)))
+
+theorem mem_split_of_mem {l1 l2 : List Nat} {g z : Nat} (h : z ∈ l1 ++ l2) : z ∈ l1 ++ g :: l2 := by
+  simp only [List.mem_append, List.mem_cons] at h ⊢
+  rcases h with h | h
+  · exact Or.inl h
+  · exact Or.inr (Or.inr h)
+
 end OM.Proof

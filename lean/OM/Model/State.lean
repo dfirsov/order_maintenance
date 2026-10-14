@@ -190,6 +190,9 @@ def _root_.Array.getX {α : Type} [Inhabited α] (a : Array α) (i : Nat) : α :
 def guard {α : Type} (msg : String) : CM α := throw (.guard msg)
 def bug {α : Type} (msg : String) : CM α := throw (.bug msg)
 
+/-- Fail the guard `msg` unless `ok`. -/
+def require (ok : Bool) (msg : String) : CM Unit := if ok then pure () else guard msg
+
 @[inline] def getE (i : Nat) : CM Elem := return (← get).E.getX i
 @[inline] def getG (i : Nat) : CM Group := return (← get).Gs.getX i
 @[inline] def getC (i : Nat) : CM Chunk := return (← get).C.getX i

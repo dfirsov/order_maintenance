@@ -184,6 +184,10 @@ theorem Array.getX_def (a : Array α) (i : Nat) : a.getX i = a.getD i default :=
   · subst hij; by_cases hi : i < a.size <;> simp [hi]
   · simp [hij]
 
+@[simp] theorem Array.getX_setIfInBounds (a : Array α) (i j : Nat) (v : α) :
+    (a.setIfInBounds i v).getX j = if i = j ∧ i < a.size then v else a.getX j := by
+  rw [← Array.set!_eq_setIfInBounds]; exact Array.getX_set! a i j v
+
 @[simp] theorem Array.size_set!' (a : Array α) (i : Nat) (v : α) :
     (a.set! i v).size = a.size := by simp
 
