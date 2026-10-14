@@ -148,3 +148,75 @@ theorem split_rest {s s2 : Core} {x : Nat} {job : Job}
   exact ⟨hE, hc, hh, hP⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem GSame.of_eq {s s' : Core} (hG : s'.Gs = s.Gs) (hE : s'.E = s.E) (hh : s'.head = s.head)
+    (hP : s'.P = s.P) : GSame s s' := by
+  have hG' : ∀ g, s'.Gs.getX g = s.Gs.getX g := fun g => by rw [hG]
+  have hE' : ∀ e, s'.E.getX e = s.E.getX e := fun e => by rw [hE]
+  exact ⟨by rw [hG], fun g => by simp only [gSz, hG'], fun g => by simp only [gSt, hG'],
+    fun g => by simp only [gSrc, hG'], fun g => by simp only [gLl, hG'], fun g => by simp only [gRr, hG'],
+    fun g => by simp only [gN, hG'], fun g => by simp only [gC, hG'], fun g => by simp only [gA, hG'],
+    fun e => by show (s'.E.getX e).grp = (s.E.getX e).grp; rw [hE'],
+    fun e => by show (s'.E.getX e).lab = (s.E.getX e).lab; rw [hE'], hh, hP⟩
+
+/-- **The lower invariants after a pop and the split start.** -/
+theorem lowinv_pop {t s2 : Core} {L : List Nat} {c : Nat} {job : Job} (h : LowInv t L)
+    (hGP : GParams t.P) (hc : inQC t c = true) (hT5 : cSz t c ≤ t.P.T)
+    (hs2 : TopRel (linkChunkPair (push2 (delSt t c)) c (delSt t c).C.size
+      ((delSt t c).C.size + 1)) s2)
+    (hrun : (splitChunkStart c).run (delSt t c) =
+      .ok () (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job)) :
+    LowInv (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job) L := by
+  have hD := delSt_only t c
+  have hDS := hD.lowSame
+  obtain ⟨A, hI, hel⟩ := h.inv
+  obtain ⟨gh, hG⟩ := h.ginv
+  obtain ⟨s₀, hC, ⟨lg, hL⟩, hLP, hPP⟩ := h.cinv
+  obtain ⟨e, pops, hN⟩ := h.cnt
+  obtain ⟨bl, nb, hQ⟩ := h.pq
+  have hcq' := hc
+  unfold inQC at hcq'; simp only [decide_eq_true_eq] at hcq'
+  obtain ⟨hcL, hcq, hθ⟩ := hcq'
+  -- the invariants at the state after the deletion from the queue
+  have hI1 : INV (delSt t c) A := hI.of_sameLinks hD.sameLinks (fun d => by simp only [cT, hD.C])
+  have hG1 : GInv (delSt t c) L gh (fun _ => 0) := hG.of_gsame hDS.gsame
+  have hC1 : CInv (delSt t c) A.elist (fun _ => 0) (fun _ => 0) s₀ := by
+    rw [hel]
+    refine hC.transfer hDS.csame (fun d => ?_) (fun d => ?_) hC.δu (fun g hg => ?_)
+    · unfold celts; congr 1; funext x; rw [hDS.gsame.chk, hDS.gsame.eG]
+    · rw [units_of_Gs hDS.Gs]
+    · rw [hDS.gsame.chk]; exact hC.gchk g ((liveG_of_Gs hDS.Gs g).mp hg)
+  have hL1 : LInv (delSt t c) lg s₀ (fun _ => 0) (fun _ => 0) := hL.transfer hDS.lsame
+  have hN1 : CountInv (delSt t c) e pops := hN.frame hDS.qsame hDS.count
+  have hQS := hDS.qsame
+  have hcL1 : LiveC (delSt t c) c := by simp only [LiveC, hQS.Csize]; exact hcL
+  have hcq1 : cSt (delSt t c) c = .quiet := (hQS.q c hcL).mpr hcq
+  have hsz1 : cSz (delSt t c) c = cSz t c := hQS.sz c hcL hcq
+  have hP1 : (delSt t c).P = t.P := hD.P
+  have hcA : c ∈ A.chunks := (hI1.cAlloc c).mpr hcL1
+  have R := resSpec_run (job := job) hI1 hcA hs2
+  obtain ⟨rE, rcnt, rhead, rP⟩ := split_rest (job := job) hs2
+  -- INV-S after the split start
+  have hgood := good_splitChunkStart c (delSt t c) A hI1
+  rw [hrun] at hgood
+  obtain ⟨-, A', hI2, hel2⟩ := hgood
+  have hG2 : A.elist = L := hel
+  have hun1 : units (delSt t c) c ≤ unitsOf (delSt t c).P (cSz (delSt t c) c) :=
+    units_le_unitsOf hI1 (hel ▸ hG1) hC1 (by rw [hP1]; exact hGP) hcL1
+  refine ⟨⟨A', hI2, hel2.trans hel⟩, ⟨gh, hG1.of_gsame (GSame.of_eq R.Gs rE rhead rP)⟩,
+    ⟨Function.update s₀ c (cSz (delSt t c) c), ?_,
+      ⟨lg.fresh (delSt t c).C.size ((delSt t c).C.size + 1), ?_⟩, by rw [rP, hP1]; exact hLP,
+      by rw [rP, hP1]; exact hPP⟩, ?_, ⟨e, pops + 1, ?_⟩, by rw [rP, hP1]; exact h.cp⟩
+  · rw [← hel]
+    exact cinv_pop hI1 R rE hC1 hcL1 hcq1 (by rw [hsz1, hP1]; exact hT5) hun1
+  · exact linv_pop (A := A) R hC1 hL1 hcL1 hcq1 hun1
+  · exact pqc_pop hQ hc R (pqsame_split hs2)
+  · exact hN1.pop R hcL1 hcq1 (by rw [hsz1, hP1]; exact hθ) rcnt
+
+end OM.Proof
