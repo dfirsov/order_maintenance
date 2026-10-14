@@ -505,3 +505,225 @@ theorem copy_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {n : Co
     exact ⟨_, n, B, rfl, rfl, hRB, hok, hfill, rfl⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- The rebuild loop's cost invariant, with `budget` steps left, within the entry potential `Φe`. -/
+structure LoopC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+    (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (A : Abs) (budget Φe live₀ I D N' : Nat) :
+    Prop where
+  curok : CoreOK mk TI μ Jf nf Rf om.cur A.elist
+  nP : n.P = mk N'
+  prep : om.cursorSet = false → PrepOK mk PI n ∧ ν n + om.cur.count + (om.KB - budget) ≤ Φe
+  serve : om.cursorSet = true →
+    (∀ B, INV n B → CoreOK mk TI μ Jf nf Rf n B.elist ∧
+      n.count ≤ 1 + (liveH n B.elist).length + D) ∧
+    (postOf A.elist om.cursor).length + (om.KB - budget) ≤ Φe
+  room : 1 + live₀ + I + 1 ≤ N'
+  live : om.live + D = live₀ + I
+  bud : budget ≤ om.KB
+
+/-- What the rebuild loop leaves: the rebuild goes on, having spent the whole budget, or `nxt`
+replaced `cur`. -/
+def LoopOut (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+    (Jf nf Rf : Params → Nat) (om om' : OM) (A : Abs) (Φe live₀ I D N' : Nat) : Prop :=
+  (∃ n', om'.nxt = some n' ∧ om'.cur = om.cur ∧ om'.KB = om.KB ∧
+      LoopC mk TI PI μ ν Jf nf Rf om' n' A 0 Φe live₀ I D N') ∨
+    (om'.nxt = none ∧ om'.cur.P = mk N' ∧ om'.KB = om.KB ∧ om'.live = om.live ∧
+      (∀ B, INV om'.cur B → CoreOK mk TI μ Jf nf Rf om'.cur B.elist) ∧
+      om'.cur.count ≤ 1 + live₀ + I)
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+theorem LoopC.congr {om om' : OM} {n : Core} {A : Abs} {budget Φe live₀ I D N' : Nat}
+    (h : LoopC mk TI PI μ ν Jf nf Rf om n A budget Φe live₀ I D N') (hc : om'.cur = om.cur)
+    (hs : om'.cursorSet = om.cursorSet) (hu : om'.cursor = om.cursor) (hk : om'.KB = om.KB)
+    (hl : om'.live = om.live) : LoopC mk TI PI μ ν Jf nf Rf om' n A budget Φe live₀ I D N' := by
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := h
+  refine ⟨by rw [hc]; exact h1, h2, fun h => ?_, fun h => ?_, h5, by rw [hl]; exact h6,
+    by rw [hk]; exact h7⟩
+  · rw [hs] at h; rw [hc, hk]; exact h3 h
+  · rw [hs] at h; rw [hu, hk]; exact h4 h
+
+theorem LoopOut.mono {om om1 om' : OM} {A : Abs} {Φe live₀ I D N' : Nat}
+    (h : LoopOut mk TI PI μ ν Jf nf Rf om1 om' A Φe live₀ I D N') (hc : om1.cur = om.cur)
+    (hk : om1.KB = om.KB) (hl : om1.live = om.live) :
+    LoopOut mk TI PI μ ν Jf nf Rf om om' A Φe live₀ I D N' := by
+  rcases h with ⟨n', h1, h2, h3, h4⟩ | ⟨h1, h2, h3, h4, h5, h6⟩
+  · exact Or.inl ⟨n', h1, h2.trans hc, h3.trans hk, h4⟩
+  · exact Or.inr ⟨h1, h2, h3.trans hk, h4.trans hl, h5, h6⟩
+
+/-- The live copies are at most the live count, inside the loop. -/
+theorem nxtR'_live_le {c : Core} {A : Abs} {om : OM} {n : Core} {Sp : OM.Spec.State}
+    (hN : NxtR' c A om n) (hL : liveH c A.elist = Sp.list) (hset : om.cursorSet = true)
+    {B : Abs} (hB : INV n B) : (liveH n B.elist).length ≤ Sp.list.length := by
+  obtain ⟨B', hRB', -, -, hcs⟩ := hN
+  rw [if_pos hset] at hcs
+  obtain ⟨pre, post, hsplit, -, -, hLB⟩ := hcs
+  rw [INV.elist_unique hB hRB'.inv, hLB, ← hL, hsplit, liveH_append, List.length_append]
+  omega
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- **The rebuild loop** (Lemma W's length argument): every budgeted step shrinks the work left by
+one; the loop ends with the budget spent or with the swap. -/
+theorem rebuildLoop_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {Sp : OM.Spec.State}
+    (hS : OM.Spec.Inv Sp) {Φe live₀ I D N' : Nat} :
+    ∀ fuel budget (om : OM) (n : Core) (A : Abs), CoreR om.cur A →
+      liveH om.cur A.elist = Sp.list → IdxOK om.cur A om.curIdx Sp.list → NxtR' om.cur A om n →
+      om.nextHandle = Sp.fresh → om.live = Sp.list.length →
+      LoopC mk TI PI μ ν Jf nf Rf om n A budget Φe live₀ I D N' →
+      budget + (if om.cursorSet then 0 else 1) ≤ fuel →
+      ∃ om', rebuildLoop om n fuel budget = .ok om' ∧ WInv om' Sp ∧ om'.live = om.live ∧
+        LoopOut mk TI PI μ ν Jf nf Rf om om' A Φe live₀ I D N' := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro budget om n A hR hL hI hN hf hlv hC hfu
+    have hb : budget = 0 := by split at hfu <;> omega
+    subst hb
+    exact ⟨_, rfl, ⟨hS, hf, A, hR, hL, hI, hN⟩, rfl, Or.inl ⟨n, rfl, rfl, rfl,
+      hC.congr rfl rfl rfl rfl rfl⟩⟩
+  | succ fuel ih =>
+    intro budget om n A hR hL hI hN hf hlv hC hfu
+    have hnd : (liveH om.cur A.elist).Nodup := hL ▸ hS.1
+    unfold rebuildLoop
+    by_cases hb : budget = 0
+    · rw [if_pos hb]; subst hb
+      exact ⟨_, rfl, ⟨hS, hf, A, hR, hL, hI, hN⟩, rfl, Or.inl ⟨n, rfl, rfl, rfl,
+        hC.congr rfl rfl rfl rfl rfl⟩⟩
+    rw [if_neg hb]
+    by_cases hset : om.cursorSet = true
+    · rw [if_neg (by simp [hset])]
+      obtain ⟨hserve, hpost⟩ := hC.serve hset
+      have hN0 := hN
+      obtain ⟨B, hRB, hIB, hzB, hcs⟩ := hN0
+      rw [if_pos hset] at hcs
+      obtain ⟨pre, post, hsplit, hcpost, hpre, hLB⟩ := hcs
+      have hlB := nxtR'_live_le hN hL hset hRB.inv
+      have hfill := (hserve B hRB.inv).2
+      have hlive := hC.live
+      by_cases hc : om.cursor = NIL
+      · rw [if_pos hc]
+        refine ⟨_, rfl, swap_ok hN hR hL hset hc hS hf, rfl, Or.inr ⟨rfl, hC.nP, rfl, rfl,
+          fun B' hB' => (hserve B' hB').1, ?_⟩⟩
+        show n.count ≤ 1 + live₀ + I
+        omega
+      rw [if_neg hc]
+      obtain ⟨om', n', hcp, e1, e2, e3, e4, e5, e6, e7, hN'⟩ := copy_ok hN hR hnd hset hc
+      have hcurA : om.cursor ∈ A.elist := by
+        rw [hsplit, hcpost]
+        cases post with
+        | nil => exact absurd hcpost hc
+        | cons a t => simp
+      have hroom : n.count + 1 ≤ n.P.N := by
+        rw [hC.nP, S.PN]; have := hC.room; omega
+      obtain ⟨om2, n2, B2, hcp2, hcur2, hRB2, hok2, hfill2, hP2⟩ :=
+        copy_cost S hR hRB hset hc hcurA (hserve B hRB.inv).1 hfill hroom
+      rw [hcp] at hcp2
+      injection hcp2 with hcp2
+      injection hcp2 with h1 h2
+      subst h1; subst h2
+      simp only [bind, Except.bind, hcp]
+      -- the work left after the copy
+      have hpo : postOf A.elist om.cursor = post := by
+        rw [hsplit]
+        exact (split_unique (hsplit ▸ hR.inv.eList.nodup) (hsplit ▸ hR.inv.eList.nonil) hcpost).2
+      have hpne : post ≠ [] := by intro h; rw [h] at hcpost; exact hc hcpost
+      have hpost' : (postOf A.elist om'.cursor).length + 1 = (postOf A.elist om.cursor).length := by
+        rw [hcur2, hR.inv.eList.next _ hcurA, postOf_succOf hR.inv.eList.nodup hR.inv.eList.nonil hcurA,
+          hpo, List.length_tail]
+        have := List.length_pos_of_ne_nil hpne; omega
+      have hC' : LoopC mk TI PI μ ν Jf nf Rf om' n' A (budget - 1) Φe live₀ I D N' := by
+        refine ⟨by rw [e1]; exact hC.curok, by rw [hP2]; exact hC.nP, fun h => absurd (e4 ▸ h)
+          (by simp [hset]), fun _ => ⟨fun B' hB' => ?_, ?_⟩, hC.room, by rw [e6]; exact hlive,
+          by rw [e7]; have := hC.bud; omega⟩
+        · rw [INV.elist_unique hB' hRB2.inv]; exact ⟨hok2, hfill2⟩
+        · rw [e7]; have := hC.bud; omega
+      by_cases hc' : om'.cursor = NIL
+      · rw [if_pos hc']
+        have hN'' := e1 ▸ hN'
+        obtain ⟨Bx, hRBx, -, -, hcsx⟩ := hN''
+        refine ⟨_, rfl, swap_ok (om := om') (e1 ▸ hN') (e1 ▸ hR) (e1 ▸ hL) (e4 ▸ hset) hc' hS
+          (e5 ▸ hf), e6, Or.inr ⟨rfl, hC'.nP, e7, e6, fun B' hB' => ((hC'.serve (e4 ▸ hset)).1 B' hB').1,
+          ?_⟩⟩
+        show n'.count ≤ 1 + live₀ + I
+        have := nxtR'_live_le (e1 ▸ hN') (e1 ▸ hL) (e4 ▸ hset) hRB2.inv
+        omega
+      · rw [if_neg hc']
+        obtain ⟨om'', h1, h2, h3, h4⟩ := ih (budget - 1) om' n' A (e1 ▸ hR) (e1 ▸ hL)
+          (e1 ▸ e2 ▸ hI) (e1 ▸ hN') (e5 ▸ hf) (by rw [e6]; exact hlv) hC'
+          (by rw [e4, if_pos hset]; rw [if_pos hset] at hfu; omega)
+        exact ⟨om'', h1, h2, h3.trans e6, h4.mono e1 e7 e6⟩
+    · have hf' : om.cursorSet = false := by simpa using hset
+      rw [if_pos (by simp [hf'])]
+      obtain ⟨hprep, hφ⟩ := hC.prep hf'
+      obtain ⟨ready, n', hr, hN1, hN2⟩ := prepare_ok hN hR hf'
+      obtain ⟨b, n2, hr2, hcnt2, hP2, hI2, hT2, hF2⟩ := hprep.step S
+      rw [hr] at hr2
+      injection hr2 with hr2
+      injection hr2 with h1 h2
+      subst h1; subst h2
+      simp only [bind, Except.bind, hr]
+      cases ready with
+      | true =>
+        rw [if_pos rfl]
+        have hok := hT2 rfl
+        set om1 : OM := { om with cursor := (om.cur.E.getX om.cur.head).next, cursorSet := true }
+          with hom1
+        have hcnt : om.cur.count = A.elist.length := by
+          have := hC.curok.cnt; exact this
+        have hpost1 : (postOf A.elist om1.cursor).length + 1 = A.elist.length := by
+          show (postOf A.elist (eN om.cur om.cur.head)).length + 1 = _
+          rw [hR.inv.eList.next _ hR.head, hR.inv.eList.head,
+            postOf_succOf hR.inv.eList.nodup hR.inv.eList.nonil
+              (by rw [← hR.inv.eList.head]; exact hR.head), postOf_headD hR.ne, List.length_tail]
+          have := List.length_pos_of_ne_nil hR.ne; omega
+        have hC1 : LoopC mk TI PI μ ν Jf nf Rf om1 n' A budget Φe live₀ I D N' := by
+          refine ⟨hC.curok, by rw [hP2]; exact hC.nP, fun h => by simp [hom1] at h, fun _ =>
+            ⟨fun B' hB' => ?_, ?_⟩, hC.room, hC.live, hC.bud⟩
+          · rw [INV.elist_unique hB' hI2]
+            refine ⟨hok, ?_⟩
+            rw [hcnt2, hprep.cnt]; omega
+          · show (postOf A.elist om1.cursor).length + (om.KB - budget) ≤ Φe
+            omega
+        obtain ⟨om'', h1, h2, h3, h4⟩ := ih budget om1 n' A hR hL hI (hN2 rfl) hf hlv hC1
+          (by simp [hom1]; rw [if_neg (by simp [hf'])] at hfu; omega)
+        exact ⟨om'', h1, h2, h3, h4.mono rfl rfl rfl⟩
+      | false =>
+        simp only [Bool.false_eq_true, if_false]
+        obtain ⟨hprep', hν⟩ := hF2 rfl
+        have hC1 : LoopC mk TI PI μ ν Jf nf Rf om n' A (budget - 1) Φe live₀ I D N' := by
+          refine ⟨hC.curok, by rw [hP2]; exact hC.nP, fun _ => ⟨hprep', ?_⟩,
+            fun h => absurd h (by simp [hf']), hC.room, hC.live, by have := hC.bud; omega⟩
+          have := hC.bud; omega
+        obtain ⟨om'', h1, h2, h3, h4⟩ := ih (budget - 1) om n' A hR hL hI hN1 hf hlv hC1
+          (by rw [if_neg (by simp [hf'])] at hfu ⊢; omega)
+        exact ⟨om'', h1, h2, h3, h4⟩
+
+end OM.Proof
