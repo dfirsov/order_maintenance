@@ -225,12 +225,12 @@ theorem initCore_fields {s n : Core} {lazy : Bool} (h : (initCore lazy).run s = 
 
 /-- **A lazily built fresh core.** -/
 theorem newCore_lazy (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
-    ∃ n, newCore (mk N) true = .ok n ∧ PrepOK mk PI n ∧ ν n ≤ (mk N).H + 1 := by
+    ∃ n, newCore (mk N) true = .ok n ∧ PrepOK mk PI n ∧ ν n ≤ (mk N).H + 1 ∧ n.P = mk N := by
   obtain ⟨n, hnew, hr⟩ := newCore_run (P := mk N) (lazy := true)
   obtain ⟨hcnt, hP⟩ := initCore_fields hr
   obtain ⟨hL, hI⟩ := lowinv_initCore (S.gp N) (S.cp N) (S.lp N) hr
   obtain ⟨hPI, hν⟩ := S.prep.lazy _ _ hr
-  exact ⟨n, hnew, ⟨hPI, hL, hI, hcnt, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hν⟩
+  exact ⟨n, hnew, ⟨hPI, hL, hI, hcnt, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hν, hP⟩
 
 /-- **An eagerly built fresh core** is in service. -/
 theorem newCore_eager (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
@@ -284,7 +284,7 @@ elements not yet scanned) shrinks by `K_B − 1` per insertion's worth of operat
 structure RebuildW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
     (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (c₀ live₀ I D : Nat) : Prop where
   c0 : c₀ ≤ om.cur.P.N / 2
-  nP : n.P = mk (4 * max (live₀ + (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1) 16)
+  nP : n.P = mk (4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16)
   ccnt : om.cur.count ≤ c₀ + I
   live : om.live + D = live₀ + I
   l0 : live₀ ≤ c₀
@@ -379,7 +379,7 @@ theorem WC.nxt_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν
     rw [Nat.le_div_iff_mul_le (by omega), Nat.mul_comm]; omega
   rw [hW.nP, S.PN]
   generalize (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) = q at hIq ⊢
-  have : live₀ + q + 1 ≤ max (live₀ + q + 1) 16 := le_max_left _ _
+  have : live₀ + (q + 1) ≤ max (live₀ + (q + 1)) 16 := le_max_left _ _
   omega
 
 end OM.Proof
@@ -725,5 +725,174 @@ theorem rebuildLoop_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {Sp : OM.S
         obtain ⟨om'', h1, h2, h3, h4⟩ := ih (budget - 1) om n' A hR hL hI hN1 hf hlv hC1
           (by rw [if_neg (by simp [hf'])] at hfu ⊢; omega)
         exact ⟨om'', h1, h2, h3, h4⟩
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- Lemma W's record in the middle of an operation: this operation's insertion or deletion is
+counted, and its `K_B` rebuild steps are still to come. -/
+structure MidW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+    (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (c₀ live₀ I D : Nat) : Prop where
+  c0 : c₀ ≤ om.cur.P.N / 2
+  nP : n.P = mk (4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16)
+  ccnt : om.cur.count ≤ c₀ + I
+  live : om.live + D = live₀ + I
+  l0 : live₀ ≤ c₀
+  Iq : I ≤ (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1
+  prep : om.cursorSet = false → PrepOK mk PI n ∧
+    ν n + om.cur.count + (om.KB - 1) * I ≤ om.cur.P.L + 2 + c₀ + om.KB
+  serve : om.cursorSet = true →
+    (∀ B, INV n B → CoreOK mk TI μ Jf nf Rf n B.elist ∧
+      n.count ≤ 1 + (liveH n B.elist).length + D) ∧
+    ∀ A, INV om.cur A → (postOf A.elist om.cursor).length + (om.KB - 1) * I ≤
+      om.cur.P.L + 2 + c₀ + om.KB
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- **The rebuild step** (Lemma W): it restores the wrapper's cost invariant. -/
+theorem rebuildStep_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+    (hW : WInv om Sp) (hlv : om.live = Sp.list.length) (hkb : 4 ≤ om.KB)
+    (hbig : 64 ≤ om.cur.P.N) (hcur : ∀ A, INV om.cur A → CoreOK mk TI μ Jf nf Rf om.cur A.elist)
+    (hidle : om.nxt = none → om.cur.count ≤ om.cur.P.N / 2)
+    (hbusy : ∀ n, om.nxt = some n → ∃ c₀ live₀ I D, MidW mk TI PI μ ν Jf nf Rf om n c₀ live₀ I D) :
+    ∃ om', om.rebuildStep mk = .ok om' ∧ WC mk TI PI μ ν Jf nf Rf om' Sp := by
+  obtain ⟨om', hrs, hW'⟩ := rebuildStep_ok S.core hW
+  refine ⟨om', hrs, ?_⟩
+  have hW0 := hW
+  obtain ⟨hS, hf, A, hR, hL, hI, hN⟩ := hW0
+  have hok := hcur A hR.inv
+  have hmk : om.cur.P = mk om.cur.P.N := hok.pmk
+  have hsm := S.small _ hbig
+  have hLeq : (mk om.cur.P.N).L = om.cur.P.L := by rw [← hmk]
+  rw [hLeq] at hsm
+  have hlc : om.live ≤ om.cur.count := by
+    rw [hlv, ← hL, hok.cnt]; unfold liveH FM; rw [List.length_map]; exact List.length_filter_le _ _
+  unfold OM.rebuildStep at hrs
+  unfold NxtR at hN
+  cases hn : om.nxt with
+  | none =>
+    rw [hn] at hrs
+    simp only at hrs
+    have hc := hidle hn
+    split at hrs
+    · -- the trigger
+      next htr =>
+      obtain ⟨n, hnew, hprep, hν, hnP⟩ := newCore_lazy S om.nextCapacity
+      simp only [bind, Except.bind, hnew] at hrs
+      cases hrs
+      have hN' : om.nextCapacity ≤ 4 * om.cur.P.N := by
+        unfold OM.nextCapacity
+        have : (om.cur.count + (om.cur.P.L + 2)) / (om.KB - 1) ≤
+            (om.cur.count + (om.cur.P.L + 2)) / 3 := Nat.div_le_div_left (by omega) (by norm_num)
+        apply Nat.mul_le_mul_left 4
+        apply max_le
+        · omega
+        · omega
+      have hHb := S.prepB _ _ hN'
+      rw [hLeq] at hHb
+      refine ⟨hW', hlv, hkb, hbig, hcur, fun h => by simp at h, fun n' hn' => ?_⟩
+      simp only [Option.some.injEq] at hn'
+      subst hn'
+      refine ⟨om.cur.count, om.live, 0, 0, ⟨?_, ?_, ?_, ?_, hlc, fun _ => ⟨hprep, ?_⟩,
+        fun h => by simp at h⟩⟩
+      · show om.cur.count ≤ om.cur.P.N / 2; exact hc
+      · show n.P = mk (4 * max (om.live + ((om.cur.count + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16)
+        rw [hnP]; rfl
+      · show om.cur.count ≤ om.cur.count + 0; omega
+      · show om.live + 0 = om.live + 0; rfl
+      · show ν n + om.cur.count + (om.KB - 1) * 0 ≤ om.cur.P.L + 2 + om.cur.count
+        omega
+    · next htr =>
+      cases hrs
+      refine ⟨hW', hlv, hkb, hbig, hcur, fun _ => ?_, fun n' hn' => (by rw [hn] at hn'; cases hn')⟩
+      simp only [Bool.or_eq_true, decide_eq_true_eq, not_or] at htr
+      omega
+  | some n0 =>
+    rw [hn] at hrs hN
+    simp only at hrs
+    obtain ⟨c₀, live₀, I, D, hM⟩ := hbusy n0 hn
+    -- the entry potential
+    set Φe := if om.cursorSet then (postOf A.elist om.cursor).length else ν n0 + om.cur.count
+      with hΦe
+    have hΦ : Φe + (om.KB - 1) * I ≤ om.cur.P.L + 2 + c₀ + om.KB := by
+      cases hs : om.cursorSet
+      · simp only [hΦe, hs, Bool.false_eq_true, if_false]; exact (hM.prep hs).2
+      · simp only [hΦe, hs, if_true]; exact (hM.serve hs).2 A hR.inv
+    have hroom : 1 + live₀ + I + 1 ≤
+        4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16 := by
+      have := hM.Iq
+      have : live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1) ≤
+          max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16 := le_max_left _ _
+      omega
+    have hC0 : LoopC mk TI PI μ ν Jf nf Rf { om with nxt := none } n0 A om.KB Φe live₀ I D
+        (4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16) := by
+      refine ⟨hok, hM.nP, fun hs => ⟨(hM.prep hs).1, ?_⟩, fun hs => ⟨(hM.serve hs).1, ?_⟩, hroom,
+        hM.live, le_rfl⟩
+      · show ν n0 + om.cur.count + (om.KB - om.KB) ≤ Φe
+        simp only [hΦe, show om.cursorSet = false from hs, Bool.false_eq_true, if_false]; omega
+      · show (postOf A.elist om.cursor).length + (om.KB - om.KB) ≤ Φe
+        simp only [hΦe, show om.cursorSet = true from hs, if_true]; omega
+    obtain ⟨om2, hr2, hW2, hl2, hout⟩ := rebuildLoop_cost S hS (om.KB + 1) om.KB
+      { om with nxt := none } n0 A hR hL hI hN hf hlv hC0 (by split <;> omega)
+    rw [hrs] at hr2
+    injection hr2 with hr2
+    subst hr2
+    dsimp only at hl2
+    rcases hout with ⟨n', h1, h2, h3, hC'⟩ | ⟨h1, h2, h3, h4, h5, h6⟩
+    · -- the rebuild goes on
+      dsimp only at h2 h3
+      have hcur' : om'.cur = om.cur := h2
+      refine ⟨hW', by rw [hl2]; exact hlv, by rw [h3]; exact hkb, by rw [hcur']; exact hbig,
+        fun A' hA' => (by rw [hcur'] at hA' ⊢; exact hcur A' hA'),
+        fun h => (by rw [h1] at h; cases h), fun n'' hn'' => ?_⟩
+      rw [h1] at hn''; cases hn''
+      refine ⟨c₀, live₀, I, D, ⟨by rw [hcur']; exact hM.c0, ?_, by rw [hcur']; exact hM.ccnt,
+        by rw [hl2]; exact hM.live, hM.l0, fun hs => ⟨(hC'.prep hs).1, ?_⟩,
+        fun hs => ⟨(hC'.serve hs).1, fun A' hA' => ?_⟩⟩⟩
+      · rw [hC'.nP, hcur', h3]
+      · have h0 := (hC'.prep hs).2
+        rw [hcur', h3]
+        rw [hcur', h3] at h0
+        have : (om.KB - 1) * I + om.KB ≤ om.KB * I + om.KB := by
+          have := Nat.mul_le_mul_right I (Nat.sub_le om.KB 1); omega
+        have hk3 : 3 * I ≤ (om.KB - 1) * I := Nat.mul_le_mul_right I (by omega)
+        simp only [Nat.sub_zero] at h0
+        omega
+      · have h0 := (hC'.serve hs).2
+        rw [hcur'] at hA'
+        rw [INV.elist_unique hA' hR.inv, hcur', h3]
+        rw [h3] at h0
+        simp only [Nat.sub_zero] at h0
+        omega
+    · -- the swap
+      dsimp only at h3 h4
+      have hPN : om'.cur.P.N = 4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16 := by
+        rw [h2, S.PN]
+      have hge : 64 ≤ om'.cur.P.N := by rw [hPN]; have := le_max_right (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16; omega
+      refine ⟨hW', by rw [h4]; exact hlv, by rw [h3]; exact hkb, hge, h5, fun _ => ?_,
+        fun n'' hn'' => (by rw [h1] at hn''; cases hn'')⟩
+      rw [hPN]
+      have := hM.Iq
+      have : live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1) ≤
+          max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16 := le_max_left _ _
+      have : 16 ≤ max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16 := le_max_right _ _
+      omega
 
 end OM.Proof
