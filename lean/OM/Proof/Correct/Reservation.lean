@@ -555,7 +555,7 @@ theorem Abs.splitChunk_glist {A : Abs} {x y z : Nat} (hx : x ∈ A.chunks) (hnd 
   rw [e1, e2]; simp
 
 theorem withTag_eframe (s : Core) (c t : Nat) : EFrame s (withTag s c t) :=
-  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl⟩
+  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
 
 theorem good_splitChunkStart (x : Nat) : Good (splitChunkStart x) := by
   intro s A hI
@@ -573,7 +573,7 @@ theorem good_splitChunkStart (x : Nat) : Good (splitChunkStart x) := by
   rw [hps]
   -- E and the other element fields are untouched up to the linked state
   have hE2 : EFrame s (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) :=
-    ⟨by simp [linkChunkPair, push2], fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl⟩
+    ⟨by simp [linkChunkPair, push2], fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
   have hInv := fun ty tz => inv_splitChunk (ty := ty) (tz := tz) hI hx
   generalize hs2 : linkChunkPair (push2 s) x s.C.size (s.C.size + 1) = s2 at hE2 hInv
   rw [run_bind]

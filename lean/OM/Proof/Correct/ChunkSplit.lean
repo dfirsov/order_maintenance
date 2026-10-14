@@ -999,11 +999,11 @@ set_option linter.deprecated false
 
 theorem moveGroupsLeft_eframe (s : Core) (x y : Nat) (u labs : List Nat) :
     EFrame s (moveGroupsLeft s x y u labs) :=
-  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl⟩
+  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
 
 theorem moveGroupsRight_eframe (s : Core) (x z : Nat) (u labs : List Nat) :
     EFrame s (moveGroupsRight s x z u labs) :=
-  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl⟩
+  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
 
 theorem good_moveUnit (x : Nat) (left : Bool) : Good (moveUnit x left) := by
   intro s A hI

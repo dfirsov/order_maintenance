@@ -72,6 +72,9 @@ def allocGroup (s : Core) (c : Nat) : Nat × Core :=
 
 theorem newGroup_eq (c : Nat) : newGroup c = modifyGet (allocGroup · c) := rfl
 
+theorem allocGroup_P (s : Core) (c : Nat) : (allocGroup s c).2.P = s.P := by
+  unfold allocGroup; split <;> rfl
+
 @[simp] theorem run_newGroup_bind {β : Type} (c : Nat) (k : Nat → CM β) (s : Core) :
     (newGroup c >>= k).run s = (k (allocGroup s c).1).run (allocGroup s c).2 := rfl
 
@@ -452,11 +455,13 @@ theorem good_startGroupSplit (g : Nat) : Good (startGroupSplit g) := by
     have hF := hI.freeOK
     obtain ⟨al1, al2, al3, al4, al5, al6, al7, al8, hF1, al10, alE, alC, alH, alT, alFG, alFC,
       alS1, alS2⟩ := allocGroup_spec hF c
+    have alP := allocGroup_P s c
     generalize hp1 : allocGroup s c = p1 at *
     obtain ⟨gl, s1⟩ := p1
     simp only at al1 al2 al3 al4 al5 al6 al7 al8 hF1 al10 alE alC alH alT alFG alFC alS1 alS2 hr
     obtain ⟨bl1, bl2, bl3, bl4, bl5, bl6, bl7, bl8, hF2, bl10, blE, blC, blH, blT, blFG, blFC,
       blS1, blS2⟩ := allocGroup_spec hF1 c
+    have blP := allocGroup_P s1 c
     generalize hp2 : allocGroup s1 c = p2 at *
     obtain ⟨gr, s2⟩ := p2
     simp only at bl1 bl2 bl3 bl4 bl5 bl6 bl7 bl8 hF2 bl10 blE blC blH blT blFG blFC blS1 blS2 hr
@@ -594,7 +599,8 @@ theorem good_startGroupSplit (g : Nat) : Good (startGroupSplit g) := by
     have hmem' : ∀ z, z ∈ (A.splitStart c g gl gr).glist ↔ z = gl ∨ z = gr ∨ z ∈ A.glist := by
       intro z; rw [hgl', hsplit]; exact mem_around_iff
     refine ⟨⟨by rw [hE'], fun e => by simp [eN, hE'], fun e => by simp [eP, hE'],
-      fun e => by rw [hE'], fun e => by rw [hE'], hH', hT'⟩, A.splitStart c g gl gr, ?_, hel'⟩
+      fun e => by rw [hE'], fun e => by rw [hE'], hH', hT', by simp only at alP blP; rw [hs', ← alP, ← blP]; rfl⟩,
+      A.splitStart c g gl gr, ?_, hel'⟩
     -- chunk `c`'s run
     obtain ⟨r1, r2, hrun⟩ := List.mem_iff_append.mp hgc
     have hrnd : (A.grps c).Nodup := by

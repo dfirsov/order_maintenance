@@ -9,3 +9,4 @@ import OM.Proof.Correct.GroupMove
 import OM.Proof.Correct.ChunkSplit
 import OM.Proof.Correct.Reservation
 import OM.Proof.Correct.Fallback
+import OM.Proof.Correct.CoreInsert

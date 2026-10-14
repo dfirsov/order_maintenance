@@ -763,7 +763,7 @@ theorem sameLinks_C_tag (s : Core) (C : Array Chunk) (hs : C.size = s.C.size)
   exact ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl,
     fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl,
     rfl, rfl, rfl, rfl, rfl, hs, fun c => (h c).1, fun c => (h c).2.1, fun c => (h c).2.2.1,
-    fun c => (h c).2.2.2⟩
+    fun c => (h c).2.2.2, rfl⟩
 
 theorem pres_modC_tag (c t : Nat) : Pres SameLinks (modC c fun C => { C with tag := t }) := by
   unfold modC
@@ -906,7 +906,7 @@ theorem eframe_fbLayout (P : Params) (l : List Nat) (s : Core) (hnd : l.Nodup) :
     EFrame s (fbLayout P l s) := by
   have hnd' : (chunksOf (fbGS P) l).flatten.Nodup := by rw [chunksOf_flatten]; exact hnd
   have h := fun e => fbE_other P (chunksOf (fbGS P) l) 0 s.E hnd' e
-  refine ⟨?_, fun e => ?_, fun e => ?_, fun e => ?_, fun e => ?_, rfl, rfl⟩
+  refine ⟨?_, fun e => ?_, fun e => ?_, fun e => ?_, fun e => ?_, rfl, rfl, rfl⟩
   · simp only [fbLayout, fbElems_eq, fbE_size]
   · simp only [eN, fbLayout, fbElems_eq]; exact (h e).1
   · simp only [eP, fbLayout, fbElems_eq]; exact (h e).2.1
@@ -924,13 +924,142 @@ theorem fallback_run {s : Core} {l : List Nat} (hE : ElemOK s l) (hP : FbOK s.P)
     hE.eList.walk (length_lt_of_range hE.eList.nodup fun e he => (hE.eAlloc e).mp he)
   rw [hw]
   generalize hs0 : { s with fallbacks := s.fallbacks + 1 } = s0
-  have e0 : EFrame s s0 := by rw [← hs0]; exact ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl⟩
+  have e0 : EFrame s s0 := by rw [← hs0]; exact ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
   have hE0 : ElemOK s0 l := hE.of_eframe e0
   have hPs : s.P = s0.P := by rw [← hs0]
   have hP0 : FbOK s0.P := hPs ▸ hP
   rw [hPs]
   obtain ⟨s2, h2, hs2, I2⟩ := relabelAll_run (inv0_fbLayout hE0 hP0)
   refine ⟨s2, h2, ?_, fbAbs s0.P l, I2, fbAbs_elist _ _⟩
+  exact e0.trans ((eframe_fbLayout _ _ _ hE0.eList.nodup).trans hs2.eframe)
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Room for the retried insertion -/
+
+/-- Parameters for the retry: FALLBACK's element gap exceeds the append distance `D_e ≥ 1`. -/
+def RoomP (P : Params) : Prop := 1 ≤ P.D_e ∧ P.D_e < (1 <<< P.B_e) / (fbGS P + 1)
+
+/-- Every element has room for an insertion right after it. -/
+def Room (s : Core) (A : Abs) : Prop :=
+  1 ≤ s.P.D_e ∧ ∀ x ∈ A.elist, (x = gLs s (eG s x) → eL s x + s.P.D_e < 1 <<< s.P.B_e) ∧
+    (x ≠ gLs s (eG s x) → eL s x + 1 < eL s (eN s x))
+
+theorem Room.of_sameLinks {s s' : Core} {A : Abs} (h : Room s A) (hs : SameLinks s s') : Room s' A := by
+  refine ⟨hs.P ▸ h.1, fun x hx => ?_⟩
+  rw [hs.eG, hs.gLs, hs.eL, hs.eN, hs.eL, hs.P]
+  exact h.2 x hx
+
+theorem succOf_getElem {b : List Nat} (hnd : b.Nodup) {i : Nat} (hi : i + 1 < b.length) :
+    succOf b b[i] = b[i + 1] := by
+  have e : b = b.take i ++ b[i] :: b.drop (i + 1) := by simp
+  generalize hx : b[i] = x at e
+  have hnd' := hnd; rw [e] at hnd'
+  calc succOf b x = succOf (b.take i ++ x :: b.drop (i + 1)) x := congrArg (succOf · x) e
+    _ = (b.drop (i + 1)).headD NIL := succOf_mid hnd'
+    _ = b[i + 1] := by
+      rw [List.headD_eq_head?_getD, List.head?_drop, List.getElem?_eq_getElem hi]; rfl
+
+theorem getLastD_eq_getElem {b : List Nat} (hb : b ≠ []) :
+    b.getLastD NIL = b[b.length - 1]'(by have := List.length_pos_iff.mpr hb; omega) := by
+  rw [List.getLastD_eq_getLast?, List.getLast?_eq_getElem?, List.getElem?_eq_getElem]; rfl
+
+theorem room_fbLayout {s : Core} {l : List Nat} (hE : ElemOK s l) (hP : RoomP s.P) :
+    Room (fbLayout s.P l s) (fbAbs s.P l) := by
+  refine ⟨hP.1, fun x hx => ?_⟩
+  rw [fbAbs_elist] at hx
+  generalize hP' : s.P = P at hP
+  have hnd : l.Nodup := hE.eList.nodup
+  have hsz : ∀ e ∈ l, e < s.E.size := fun e he => ((hE.eAlloc e).mp he).2
+  have hPl : (fbLayout P l s).P = P := hP'
+  rw [hPl]
+  generalize hgr : chunksOf (fbGS P) l = groups
+  have hfl : groups.flatten = l := hgr ▸ chunksOf_flatten _ _
+  have hne : ∀ p ∈ groups, p ≠ [] := hgr ▸ chunksOf_ne_nil _ _
+  have hlen : ∀ p ∈ groups, p.length ≤ fbGS P := by
+    have := chunksOf_mem_length (fbGS P) l; rw [hgr] at this
+    intro p hp; have := this p hp; have := fbGS_pos P; unfold fbGS at *; omega
+  have hElem : (fbLayout P l s).E = fbE P 0 groups s.E := by simp only [fbLayout, hgr, fbElems_eq]
+  have hG := fbLayout_Gs P l s
+  rw [hgr] at hG
+  -- the group of `x`
+  rw [← hfl, List.mem_flatten] at hx
+  obtain ⟨b, hb, hxb⟩ := hx
+  obtain ⟨k, hk, rfl⟩ := List.mem_iff_getElem.mp hb
+  have hin := fbE_in P groups 0 s.E (hfl ▸ hnd) (fun e he => hsz e (hfl ▸ he)) hk hxb
+  have hbnd : groups[k].Nodup := List.Nodup.sublist (List.sublist_flatten_of_mem hb) (hfl ▸ hnd)
+  have hbne := hne _ hb
+  generalize hst : (1 <<< P.B_e) / (groups[k].length + 1) = st at hin
+  have hD : P.D_e < st := by
+    rw [← hst]
+    exact Nat.lt_of_lt_of_le hP.2 (Nat.div_le_div_left (by have := hlen _ hb; omega) (by omega))
+  have hstB : (groups[k].length + 1) * st ≤ 1 <<< P.B_e := by
+    rw [← hst, Nat.mul_comm]; exact Nat.div_mul_le_self _ _
+  generalize hi : groups[k].idxOf x = i at hin
+  have hil : i < groups[k].length := hi ▸ List.idxOf_lt_length_of_mem hxb
+  have hxi : groups[k][i] = x := by subst hi; exact List.getElem_idxOf hil
+  have heG : eG (fbLayout P l s) x = k + 1 := by simp only [eG, hElem]; rw [hin.1]; omega
+  have hgl : gLs (fbLayout P l s) (k + 1) = groups[k].getLastD NIL := by
+    simp only [gLs, hG, if_neg (show k + 1 ≠ 0 by omega), if_pos (show k + 1 ≤ groups.length by omega),
+      fbGroup, Nat.add_sub_cancel, List.getD_eq_getElem _ _ hk]
+  have heL : eL (fbLayout P l s) x = (i + 1) * st := by simp only [eL, hElem]; exact hin.2
+  rw [heG, hgl, heL, getLastD_eq_getElem hbne]
+  refine ⟨fun hlast => ?_, fun hnl => ?_⟩
+  · have : i = groups[k].length - 1 := by
+      rw [← hxi] at hlast; exact (List.Nodup.getElem_inj_iff hbnd).mp hlast
+    have : (i + 1) * st + st ≤ 1 <<< P.B_e := by
+      rw [← Nat.succ_mul]; refine Nat.le_trans (Nat.mul_le_mul_right _ ?_) hstB; omega
+    omega
+  · have hi1 : i + 1 < groups[k].length := by
+      by_contra h
+      exact hnl (by rw [← hxi]; congr 1; omega)
+    have hN : eN (fbLayout P l s) x = groups[k][i + 1] := by
+      have := (eframe_fbLayout P l s hnd).next x
+      rw [this, hE.eList.next x (hfl ▸ List.mem_flatten.mpr ⟨_, hb, hxb⟩), ← hfl,
+        succOf_flatten (hfl ▸ hnd) hb hxb (by
+          rw [List.getLast?_eq_getElem?, List.getElem?_eq_getElem (by omega)]
+          intro h; apply hnl; rw [Option.some_inj] at h; exact h ▸ rfl),
+        ← hxi, succOf_getElem hbnd hi1]
+    have hmem : groups[k][i + 1] ∈ groups[k] := List.getElem_mem _
+    have hin2 := fbE_in P groups 0 s.E (hfl ▸ hnd) (fun e he => hsz e (hfl ▸ he)) hk hmem
+    rw [hst, List.Nodup.idxOf_getElem hbnd] at hin2
+    rw [hN]; simp only [eL, hElem]; rw [hin2.2]
+    have := hP.1
+    rw [Nat.succ_mul (i + 1)]; omega
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- **Lemma 3.3 with room**: under `RoomP`, every element also has room after FALLBACK. -/
+theorem fallback_run_room {s : Core} {l : List Nat} (hE : ElemOK s l) (hP : FbOK s.P)
+    (hR : RoomP s.P) :
+    ∃ s', fallback.run s = .ok () s' ∧ EFrame s s' ∧ ∃ A, INV s' A ∧ A.elist = l ∧ Room s' A := by
+  unfold fallback
+  simp only [run_getP_bind, run_modify_bind, run_elements_bind]
+  have hw : walkList (fun e => (s.E.getX e).next) s.E.size s.head = l :=
+    hE.eList.walk (length_lt_of_range hE.eList.nodup fun e he => (hE.eAlloc e).mp he)
+  rw [hw]
+  generalize hs0 : { s with fallbacks := s.fallbacks + 1 } = s0
+  have e0 : EFrame s s0 := by
+    rw [← hs0]; exact ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
+  have hE0 : ElemOK s0 l := hE.of_eframe e0
+  have hPs : s.P = s0.P := by rw [← hs0]
+  have hP0 : FbOK s0.P := hPs ▸ hP
+  have hR0 : RoomP s0.P := hPs ▸ hR
+  rw [hPs]
+  obtain ⟨s2, h2, hs2, I2⟩ := relabelAll_run (inv0_fbLayout hE0 hP0)
+  refine ⟨s2, h2, ?_, fbAbs s0.P l, I2, fbAbs_elist _ _, (room_fbLayout hE0 hR0).of_sameLinks hs2⟩
   exact e0.trans ((eframe_fbLayout _ _ _ hE0.eList.nodup).trans hs2.eframe)
 
 end OM.Proof

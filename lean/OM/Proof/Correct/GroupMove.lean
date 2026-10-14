@@ -245,7 +245,7 @@ theorem good_unlinkStep (g : Nat) : Good (unlinkStep g) := by
         · exact absurd h hzg
         · exact Or.inr h
     refine ⟨⟨by rw [rE], fun e => by simp [eN, rE], fun e => by simp [eP, rE],
-      fun e => by rw [rE], fun e => by rw [rE], rH, rT⟩, A.removeGroup c g, ?_, hel'⟩
+      fun e => by rw [rE], fun e => by rw [rE], rH, rT, rfl⟩, A.removeGroup c g, ?_, hel'⟩
     obtain ⟨r1, r2, hrun⟩ := List.mem_iff_append.mp hgc
     have hrnd : (A.grps c).Nodup := by
       have := hgnd; rw [INV.glist_flatten] at this
@@ -1138,13 +1138,13 @@ theorem good_moveElem (g : Nat) : Good (moveElem g) := by
     obtain ⟨A', h1, h2⟩ := inv_moveFirstLeft hI hg hne hadj hlab
     obtain ⟨-, -, -, -, -, -, seN, seP, sLive, sH, sEs, -, -, sHd, sT, -, -⟩ :=
       moveFirstLeft_same (s := s) (g := g) (gl := (s.Gs.getX g).l) (e := gF s g) (lab := lab)
-    exact ⟨⟨sEs, seN, seP, sLive, sH, sHd, sT⟩, A', h1, h2⟩
+    exact ⟨⟨sEs, seN, seP, sLive, sH, sHd, sT, rfl⟩, A', h1, h2⟩
   · rw [hr]
     have hg := hI.mem_of_alive hg0 hgs hga
     obtain ⟨A', h1, h2⟩ := inv_moveLastRight hI hg hne hadj hlab
     obtain ⟨-, -, -, -, -, -, seN, seP, sLive, sH, sEs, -, -, sHd, sT, -, -⟩ :=
       moveLastRight_same (s := s) (g := g) (gr := (s.Gs.getX g).r) (e := gLs s g) (lab := lab)
-    exact ⟨⟨sEs, seN, seP, sLive, sH, sHd, sT⟩, A', h1, h2⟩
+    exact ⟨⟨sEs, seN, seP, sLive, sH, sHd, sT, rfl⟩, A', h1, h2⟩
   · rw [hr]; exact EFrame.refl s
 
 /-- Updating group fields that INV-S does not read. -/

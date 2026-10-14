@@ -27,17 +27,18 @@ structure EFrame (s s' : Core) : Prop where
   h : ∀ e, (s'.E.getX e).h = (s.E.getX e).h
   head : s'.head = s.head
   tail : s'.tail = s.tail
+  P : s'.P = s.P
 
 theorem EFrame.refl (s : Core) : EFrame s s :=
-  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl⟩
+  ⟨rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, fun _ => rfl, rfl, rfl, rfl⟩
 
 theorem EFrame.trans {s t u : Core} (h1 : EFrame s t) (h2 : EFrame t u) : EFrame s u :=
   ⟨h2.size.trans h1.size, fun e => (h2.next e).trans (h1.next e),
    fun e => (h2.prev e).trans (h1.prev e), fun e => (h2.live e).trans (h1.live e),
-   fun e => (h2.h e).trans (h1.h e), h2.head.trans h1.head, h2.tail.trans h1.tail⟩
+   fun e => (h2.h e).trans (h1.h e), h2.head.trans h1.head, h2.tail.trans h1.tail, h2.P.trans h1.P⟩
 
 theorem SameLinks.eframe {s s' : Core} (h : SameLinks s s') : EFrame s s' :=
-  ⟨h.Esize, h.eN, h.eP, h.eLive, h.eH, h.head, h.tail⟩
+  ⟨h.Esize, h.eN, h.eP, h.eLive, h.eH, h.head, h.tail, h.P⟩
 
 def Good {α : Type} (m : CM α) : Prop :=
   ∀ s A, INV s A →

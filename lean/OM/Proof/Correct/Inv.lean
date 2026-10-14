@@ -133,6 +133,7 @@ structure SameLinks (s s' : Core) : Prop where
   cP : ∀ c, cP s' c = cP s c
   cF : ∀ c, cF s' c = cF s c
   cLs : ∀ c, cLs s' c = cLs s c
+  P : s'.P = s.P
 
 theorem SameLinks.refl (s : Core) : SameLinks s s := by
   constructor <;> intros <;> rfl
@@ -152,7 +153,7 @@ theorem SameLinks.trans {s t u : Core} (h1 : SameLinks s t) (h2 : SameLinks t u)
     | exact h2.firstGroup.trans h1.firstGroup | exact h2.firstChunk.trans h1.firstChunk
     | exact h2.Csize.trans h1.Csize | exact (h2.cN x).trans (h1.cN x)
     | exact (h2.cP x).trans (h1.cP x) | exact (h2.cF x).trans (h1.cF x)
-    | exact (h2.cLs x).trans (h1.cLs x)
+    | exact (h2.cLs x).trans (h1.cLs x) | exact h2.P.trans h1.P
 
 theorem INV.of_sameLinks' {s s' : Core} {A : Abs} (h : INV s A) (hs : SameLinks s s')
     (hsorted : (A.chunks.map (cT s')).IsChain (· < ·)) : INV s' A := by
