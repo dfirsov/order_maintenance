@@ -460,3 +460,48 @@ theorem postOf_headD {l : List Nat} (hne : l ≠ []) : postOf l (l.headD NIL) = 
   | cons a t => simp [postOf]
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- **A copy step** keeps the nxt core in service and its fill bound, and advances the cursor. -/
+theorem copy_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {n : Core} {A B : Abs}
+    {D : Nat} (hR : CoreR om.cur A) (hRB : CoreR n B) (hset : om.cursorSet = true)
+    (hcur : om.cursor ≠ NIL) (hcurA : om.cursor ∈ A.elist)
+    (hok : CoreOK mk TI μ Jf nf Rf n B.elist) (hfill : n.count ≤ 1 + (liveH n B.elist).length + D)
+    (hroom : n.count + 1 ≤ n.P.N) :
+    ∃ om' n' B', copyAtCursor om n = .ok (om', n') ∧ om'.cursor = eN om.cur om.cursor ∧
+      CoreR n' B' ∧ CoreOK mk TI μ Jf nf Rf n' B'.elist ∧
+      n'.count ≤ 1 + (liveH n' B'.elist).length + D ∧ n'.P = n.P := by
+  unfold copyAtCursor
+  by_cases hl : live om.cur om.cursor = true
+  · have hl' : (om.cur.E.getX om.cursor).live = true := hl
+    simp only [hl', if_true]
+    have htail : n.tail ∈ B.elist := by
+      rw [hRB.inv.tail]
+      obtain ⟨b, bt, hb⟩ := List.exists_cons_of_ne_nil hRB.ne
+      rw [hb]; exact getLastD_cons_mem _ _ _
+    obtain ⟨n', B', hr', hRB', hB', hrecB, hlyB, hhyB, hyB, _, _, hP'⟩ :=
+      core_insert hRB htail (hdl om.cur om.cursor)
+    obtain ⟨n2, hr2, -, hok2, hcnt2, hP2⟩ := hok.insert S htail hroom (hdl om.cur om.cursor)
+    rw [hr'] at hr2; cases hr2
+    simp only [bind, Except.bind]
+    rw [show (om.cur.E.getX om.cursor).h = hdl om.cur om.cursor from rfl, runCore_ok hr']
+    have hB'e : B'.elist = B.elist ++ [n.E.size] := by
+      rw [hB', hRB.inv.tail]; exact insertAfterL_getLastD hRB.inv.eList.nodup hRB.ne _
+    have hLn : liveH n' B'.elist = liveH n B.elist ++ [hdl om.cur om.cursor] := by
+      rw [hB'e, liveH_append, liveH_frame hrecB]
+      simp [FM_cons, hlyB, hhyB]
+    refine ⟨_, n', B', rfl, rfl, hRB', by rw [hB']; exact hok2, ?_, hP2⟩
+    rw [hLn, List.length_append, hcnt2]; simp; omega
+  · have hl' : (om.cur.E.getX om.cursor).live = false := by simpa [live] using hl
+    simp only [hl', Bool.false_eq_true, if_false]
+    exact ⟨_, n, B, rfl, rfl, hRB, hok, hfill, rfl⟩
+
+end OM.Proof
