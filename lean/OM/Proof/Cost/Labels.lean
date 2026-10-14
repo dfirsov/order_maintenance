@@ -123,3 +123,206 @@ structure LInv (s : Core) (lg : LGh) (s₀ : Nat → Nat) : Prop where
   e0 : ∀ c, LiveC s c → cSt s c = .quiet → lg.e0 c ≤ cSz s c
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### The labels of a split start -/
+
+theorem labBefore_val {s : Core} {g lab : Nat} (h : (labBefore g).run s = .ok lab s) :
+    lab = if g = cF s (gC s g) then gL s g - s.P.D_g else (gL s (gP s g) + gL s g) / 2 := by
+  unfold labBefore at h
+  simp only [run_getP_bind, run_getG_bind, run_getC_bind] at h
+  by_cases hf : g = (s.C.getX (s.Gs.getX g).chk).first
+  · rw [if_pos (beq_iff_eq.mpr hf), run_before] at h
+    simp only [cF, gC, gL] at hf ⊢; rw [if_pos hf]
+    split at h
+    · cases h
+    · cases h; rfl
+  · rw [if_neg (fun e => hf (beq_iff_eq.mp e))] at h
+    simp only [run_getG_bind, run_between] at h
+    simp only [cF, gC, gL, gP] at hf ⊢; rw [if_neg hf]
+    split at h
+    · cases h
+    · cases h; rfl
+
+theorem labAfter_val {s : Core} {g lab : Nat} (h : (labAfter g).run s = .ok lab s) :
+    lab = if g = cLs s (gC s g) then gL s g + s.P.D_g else (gL s g + gL s (gN s g)) / 2 := by
+  unfold labAfter at h
+  simp only [run_getP_bind, run_getG_bind, run_getC_bind] at h
+  by_cases hf : g = (s.C.getX (s.Gs.getX g).chk).last
+  · rw [if_pos (beq_iff_eq.mpr hf), run_after] at h
+    simp only [cLs, gC, gL] at hf ⊢; rw [if_pos hf]
+    split at h
+    · cases h
+    · cases h; rfl
+  · rw [if_neg (fun e => hf (beq_iff_eq.mp e))] at h
+    simp only [run_getG_bind, run_between] at h
+    simp only [cLs, gC, gL, gN] at hf ⊢; rw [if_neg hf]
+    split at h
+    · cases h
+    · cases h; rfl
+
+/-- The guard conditions of `labBefore`, when it succeeds. -/
+theorem labBefore_guard {s : Core} {g lab : Nat} (h : (labBefore g).run s = .ok lab s) :
+    (g = cF s (gC s g) → s.P.D_g ≤ gL s g ∧ s.P.D_g ≠ 0) ∧
+    (g ≠ cF s (gC s g) → gL s (gP s g) + 1 < gL s g) := by
+  unfold labBefore at h
+  simp only [run_getP_bind, run_getG_bind, run_getC_bind] at h
+  by_cases hf : g = (s.C.getX (s.Gs.getX g).chk).first
+  · rw [if_pos (beq_iff_eq.mpr hf), run_before] at h
+    simp only [cF, gC, gL] at hf ⊢
+    refine ⟨fun _ => ?_, fun h' => absurd hf h'⟩
+    split at h
+    · cases h
+    · next hg => simp only [not_or] at hg; omega
+  · rw [if_neg (fun e => hf (beq_iff_eq.mp e))] at h
+    simp only [run_getG_bind, run_between] at h
+    simp only [cF, gC, gL, gP] at hf ⊢
+    refine ⟨fun h' => absurd h' hf, fun _ => ?_⟩
+    split at h
+    · cases h
+    · omega
+
+theorem labAfter_guard {s : Core} {g lab : Nat} (h : (labAfter g).run s = .ok lab s) :
+    (g = cLs s (gC s g) → gL s g + s.P.D_g < 1 <<< s.P.B_g ∧ s.P.D_g ≠ 0) ∧
+    (g ≠ cLs s (gC s g) → gL s g + 1 < gL s (gN s g)) := by
+  unfold labAfter at h
+  simp only [run_getP_bind, run_getG_bind, run_getC_bind] at h
+  by_cases hf : g = (s.C.getX (s.Gs.getX g).chk).last
+  · rw [if_pos (beq_iff_eq.mpr hf), run_after] at h
+    simp only [cLs, gC, gL] at hf ⊢
+    refine ⟨fun _ => ?_, fun h' => absurd hf h'⟩
+    split at h
+    · cases h
+    · next hg => simp only [not_or] at hg; omega
+  · rw [if_neg (fun e => hf (beq_iff_eq.mp e))] at h
+    simp only [run_getG_bind, run_between] at h
+    simp only [cLs, gC, gL, gN] at hf ⊢
+    refine ⟨fun h' => absurd h' hf, fun _ => ?_⟩
+    split at h
+    · cases h
+    · omega
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Across a split start -/
+
+/-- The ghost update of a split start of `g` (new groups `gl`, `gr`, in chunk `c`). -/
+def LGh.split (lg : LGh) (s : Core) (g gl gr : Nat) : LGh :=
+  let c := gC s g
+  { lg with
+    child := fun z => if z = gl ∨ z = gr then true else lg.child z
+    hv := fun d => if d = c then lg.hv d + (if g = cF s c then 0 else 1) +
+      (if g = cLs s c then 0 else 1) else lg.hv d
+    cs := fun d => if d = c ∧ lg.child g = true then lg.cs d + 1 else lg.cs d
+    rs := fun d => if d = c ∧ lg.child g = false then lg.rs d + 1 else lg.rs d
+    pb := fun d => if d = c ∧ g = cLs s c then lg.pb d + 1 else lg.pb d
+    pf := fun d => if d = c ∧ g = cF s c then lg.pf d + 1 else lg.pf d }
+
+theorem GrpsC_split {s s' : Core} {g gl gr labL labR : Nat} (S : SplitSpec s s' g gl gr labL labR)
+    (c : Nat) : GrpsC s' c = if c = gC s g then insert gl (insert gr (GrpsC s c)) else GrpsC s c := by
+  have key : ∀ z, (LiveG s' z ∧ gC s' z = c) ↔
+      ((z = gl ∨ z = gr) ∧ c = gC s g) ∨ (LiveG s z ∧ gC s z = c) := by
+    intro z
+    rw [S.live, S.chk]
+    by_cases hz : z = gl ∨ z = gr
+    · have hnl : ¬ LiveG s z := by rcases hz with rfl | rfl; exact S.glOut; exact S.grOut
+      rw [if_pos hz]; simp only [hz, true_or, true_and, hnl, false_and, or_false]; exact eq_comm
+    · rw [if_neg hz]
+      have : (z = gl ∨ z = gr ∨ LiveG s z) ↔ LiveG s z := by
+        constructor
+        · rintro (h | h | h); exact absurd (Or.inl h) hz; exact absurd (Or.inr h) hz; exact h
+        · exact fun h => Or.inr (Or.inr h)
+      rw [this]; simp [hz]
+  unfold GrpsC
+  by_cases hcc : c = gC s g
+  · rw [if_pos hcc]
+    ext z
+    simp only [Finset.mem_insert, Finset.mem_filter, Finset.mem_range]
+    constructor
+    · rintro ⟨-, h⟩
+      rcases (key z).mp h with ⟨h1, -⟩ | h2
+      · rcases h1 with rfl | rfl; exact Or.inl rfl; exact Or.inr (Or.inl rfl)
+      · exact Or.inr (Or.inr ⟨h2.1.2.1, h2⟩)
+    · intro h
+      have h' : LiveG s' z ∧ gC s' z = c := by
+        rcases h with rfl | rfl | ⟨-, h2⟩
+        · exact (key _).mpr (Or.inl ⟨Or.inl rfl, hcc⟩)
+        · exact (key _).mpr (Or.inl ⟨Or.inr rfl, hcc⟩)
+        · exact (key _).mpr (Or.inr h2)
+      exact ⟨h'.1.2.1, h'⟩
+  · rw [if_neg hcc]
+    ext z
+    simp only [Finset.mem_filter, Finset.mem_range]
+    constructor
+    · rintro ⟨-, h⟩
+      rcases (key z).mp h with ⟨-, h1⟩ | h2
+      · exact absurd h1 hcc
+      · exact ⟨h2.1.2.1, h2⟩
+    · rintro ⟨-, h2⟩
+      have h' := (key z).mpr (Or.inr h2)
+      exact ⟨h'.1.2.1, h'⟩
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-- The group before a non-first group of a chunk lies in the same chunk, right before it. -/
+theorem INV.prev_in_chunk {s : Core} {A : Abs} (hI : INV s A) {g : Nat} (hg : LiveG s g)
+    (hf : g ≠ cF s (gC s g)) :
+    LiveG s (gP s g) ∧ gC s (gP s g) = gC s g ∧ gN s (gP s g) = g ∧
+      gP s g ≠ cLs s (gC s g) := by
+  have hgl := hI.mem_glist_iff.mpr hg
+  obtain ⟨hc, hgc⟩ := hI.mem_glist hgl
+  obtain ⟨r1, r2, hrun⟩ := List.mem_iff_append.mp hgc
+  have hnd := hI.grps_nodup hc
+  rw [hrun] at hnd
+  have hr1 : r1 ≠ [] := by
+    rintro rfl
+    apply hf; rw [(hI.cEnds _ hc).1, hrun]; rfl
+  obtain ⟨r1', p, rfl⟩ := r1.eq_nil_or_concat.resolve_left hr1
+  rw [List.concat_eq_append] at hrun hnd
+  have hpm : p ∈ A.grps (gC s g) := by rw [hrun]; simp
+  have hpg : p ∈ A.glist := A.grps_sub_glist hc hpm
+  have hpc : gC s p = gC s g := hI.chk _ hc p hpm
+  have hgp : g ∉ r1' ++ [p] := fun h => (List.nodup_append.mp hnd).2.2 g h g (by simp) rfl
+  have hprev : gP s g = p := by
+    rw [hI.gList.prev g hgl, INV.glist_flatten]
+    have hnd' := hI.gList.nodup
+    rw [INV.glist_flatten] at hnd'
+    rw [predOf_flatten hnd' (List.mem_map.mpr ⟨_, hc, rfl⟩) hgc (by
+      rw [hrun]
+      cases r1' with
+      | nil => simp; intro e; exact hgp (by simp [e])
+      | cons a t => simp; intro e; exact hgp (by simp [e]))]
+    rw [hrun, show r1' ++ [p] ++ g :: r2 = (r1' ++ [p]) ++ g :: r2 by simp, predOf_mid (by simpa using hnd)]
+    simp
+  have hp0 : p ≠ NIL := fun e => hI.gList.nonil (e ▸ hpg)
+  have hnext : gN s p = g := by rw [← hprev]; exact hI.gN_gP hgl (by rw [hprev]; exact hp0)
+  rw [hprev]
+  refine ⟨hI.mem_glist_iff.mp hpg, hpc, hnext, ?_⟩
+  intro e
+  have hE := (hI.cEnds _ hc).2
+  rw [hrun, show r1' ++ [p] ++ g :: r2 = (r1' ++ [p]) ++ g :: r2 by simp,
+    getLastD_append_ne (by simp)] at hE
+  have hm : (g :: r2).getLastD NIL ∈ g :: r2 := getLastD_cons_mem _ _ _
+  rw [← hE, ← e] at hm
+  have := (List.nodup_append.mp hnd).2.2 p (by simp) p
+  rw [show r1' ++ [p] ++ g :: r2 = (r1' ++ [p]) ++ g :: r2 by simp] at hnd
+  exact (List.nodup_append.mp hnd).2.2 p (by simp) p hm rfl
+
+end OM.Proof
