@@ -1290,6 +1290,7 @@ structure XSteps (X Y : Core → Prop) (L : List Nat) (δ : Nat → Nat) (p c : 
     X (moveRState t p)
   rem : ∀ t A' gh, INV t A' → A'.elist = L → GInvE t L gh δ p → LiveG t p →
     gSt t p = .splitting → gF t p = NIL → gSz t (gLl t p) < t.P.G → gSz t (gRr t p) < t.P.G →
+    gmin t.P ≤ gSz t (gLl t p) → gmin t.P ≤ gSz t (gRr t p) →
     gC t p = c → X t → Y (removeState t p)
 
 theorem DriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ : Nat → Nat}
@@ -1346,7 +1347,8 @@ theorem DriveInv.step {X Y : Core → Prop} {s : Core} {L : List Nat} {δ : Nat 
     obtain ⟨hef, A'', hI'', hel''⟩ := Good.ok_inv (good_groupSplitStep p) hI' hrun
     refine ⟨_, Or.inr ⟨hrun, ⟨?_, ?_, hD.ef.trans hef, ⟨A'', hI'', hel''⟩, ⟨gh, ?_⟩⟩⟩⟩
     · exact Or.inr (hXs.rem t A' gh hI' rfl hG hp hs he (by rw [hD.ll]; exact hszl)
-        (by rw [hD.rr]; exact hszr) hD.chk hD.x)
+        (by rw [hD.rr]; exact hszr) (by rw [hD.ll]; exact hgl) (by rw [hD.rr]; exact hgr)
+        hD.chk hD.x)
     · exact hef.P.trans hPt
     · refine ginv_remove hI' hG hp hs (by rw [hD.ll, hD.rr]; exact hδ) hfam
         (by rw [hD.ll]; exact ⟨hszl, hgl⟩) (by rw [hD.rr]; exact ⟨hszr, hgr⟩) hg1

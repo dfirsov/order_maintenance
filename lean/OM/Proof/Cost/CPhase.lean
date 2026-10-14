@@ -208,7 +208,7 @@ theorem xgroup_cinv {L : List Nat} {δ δu s₀ : Nat → Nat} {c : Nat} (hδ : 
     have hm := mem_runOf.mp (hrun ▸ (by simp : gLs t p ∈ front ++ [gLs t p]))
     exact cinv_move hI hX (moveRState_spec hrp hok.live.2.1 (hI.gAlloc _ hr')
       ((hI.eAlloc _).mp hm.1).2) hm.2 hok.chk
-  · intro t A' gh hI hel hG hp hs he hl hr hc hX
+  · intro t A' gh hI hel hG hp hs he hl hr _ _ hc hX
     subst hel
     have := cinv_remove hI hG hX hp hs (by rw [hc]; exact hδ)
     rw [hc] at this; exact this

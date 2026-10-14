@@ -906,3 +906,232 @@ theorem linv_move {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ
     exact hL.famChild p hp hps
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Across a group removal -/
+
+/-- **The group-label invariant across a group removal**: two gaps merge, the siblings become
+quiet, and the family's charge pays for theirs. -/
+theorem linv_remove {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ δu : Nat → Nat}
+    {ex : Nat} {lg : LGh} {p : Nat} (hI : INV s A) (hG : GInvE s L gh δg ex)
+    (hL : LInv s lg s₀ δ δu) (hp : LiveG s p) (hs : gSt s p = .splitting) (he : gSz s p = 0)
+    (hql : gmin s.P ≤ gSz s (gLl s p)) (hqr : gmin s.P ≤ gSz s (gRr s p))
+    (hg2 : 2 * gmin s.P ≤ s.P.G) :
+    LInv (removeState s p) lg s₀ δ (Function.update δu (gC s p) (δu (gC s p) + 1)) := by
+  have Fp := hG.fam p hp hs
+  have hp' := hI.mem_glist_iff.mpr hp
+  have hpp : gP s p ≠ p := by
+    rw [hI.gList.prev p hp']; exact predOf_ne_self hI.gList.nodup p hp.1
+  have hgPl : gP s p = gLl s p := by
+    have := hI.gP_gN (hI.mem_glist_iff.mpr Fp.lLive) (by rw [Fp.lAdj]; exact hp.1)
+    rw [Fp.lAdj] at this; exact this
+  have R := removeState_spec hp.2.1 Fp.lLive.2.1 Fp.rLive.2.1 hpp
+    (fun _ => by rw [hgPl]; exact Fp.lLive.2.1)
+  have hlp := Fp.lp hI hp
+  have hrp := Fp.rp hI hp
+  have hlr := Fp.lr hI hp
+  generalize hc : gC s p = c at *
+  -- `p` is neither the first nor the last of its chunk
+  obtain ⟨hcm, hpc⟩ := hI.mem_glist hp'
+  rw [hc] at hcm hpc
+  have hcs : c < s.C.size := ((hI.cAlloc c).mp hcm).2
+  have hcf0 : cF s c ≠ NIL := by
+    intro h0
+    have hE := (hI.cEnds c hcm).1
+    rw [h0] at hE
+    cases hgr : A.grps c with
+    | nil => rw [hgr] at hpc; simp at hpc
+    | cons a t => rw [hgr] at hE; simp at hE; exact hI.gList.nonil (hE ▸ A.grps_sub_glist hcm (hgr ▸ by simp))
+  have hpf : p ≠ cF s c := by
+    have := hI.not_before_first hcf0 (hI.mem_glist_iff.mpr Fp.lLive) (by rw [Fp.lC, hc])
+    rw [Fp.lAdj] at this; exact this
+  have hpl : p ≠ cLs s c := by
+    intro e
+    have := hI.not_after_last hcf0 (a := gRr s p) (by rw [← e]; exact Fp.rAdj) Fp.rLive.1
+    exact this (by rw [Fp.rC, hc])
+  have hC : ∀ d, (removeState s p).C.getX d = s.C.getX d := by
+    intro d
+    rw [R.C, unlinkGroup_C (s := s) (g := p) d (by rw [hc]; exact hcs), hc]
+    have h1 : ¬ (cF s c = p) := fun h => hpf h.symm
+    have h2 : ¬ (cLs s c = p) := fun h => hpl h.symm
+    split
+    · next hd => subst hd; simp only [h1, h2, false_and, if_false]
+    · rfl
+  generalize removeState s p = s' at R hC ⊢
+  have hU : (unlinkGroup s p).C.size = s.C.size := (unlinkGroup_rest (s := s) (g := p)).2.1
+  have hLC : ∀ d, LiveC s' d ↔ LiveC s d := by intro d; simp only [LiveC, R.C, hU]
+  have hcf : ∀ d, cSz s' d = cSz s d ∧ cSt s' d = cSt s d ∧ cSrc s' d = cSrc s d ∧
+      cLl s' d = cLl s d ∧ cRr s' d = cRr s d ∧ cLs s' d = cLs s d := by
+    intro d; simp only [cSz, cSt, cSrc, cLl, cRr, cLs, hC, and_self]
+  have hfamC : ∀ x, famC s' x = famC s x := by
+    intro x; simp only [famC, (hcf _).1, (hcf x).2.2.2.1, (hcf x).2.2.2.2.1]
+  generalize hl : gLl s p = l at *
+  generalize hr : gRr s p = r at *
+  have hlL : LiveG s l := hl ▸ Fp.lLive
+  have hrL : LiveG s r := hr ▸ Fp.rLive
+  have hlst : gSt s l = .overflow := hl ▸ Fp.lSt
+  have hrst : gSt s r = .overflow := hr ▸ Fp.rSt
+  have hlc : gC s l = c := by rw [← hl, Fp.lC, hc]
+  have hrc : gC s r = c := by rw [← hr, Fp.rC, hc]
+  have hlp' : l ≠ p := hl ▸ hlp
+  have hrp' : r ≠ p := hr ▸ hrp
+  -- units: one more in `c`
+  have hunits : ∀ d, units s' d - Function.update δu c (δu c + 1) d = units s d - δu d := by
+    intro d
+    by_cases hdc : d = c
+    · subst hdc
+      have : units s' d = units s d + 1 := by
+        refine units_swap (p := p) (l := l) (r := r) ⟨hp, hc, by rw [hs]; simp⟩
+          (fun h => h.2.2 hlst) (fun h => h.2.2 hrst) hlr ?_ ?_ ?_ ?_
+        · refine ⟨(R.live _).mpr ⟨hlL, hlp'⟩, by rw [R.chk, hlc], ?_⟩
+          rw [R.st, if_pos (Or.inl rfl)]; simp
+        · refine ⟨(R.live _).mpr ⟨hrL, hrp'⟩, by rw [R.chk, hrc], ?_⟩
+          rw [R.st, if_pos (Or.inr rfl)]; simp
+        · intro h; exact ((R.live p).mp h.1).2 rfl
+        · intro z h1 h2 h3
+          unfold UnitG; rw [R.live, R.chk, R.st, if_neg (not_or.mpr ⟨h2, h3⟩)]
+          simp [h1]
+      rw [this, Function.update_self]; omega
+    · rw [Function.update_of_ne hdc]
+      congr 1
+      apply units_congr
+      intro z
+      unfold UnitG; rw [R.live, R.chk, R.st]
+      by_cases h1 : z = l ∨ z = r
+      · rw [if_pos h1]
+        have hzc : gC s z = c := by
+          rcases h1 with rfl | rfl
+          · exact hlc
+          · exact hrc
+        simp only [hzc, Ne.symm hdc]; simp
+      · rw [if_neg h1]
+        by_cases h3 : z = p
+        · subst h3; simp [hc, Ne.symm hdc]
+        · simp [h3]
+  have hgrps : ∀ d, ∀ z, z ∈ GrpsC s' d ↔ z ∈ GrpsC s d ∧ z ≠ p := by
+    intro d z; simp only [mem_GrpsC, R.live, R.chk]; tauto
+  have hpend : ∀ d, pending s' lg d = pending s lg d := by
+    intro d; unfold pending
+    congr 1
+    ext z
+    simp only [Finset.mem_filter, hgrps, R.st]
+    constructor
+    · rintro ⟨⟨hz, -⟩, h1, h2⟩
+      refine ⟨hz, h1, ?_⟩
+      by_cases hlr' : z = l ∨ z = r
+      · rcases hlr' with rfl | rfl
+        · rw [hlst]; simp
+        · rw [hrst]; simp
+      · rwa [if_neg hlr'] at h2
+    · rintro ⟨hz, h1, h2⟩
+      have hzp : z ≠ p := by rintro rfl; exact h2 hs
+      refine ⟨⟨hz, hzp⟩, h1, ?_⟩
+      split
+      · simp
+      · exact h2
+  have hterm : ∀ z, LiveG s z → z ≠ p → z ≠ l → z ≠ r → chTerm s' lg z = chTerm s lg z := by
+    intro z hz h1 h2 h3
+    unfold chTerm
+    rw [R.st, if_neg (not_or.mpr ⟨h2, h3⟩), R.l, R.sz, R.P]
+    simp only [famT, R.sz, R.l, R.r]
+  have hcharge : charge s' lg c ≤ charge s lg c := by
+    rw [charge_eq, charge_eq]
+    have hpG : p ∈ GrpsC s c := mem_GrpsC.mpr ⟨hp, hc⟩
+    have hlG : l ∈ GrpsC s c := mem_GrpsC.mpr ⟨hlL, hlc⟩
+    have hrG : r ∈ GrpsC s c := mem_GrpsC.mpr ⟨hrL, hrc⟩
+    have hG' : GrpsC s' c = (GrpsC s c).erase p := by
+      ext z; rw [hgrps, Finset.mem_erase]; tauto
+    rw [hG']
+    have hlG' : l ∈ (GrpsC s c).erase p := Finset.mem_erase.mpr ⟨hlp', hlG⟩
+    have hrG' : r ∈ ((GrpsC s c).erase p).erase l :=
+      Finset.mem_erase.mpr ⟨Ne.symm hlr, Finset.mem_erase.mpr ⟨hrp', hrG⟩⟩
+    rw [← Finset.add_sum_erase _ _ hlG', ← Finset.add_sum_erase _ _ hrG']
+    rw [← Finset.add_sum_erase _ _ hpG, ← Finset.add_sum_erase _ _ hlG', ← Finset.add_sum_erase _ _ hrG']
+    have hrest : ∑ z ∈ (((GrpsC s c).erase p).erase l).erase r, chTerm s' lg z =
+        ∑ z ∈ (((GrpsC s c).erase p).erase l).erase r, chTerm s lg z := by
+      refine Finset.sum_congr rfl fun z hz => ?_
+      simp only [Finset.mem_erase] at hz
+      exact hterm z (mem_GrpsC.mp hz.2.2.2).1 hz.2.2.1 hz.2.1 hz.1
+    rw [hrest]
+    -- the siblings' terms against the family's
+    have hl0 : chTerm s lg l = 0 := by
+      unfold chTerm; rw [hlst]; simp
+    have hr0 : chTerm s lg r = 0 := by
+      unfold chTerm; rw [hrst]; simp
+    have hl' : chTerm s' lg l = if lg.child l = true then gmin s.P + gSz s l - s.P.G else 0 := by
+      unfold chTerm; rw [R.st, if_pos (Or.inl rfl), R.sz, R.P]; simp
+    have hr' : chTerm s' lg r = if lg.child r = true then gmin s.P + gSz s r - s.P.G else 0 := by
+      unfold chTerm; rw [R.st, if_pos (Or.inr rfl), R.sz, R.P]; simp
+    have hpt : chTerm s lg p = if lg.child l = true then gSz s l + gSz s r - s.P.G else 0 := by
+      unfold chTerm; rw [hs, hl]; simp only [true_and]
+      split
+      · simp only [famT, hl, hr, he]; omega
+      · simp
+    have hfc : lg.child l = lg.child r := by have := hL.famChild p hp hs; rw [hl, hr] at this; exact this
+    rw [hl0, hr0, hl', hr', hpt, ← hfc]
+    split <;> omega
+  refine
+    { gaps := ?_, range := ?_, hv := hL.hv, pb := hL.pb, pf := hL.pf, roots := ?_, claim2 := ?_,
+      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_, famChild := ?_ }
+  · intro h hh hlast
+    rw [R.live] at hh
+    rw [R.chk, (hcf _).2.2.2.2.2] at hlast; rw [R.chk, R.lab, R.lab, R.P]
+    by_cases hhl : h = l
+    · rw [hhl]
+      rw [← hgPl, R.nextp (by rw [hgPl]; exact hlL.1), hgPl, Fp.rAdj, hr]
+      have hlN : gN s l = p := by rw [← hl]; exact Fp.lAdj
+      have hl1 := hL.gaps l hlL (by
+        intro e; rw [hlc] at e
+        exact hI.not_after_last hcf0 (a := p) (by rw [← e]; exact hlN) hp.1 hc)
+      rw [hlN, hlc] at hl1
+      have hp1 := hL.gaps p hp (by rw [hc]; exact hpl)
+      rw [Fp.rAdj, hc, hr] at hp1
+      rw [hlc]
+      generalize s.P.D_g / 2 ^ lg.hv c = t at hl1 hp1 ⊢
+      omega
+    · rw [R.next h hh.2 (by rw [hgPl]; exact hhl)]
+      exact hL.gaps h hh.1 hlast
+  · intro h hh; rw [R.live] at hh; rw [R.chk, R.lab, R.P]; exact hL.range h hh.1
+  · intro d hd; rw [hLC] at hd; rw [hpend]; exact hL.roots d hd
+  · intro d hd; rw [hLC] at hd; rw [R.P]
+    by_cases hdc : d = c
+    · subst hdc; have := hL.claim2 d hd; omega
+    · have : charge s' lg d = charge s lg d := by
+        rw [charge_eq, charge_eq]
+        have hG' : GrpsC s' d = GrpsC s d := by
+          ext z; rw [hgrps]
+          constructor
+          · exact fun h => h.1
+          · intro h; exact ⟨h, by rintro rfl; exact hdc ((mem_GrpsC.mp h).2.symm.trans hc)⟩
+        rw [hG']
+        refine Finset.sum_congr rfl fun z hz => ?_
+        have hz' := mem_GrpsC.mp hz
+        have hzp : z ≠ p := by rintro rfl; exact hdc (hz'.2.symm.trans hc)
+        have hzl : z ≠ l := by rintro rfl; exact hdc (hz'.2.symm.trans hlc)
+        have hzr : z ≠ r := by rintro rfl; exact hdc (hz'.2.symm.trans hrc)
+        exact hterm z hz'.1 hzp hzl hzr
+      rw [this]; exact hL.claim2 d hd
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).1, R.P]
+    exact hL.insQ d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).2.2.1, hfamC]
+    exact hL.insO d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [hfamC, R.P]
+    exact hL.insS d hd hds
+  · intro x hx hxs; rw [hLC] at hx; rw [(hcf x).2.1] at hxs
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2.1, hunits, (hcf _).1, (hcf x).1, (hcf _).1, R.P]
+    exact hL.arrS x hx hxs
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [R.P]; exact hL.arrN d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).1]; exact hL.e0 d hd hds
+  · intro z hz hzs
+    rw [R.live] at hz
+    have hzlr : ¬ (z = l ∨ z = r) := by
+      rintro (rfl | rfl) <;> rw [R.st] at hzs <;> simp at hzs
+    rw [R.st, if_neg hzlr] at hzs
+    rw [R.l, R.r]; exact hL.famChild z hz.1 hzs
+
+end OM.Proof
