@@ -580,3 +580,70 @@ theorem units_le_unitsOf {s : Core} {A : Abs} {gh : GGh} {δg δ δu s₀ : Nat 
   omega
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### The insertion's state -/
+
+/-- The chunk-size update of an insertion. -/
+def sizeState (s : Core) (c : Nat) : Core :=
+  { s with C := s.C.modify c fun C => { C with size := (s.C.getX c).size + 1 } }
+
+theorem chunkSize_run_nq {s : Core} {c : Nat} (hq : cSt s c ≠ .quiet) :
+    (chunkSize c true).run s = .ok () (sizeState s c) := by
+  unfold chunkSize modC
+  simp only [run_getC_bind, if_true, run_modify_bind]
+  rw [if_neg (by simpa [cSt] using hq)]
+  rfl
+
+theorem chunkSize_run_q {s : Core} {c : Nat} (hq : cSt s c = .quiet) :
+    (chunkSize c true).run s = (pqAdjust c (cSz s c) (cSz s c + 1)).run (sizeState s c) := by
+  unfold chunkSize modC
+  simp only [run_getC_bind, if_true, run_modify_bind]
+  rw [if_pos (by simpa [cSt] using hq)]
+  rfl
+
+/-- **The insertion's effect on what the label invariant reads**: the element link, then the
+chunk-size update (the priority-queue fields may change too). -/
+theorem insSpec_link {s s2 : Core} {x lab hh : Nat} (hg : eG s x < s.Gs.size)
+    (hcs : gC s (eG s x) < s.C.size)
+    (hGs : s2.Gs = (linkElem s x s.E.size lab hh).Gs)
+    (hC : s2.C = (sizeState (linkElem s x s.E.size lab hh) (gC s (eG s x))).C)
+    (hP : s2.P = s.P) : InsSpec s s2 (eG s x) := by
+  have hG : ∀ b, s2.Gs.getX b = (linkElem s x s.E.size lab hh).Gs.getX b := fun b => by rw [hGs]
+  have hCx : ∀ d, s2.C.getX d = if gC s (eG s x) = d ∧ gC s (eG s x) < s.C.size then
+      { s.C.getX d with size := (s.C.getX d).size + 1 } else s.C.getX d := by
+    intro d
+    have e : (linkElem s x s.E.size lab hh).C = s.C := rfl
+    rw [hC]; simp only [sizeState, Array.getX_modify, e]
+    by_cases h : gC s (eG s x) = d
+    · subst h; simp
+    · simp [h]
+  have fld : ∀ b, gL s2 b = gL s b ∧ gN s2 b = gN s b ∧ gC s2 b = gC s b ∧ gSt s2 b = gSt s b ∧
+      gLl s2 b = gLl s b ∧ gRr s2 b = gRr s b ∧ gA s2 b = gA s b := by
+    intro b; simp only [gL, gN, gC, gSt, gLl, gRr, gA, hG b, linkElem_Gs]; split <;> simp
+  have cfl : ∀ d, cSt s2 d = cSt s d ∧ cSrc s2 d = cSrc s d ∧ cLl s2 d = cLl s d ∧
+      cRr s2 d = cRr s d ∧ cLs s2 d = cLs s d := by
+    intro d; simp only [cSt, cSrc, cLl, cRr, cLs, hCx d]; split <;> simp
+  have hGsz : s2.Gs.size = s.Gs.size := by rw [hGs]; simp [linkElem]
+  refine
+    { live := fun z => ?_, lab := fun z => (fld z).1, next := fun z => (fld z).2.1,
+      chk := fun z => (fld z).2.2.1, st := fun z => (fld z).2.2.2.1, l := fun z => (fld z).2.2.2.2.1,
+      r := fun z => (fld z).2.2.2.2.2.1, sz := fun z => ?_, Csize := ?_,
+      cst := fun d => (cfl d).1, csrc := fun d => (cfl d).2.1, cl := fun d => (cfl d).2.2.1,
+      cr := fun d => (cfl d).2.2.2.1, clast := fun d => (cfl d).2.2.2.2, csz := fun d => ?_, P := hP }
+  · simp only [LiveG, hGsz, (fld z).2.2.2.2.2.2]
+  · have : gSz s2 z = gSz (linkElem s x s.E.size lab hh) z := by simp only [gSz, hGs]
+    rw [this, linkElem_gSz s x lab hh z hg]
+    split <;> simp_all
+  · rw [hC]; simp [sizeState, linkElem]
+  · simp only [cSz, hCx d]
+    by_cases h : d = gC s (eG s x)
+    · subst h; simp [hcs]
+    · simp [h, Ne.symm h]
+
+end OM.Proof
