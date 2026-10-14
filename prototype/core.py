@@ -520,8 +520,11 @@ class Core:
                 unit = [S.l, G0.src, g0]
             else:
                 return [g0]
+            # every member in chunk x (correctness must not rest on invariant F), consecutive
+            if any(self.Gs[a].chk != x for a in unit):
+                raise GuardFailure("chunk split: family not contiguous in chunk")
             for a, b in zip(unit, unit[1:]):
-                if self.Gs[a].next != b or self.Gs[b].chk != x:
+                if self.Gs[a].next != b:
                     raise GuardFailure("chunk split: family not contiguous in chunk")
             return unit
         return [g0]

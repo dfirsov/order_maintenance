@@ -246,21 +246,32 @@ def driveGroup (g : Nat) : CM Unit := do
 
 /-! ### Chunk splits -/
 
+/-- The candidate unit at the left/right end of chunk `x`: the family `(gl, g, gr)` of a
+splitting group if the end group is its overflow sibling on that side, else the end group. -/
+def unitCand (s : Core) (x : Nat) (left : Bool) : List Nat :=
+  let X := s.C.getX x
+  let g0 := if left then X.first else X.last
+  let G0 := s.Gs.getX g0
+  if G0.st != .overflow then [g0]
+  else
+    let S := s.Gs.getX G0.src
+    if left && S.l == g0 then [g0, G0.src, S.r]
+    else if !left && S.r == g0 then [S.l, G0.src, g0]
+    else [g0]
+
+/-- A family unit must lie in chunk `x`, as consecutive groups (the prototype checked the
+chunk of all members but the first). -/
+def unitOK (s : Core) (x : Nat) (u : List Nat) : Bool :=
+  u.all (fun a => a != NIL && (s.Gs.getX a).chk == x) &&
+    (u.zip u.tail).all (fun p => (s.Gs.getX p.1).next == p.2)
+
 /-- The groups that one chunk-split move takes from the left/right end of chunk `x`: a whole
 family `(gl, g, gr)` of a splitting group, or one group (invariant F). -/
 def unit (x : Nat) (left : Bool) : CM (List Nat) := do
-  let X ← getC x
-  let g0 := if left then X.first else X.last
-  let G0 ← getG g0
-  if G0.st != .overflow then return [g0]
-  let S ← getG G0.src
-  let u := if left && S.l == g0 then [g0, G0.src, S.r]
-    else if !left && S.r == g0 then [S.l, G0.src, g0]
-    else [g0]
+  let s ← get
+  let u := unitCand s x left
   if u.length == 1 then return u
-  for (a, b) in u.zip u.tail do
-    if (← getG a).next != b || (← getG b).chk != x then
-      guard "chunk split: family not contiguous in chunk"
+  require (unitOK s x u) "chunk split: family not contiguous in chunk"
   return u
 
 def removeChunk (x : Nat) : CM Unit := do
@@ -323,31 +334,40 @@ def moveSizes (x dst : Nat) (u : List Nat) : CM Unit := do
   modC x fun X => { X with size := X.size - moved }
   modC dst fun X => { X with size := X.size + moved }
 
-def chunkSplitStep (x : Nat) : CM Bool := do
+/-- One chunk-split move of chunk `x` (non-empty) towards its sibling on the `left` (right):
+the unit at that end of `x` moves to the end (front) of the sibling, with guarded labels.
+Returns the sibling and the unit. -/
+def moveUnit (x : Nat) (left : Bool) : CM (Nat × List Nat) := do
   let P ← getP
   let X ← getC x
-  if X.first == NIL then
-    removeChunk x
-    return false
-  let y := X.l
-  let z := X.r
-  let Y ← getC y
-  let Z ← getC z
+  require (X.first != NIL) "chunk split: moving out of an empty chunk"
   let center := 1 <<< (P.B_g - 1)
-  let left := Y.size ≤ Z.size
   let u ← unit x left
   if left then
+    let y := X.l
+    let Y ← getC y
     require (Y.next == x) "chunk split: left sibling not adjacent"
     let yl := (← getG Y.last).lab
     let labs ← pushBackLabs center P.D_g P.B_g (if Y.first == NIL then none else some yl) u.length
     modify (moveGroupsLeft · x y u labs)
-    moveSizes x y u
+    return (y, u)
   else
+    let z := X.r
+    let Z ← getC z
     require (Z.prev == x) "chunk split: right sibling not adjacent"
     let zf := (← getG Z.first).lab
     let labs ← pushFrontLabs center P.D_g (if Z.first == NIL then none else some zf) u.length
     modify (moveGroupsRight · x z u labs)
-    moveSizes x z u
+    return (z, u)
+
+def chunkSplitStep (x : Nat) : CM Bool := do
+  let X ← getC x
+  if X.first == NIL then
+    removeChunk x
+    return false
+  let left := (← getC X.l).size ≤ (← getC X.r).size
+  let (dst, u) ← moveUnit x left
+  moveSizes x dst u
   return true
 
 def driveChunkFrom (s : Nat) : CM Unit := do
