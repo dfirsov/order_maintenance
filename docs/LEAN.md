@@ -1,6 +1,6 @@
 # Lean Formalization — Design
 
-Status: **v0.3** (2026-10-14); M0 and M1 implemented in `lean/`. This note fixes the design of the
+Status: **v0.4** (2026-10-14); M0, M1, M2 and M3 done in `lean/` (M2: §12). This note fixes the design of the
 Lean 4 development. It supersedes `docs/SPEC.md` §9–§10 (Lean architecture and
 milestones), which assumed a shallow cost monad.
 
@@ -242,7 +242,7 @@ OM/
 |---|---|---|---|
 | M0 ✅ | Lake project with Mathlib; `Spec`; machine syntax, `exec`, cost; `wp` with soundness | wp soundness | low |
 | M1 ✅ | Level F executable: core, top, fallback, wrapper; differential tests against the Python prototype pass on all stress workloads | — | low |
-| M2 | **Theorem A** at Level F | INV-S preservation, guards, FALLBACK, Invariant R | medium |
+| M2 ✅ | **Theorem A** at Level F (§12) | INV-S preservation, guards, FALLBACK, Invariant R | medium |
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
 | M4 | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W | invariant reasoning | medium |
 | M5 | Top-structure lemmas T0–T5, (Q) | the largest proof | **high** |
@@ -331,3 +331,56 @@ Consequences:
   design. It is a few hundred lines.
 * M0 considered `Std.Do`/`mvcgen` as the VC engine; our own `wp` rules sufficed (§6).
 * CSLib's roadmap asks for an explicit RAM model; ours could be contributed there later.
+
+---
+
+## 12. M2: Theorem A at Level F
+
+**Statement** (`OM.Proof.theoremA`, `lean/OM/Proof/Correct/Wrapper.lean`). Let `mk : Nat → Params`
+give a core's parameters for each capacity and satisfy `CoreP (mk N)` for every `N`. Then
+`OM.init mk KB` succeeds, and for every sequence `ops` that is valid from the empty list,
+`om.runOps mk ops = .ok (OM.Spec.run OM.Spec.State.empty ops)`. In words: the structure never
+fails and gives exactly the specification's answers. Axioms used: `propext`,
+`Classical.choice`, `Quot.sound`.
+
+**Parameter conditions** (`CoreP P := FbOK P ∧ RoomP P`, §3.4 of `PROOF.md`):
+
+* `FbOK`: FALLBACK's gaps are at least 1. Group size `⌊G/2⌋` is below `2^B_e`, and groups per
+  chunk are below `2^B_g`.
+* `RoomP`: `1 ≤ D_e < 2^B_e / (⌊G/2⌋ + 1)`. After FALLBACK, every element has room for one
+  insertion after it, so the retried insertion succeeds.
+
+`Params.for_capacity` in `prototype/core.py` satisfies both by a wide margin.
+
+**Proof structure.**
+
+| File | Content |
+|---|---|
+| `Inv.lean`, `Lists.lean`, `Monad.lean`, `Frame.lean`, `Good.lean` | INV-S, Lemma 3.1 (`order_iff`), linked lists, `Pres`/`Good` with tactics |
+| `Insert.lean`, `GroupSplit.lean`, `GroupMove.lean`, `ChunkSplit.lean`, `Reservation.lean` | Lemma 3.2: each step of `background` keeps INV-S (`good_background`); a failed guard changes no element records |
+| `Fallback.lean` | Lemma 3.3: from any well-formed element list, FALLBACK succeeds and establishes INV-S with the same list and room after every element (`fallback_run_room`) |
+| `CoreInsert.lean` | `insertAfter_run`: insertion with retry after FALLBACK; `order_correct`; `markDead_inv` |
+| `Init.lean` | `NoErr` (always succeeds); fresh cores; `prepareStep` |
+| `Handles.lean`, `Wrapper.lean` | live handles `liveH`; Invariant R (`WInv`); mirrored operations, copying, swap; Theorem A |
+
+**Invariant R.** `cur` satisfies INV-S with a dead sentinel at the head. Its live handles, in
+list order, are the specification's list, and `curIdx` maps each handle to its element. A
+rebuild core `nxt` is in one of two states:
+* being prepared: it holds the sentinel alone;
+* copying: the cursor splits `cur`'s list into `pre ++ post`, and `nxt`'s live handles are
+  exactly those of `pre`, mapped by `nxtIdx`.
+
+Mirrored insertions and deletions keep this. A mirrored insertion happens exactly when its
+anchor lies in `pre`.
+
+**Model changes made for the proof.** Every one replays all traces exactly.
+* Guards replace invariant assumptions: alive checks in group and chunk steps, self-checking
+  moves, and the family check in `unitOK`, which covers the first member.
+* FALLBACK in closed form (`fbLayout`). `relabelAll` checks that tags increase along the
+  chunk list and otherwise numbers the chunks `1, 2, 3, …`. The tree rebuild runs under
+  `tryCatch`, so the check always runs.
+* `walkList` (fuel-bounded) replaces the imperative list walks.
+* `initCore = set initState; initTop`.
+* The wrapper's rebuild loop became the recursive `rebuildLoop`. The mirror steps are split
+  out (`mirrorInsert`, `mirrorDelete`). `OM.apply` and `OM.runOps` give the specification's
+  interface.
