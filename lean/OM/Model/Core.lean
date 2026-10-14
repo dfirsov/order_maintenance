@@ -522,11 +522,10 @@ def initState (P : Params) : Core :=
     C := #[default, { first := 1, last := 1, size := 1 }]
     firstGroup := 1, firstChunk := 1, head := 1, tail := 1, count := 1 }
 
-/-- A fresh core (`Core.__init__`), from `{ P := P }`. With `lazy`, the top structure is built
-later, one `prepareStep` at a time. -/
-def initCore (lazy : Bool) : CM Unit := do
+/-- The top structure of a fresh core: built now, or with `lazy` later, one `prepareStep` at a
+time. -/
+def initTop (lazy : Bool) : CM Unit := do
   let P ← getP
-  set (initState P)
   modify fun s => { s with
     prep := some { chunk := 1, below := 1, path := Array.replicate (P.H + 1) NIL } }
   if lazy then
@@ -535,6 +534,12 @@ def initCore (lazy : Bool) : CM Unit := do
     for _ in List.range (P.H + 1) do
       if ← initStep then break
     modify fun s => { s with ready := true }
+
+/-- A fresh core (`Core.__init__`). -/
+def initCore (lazy : Bool) : CM Unit := do
+  let P ← getP
+  set (initState P)
+  initTop lazy
 
 /-- One step of deferred initialization; `true` once the core is ready. -/
 def prepareStep : CM Bool := do
