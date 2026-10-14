@@ -268,3 +268,118 @@ theorem PrepOK.step (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {n : Core}
     exact ⟨⟨hPI, hL', hI', hc1, hpm'⟩, hν⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- **Lemma W's record of a rebuild in progress**: `c₀` elements and `live₀` live ones at the
+trigger, `I` insertions and `D` deletions since. The work left (preparation steps, then the
+elements not yet scanned) shrinks by `K_B − 1` per insertion's worth of operations. -/
+structure RebuildW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+    (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (c₀ live₀ I D : Nat) : Prop where
+  c0 : c₀ ≤ om.cur.P.N / 2
+  nP : n.P = mk (4 * max (live₀ + (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1) 16)
+  ccnt : om.cur.count ≤ c₀ + I
+  live : om.live + D = live₀ + I
+  l0 : live₀ ≤ c₀
+  prep : om.cursorSet = false → PrepOK mk PI n ∧
+    ν n + om.cur.count + (om.KB - 1) * I ≤ om.cur.P.L + 2 + c₀
+  serve : om.cursorSet = true →
+    (∀ B, INV n B → CoreOK mk TI μ Jf nf Rf n B.elist ∧
+      n.count ≤ 1 + (liveH n B.elist).length + D) ∧
+    ∀ A, INV om.cur A → (postOf A.elist om.cursor).length + (om.KB - 1) * I ≤
+      om.cur.P.L + 2 + c₀
+
+/-- **The wrapper's cost invariant**: Invariant R, both cores' cost invariants, and Lemma W. -/
+structure WC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+    (Jf nf Rf : Params → Nat) (om : OM) (Sp : OM.Spec.State) : Prop where
+  w : WInv om Sp
+  live : om.live = Sp.list.length
+  kb : 4 ≤ om.KB
+  big : 64 ≤ om.cur.P.N
+  cur : ∀ A, INV om.cur A → CoreOK mk TI μ Jf nf Rf om.cur A.elist
+  idle : om.nxt = none → om.cur.count < om.cur.P.N / 2
+  busy : ∀ n, om.nxt = some n → ∃ c₀ live₀ I D, RebuildW mk TI PI μ ν Jf nf Rf om n c₀ live₀ I D
+
+/-- The work left bounds the insertions of a rebuild. -/
+theorem RebuildW.ins_le {om : OM} {n : Core} {c₀ live₀ I D : Nat}
+    (h : RebuildW mk TI PI μ ν Jf nf Rf om n c₀ live₀ I D) (hkb : 4 ≤ om.KB)
+    (hA : ∃ A, INV om.cur A) :
+    3 * I ≤ om.cur.P.L + 2 + c₀ := by
+  have h3 : 3 * I ≤ (om.KB - 1) * I := Nat.mul_le_mul_right I (by omega)
+  cases hs : om.cursorSet
+  · have := (h.prep hs).2; omega
+  · obtain ⟨A, hI⟩ := hA
+    have := (h.serve hs).2 A hI; omega
+
+/-- **Lemma W (1)**: `cur` has room for an insertion. -/
+theorem WC.cur_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+    (h : WC mk TI PI μ ν Jf nf Rf om Sp) : om.cur.count + 1 ≤ om.cur.P.N := by
+  have hsm := S.small _ h.big
+  have hmk : om.cur.P = mk om.cur.P.N := by
+    obtain ⟨A, hR, -⟩ := h.w.core; exact (h.cur A hR.inv).pmk
+  have hL : (mk om.cur.P.N).L = om.cur.P.L := by rw [← hmk]
+  rw [hL] at hsm
+  cases hn : om.nxt with
+  | none => have := h.idle hn; omega
+  | some n =>
+    obtain ⟨c₀, live₀, I, D, hW⟩ := h.busy n hn
+    have hI3 := hW.ins_le h.kb (by obtain ⟨A, hR, -⟩ := h.w.core; exact ⟨A, hR.inv⟩)
+    have := hW.ccnt
+    have := hW.c0
+    omega
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- The copies in `nxt` are live elements of `cur`, so at most the live count. -/
+theorem WC.nxt_live_le {om : OM} {Sp : OM.Spec.State} (h : WC mk TI PI μ ν Jf nf Rf om Sp)
+    {n : Core} (hn : om.nxt = some n) (hset : om.cursorSet = true) {B : Abs} (hB : INV n B) :
+    (liveH n B.elist).length ≤ om.live := by
+  obtain ⟨-, -, A, hR, hL, -, hN⟩ := h.w
+  unfold NxtR at hN; rw [hn] at hN
+  obtain ⟨B', hRB', -, -, hcs⟩ := hN
+  rw [if_pos hset] at hcs
+  obtain ⟨pre, post, hsplit, -, -, hLB⟩ := hcs
+  rw [INV.elist_unique hB hRB'.inv, hLB, h.live, ← hL, hsplit, liveH_append, List.length_append]
+  omega
+
+/-- **Lemma W (2)**: `nxt` has room for an insertion. -/
+theorem WC.nxt_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+    (h : WC mk TI PI μ ν Jf nf Rf om Sp) {n : Core} (hn : om.nxt = some n)
+    (hset : om.cursorSet = true) : n.count + 1 ≤ n.P.N := by
+  obtain ⟨c₀, live₀, I, D, hW⟩ := h.busy n hn
+  obtain ⟨A, hR, -, -, hN⟩ := h.w.core
+  obtain ⟨hserve, hpost⟩ := hW.serve hset
+  have hB : ∃ B, INV n B := by
+    unfold NxtR at hN; rw [hn] at hN
+    obtain ⟨B, hRB, -⟩ := hN
+    exact ⟨B, hRB.inv⟩
+  obtain ⟨B, hB⟩ := hB
+  have hc := (hserve B hB).2
+  have hl := h.nxt_live_le hn hset hB
+  have hlive := hW.live
+  have hp := hpost A hR.inv
+  have hkb := h.kb
+  have hIq : I ≤ (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) := by
+    rw [Nat.le_div_iff_mul_le (by omega), Nat.mul_comm]; omega
+  rw [hW.nP, S.PN]
+  generalize (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) = q at hIq ⊢
+  have : live₀ + q + 1 ≤ max (live₀ + q + 1) 16 := le_max_left _ _
+  omega
+
+end OM.Proof
