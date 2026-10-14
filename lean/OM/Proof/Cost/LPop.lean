@@ -271,3 +271,171 @@ theorem linv_pop {s s' : Core} {A : Abs} {lg : LGh} {s₀ : Nat → Nat} {x : Na
     rw [eLl, eRr]; exact hL.famChild p hp hps
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### Steps that change nothing the label invariant reads -/
+
+/-- The fields `LInv` reads are equal. -/
+structure LSame (s s' : Core) : Prop where
+  Gs : s'.Gs = s.Gs
+  P : s'.P = s.P
+  Csize : s'.C.size = s.C.size
+  csz : ∀ c, cSz s' c = cSz s c
+  cst : ∀ c, cSt s' c = cSt s c
+  csrc : ∀ c, cSrc s' c = cSrc s c
+  cl : ∀ c, cLl s' c = cLl s c
+  cr : ∀ c, cRr s' c = cRr s c
+  clast : ∀ c, cLs s' c = cLs s c
+
+theorem LInv.transfer {s s' : Core} {lg : LGh} {s₀ δ δu : Nat → Nat} (S : LSame s s')
+    (hL : LInv s lg s₀ δ δu) : LInv s' lg s₀ δ δu := by
+  have hg : ∀ g, s'.Gs.getX g = s.Gs.getX g := fun g => by rw [S.Gs]
+  have hLv := liveG_of_Gs S.Gs
+  have eL : ∀ g, gL s' g = gL s g := fun g => by simp only [gL, hg]
+  have eN : ∀ g, gN s' g = gN s g := fun g => by simp only [gN, hg]
+  have eC : ∀ g, gC s' g = gC s g := fun g => by simp only [gC, hg]
+  have eSt : ∀ g, gSt s' g = gSt s g := fun g => by simp only [gSt, hg]
+  have eLl : ∀ g, gLl s' g = gLl s g := fun g => by simp only [gLl, hg]
+  have eRr : ∀ g, gRr s' g = gRr s g := fun g => by simp only [gRr, hg]
+  have hLC : ∀ c, LiveC s' c ↔ LiveC s c := fun c => by simp only [LiveC, S.Csize]
+  have hfamC : ∀ c, famC s' c = famC s c := fun c => by
+    unfold famC; rw [S.cl, S.cr, S.csz, S.csz, S.csz]
+  refine
+    { gaps := ?_, range := ?_, hv := hL.hv, pb := hL.pb, pf := hL.pf, roots := ?_, claim2 := ?_,
+      insQ := ?_, insO := ?_, insS := ?_, arrS := ?_, arrN := ?_, e0 := ?_, famChild := ?_ }
+  · intro g hg' hl
+    rw [hLv] at hg'; rw [eC, S.clast] at hl
+    rw [eL, eL, eN, eC, S.P]; exact hL.gaps g hg' hl
+  · intro g hg'; rw [hLv] at hg'; rw [eL, eC, S.P]; exact hL.range g hg'
+  · intro d hd; rw [hLC] at hd; rw [pending_of_Gs S.Gs]; exact hL.roots d hd
+  · intro d hd; rw [hLC] at hd; rw [charge_of_Gs S.Gs S.P, S.P]; exact hL.claim2 d hd
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [S.csz, S.P]; exact hL.insQ d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [S.csrc, hfamC]
+    exact hL.insO d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [hfamC, S.P]; exact hL.insS d hd hds
+  · intro x hx hxs; rw [hLC] at hx; rw [S.cst] at hxs
+    rw [S.cl, S.cr, units_of_Gs S.Gs, hfamC, S.P]; exact hL.arrS x hx hxs
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [S.P]; exact hL.arrN d hd hds
+  · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [S.csz]; exact hL.e0 d hd hds
+  · intro p hp hps; rw [hLv] at hp; rw [eSt] at hps; rw [eLl, eRr]; exact hL.famChild p hp hps
+
+/-- The top structure's steps change nothing the label invariant reads. -/
+theorem TopRel.lsame {s s' : Core} (h : TopRel s s') : LSame s s' := by
+  have hc : ∀ c, s'.C.getX c = { s.C.getX c with tag := (s'.C.getX c).tag } := h.C
+  refine ⟨h.Gs, h.rest.1, h.Csize, fun c => ?_, fun c => ?_, fun c => ?_, fun c => ?_,
+    fun c => ?_, fun c => ?_⟩ <;>
+    simp only [cSz, cSt, cSrc, cLl, cRr, cLs] <;> rw [hc c]
+
+end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem LSame.trans {a b c : Core} (h1 : LSame a b) (h2 : LSame b c) : LSame a c :=
+  ⟨h2.Gs.trans h1.Gs, h2.P.trans h1.P, h2.Csize.trans h1.Csize, fun d => (h2.csz d).trans (h1.csz d),
+    fun d => (h2.cst d).trans (h1.cst d), fun d => (h2.csrc d).trans (h1.csrc d),
+    fun d => (h2.cl d).trans (h1.cl d), fun d => (h2.cr d).trans (h1.cr d),
+    fun d => (h2.clast d).trans (h1.clast d)⟩
+
+section lcp
+variable {s : Core} {x y z : Nat}
+
+theorem linkChunkPair_cSz (w : Nat) : cSz (linkChunkPair s x y z) w = cSz s w := by
+  simp only [linkChunkPair, cSz, Array.getX_modify, Array.getX_ite, Array.size_modify',
+    Array.size_ite, apply_ite (f := Chunk.size)]
+  split_ifs <;> rfl
+
+theorem linkChunkPair_cSt (w : Nat) : cSt (linkChunkPair s x y z) w = cSt s w := by
+  simp only [linkChunkPair, cSt, Array.getX_modify, Array.getX_ite, Array.size_modify',
+    Array.size_ite, apply_ite (f := Chunk.st)]
+  split_ifs <;> rfl
+
+theorem linkChunkPair_cSrc (w : Nat) : cSrc (linkChunkPair s x y z) w = cSrc s w := by
+  simp only [linkChunkPair, cSrc, Array.getX_modify, Array.getX_ite, Array.size_modify',
+    Array.size_ite, apply_ite (f := Chunk.src)]
+  split_ifs <;> rfl
+
+theorem linkChunkPair_cLl (w : Nat) : cLl (linkChunkPair s x y z) w = cLl s w := by
+  simp only [linkChunkPair, cLl, Array.getX_modify, Array.getX_ite, Array.size_modify',
+    Array.size_ite, apply_ite (f := Chunk.l)]
+  split_ifs <;> rfl
+
+theorem linkChunkPair_cRr (w : Nat) : cRr (linkChunkPair s x y z) w = cRr s w := by
+  simp only [linkChunkPair, cRr, Array.getX_modify, Array.getX_ite, Array.size_modify',
+    Array.size_ite, apply_ite (f := Chunk.r)]
+  split_ifs <;> rfl
+
+end lcp
+
+theorem linkChunkPair_lsame (s : Core) (x y z : Nat) : LSame s (linkChunkPair s x y z) :=
+  ⟨rfl, rfl, (linkChunkPair_rest (s := s) (x := x) (y := y) (z := z)).2.2.2.2.2.2.1,
+    linkChunkPair_cSz, linkChunkPair_cSt, linkChunkPair_cSrc, linkChunkPair_cLl, linkChunkPair_cRr,
+    linkChunkPair_cLs⟩
+
+/-- **The state after starting the split of `x`**, from the run of `splitChunkStart`. -/
+theorem resSpec_run {s s2 : Core} {x : Nat} {job : Job} (hxs : x < s.C.size)
+    (hT : TopRel (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) s2) :
+    ResSpec s (markState s2 x s.C.size (s.C.size + 1) job) x := by
+  have S := (linkChunkPair_lsame (push2 s) x s.C.size (s.C.size + 1)).trans hT.lsame
+  have hsz2 : s2.C.size = s.C.size + 2 := by rw [S.Csize]; simp [push2]
+  -- the fields of `push2 s`
+  have hp : ∀ c, (push2 s).C.getX c =
+      if c = s.C.size + 1 then {} else if c = s.C.size then {} else s.C.getX c := by
+    intro c; simp only [push2, Array.getX_push, Array.size_push]
+  -- the fields of the marked state, from those of `s2`
+  have hm : ∀ c, (markState s2 x s.C.size (s.C.size + 1) job).C.getX c =
+      if c = s.C.size + 1 then { s2.C.getX c with st := .overflow, src := x }
+      else if c = s.C.size then { s2.C.getX c with st := .overflow, src := x }
+      else if c = x then { s2.C.getX c with st := .splitting, l := s.C.size, r := s.C.size + 1 }
+      else s2.C.getX c := by
+    intro c
+    simp only [markState, Array.getX_modify, Array.size_modify', hsz2]
+    by_cases h1 : c = s.C.size + 1
+    · subst h1; simp [show x ≠ s.C.size + 1 by omega]
+    · by_cases h2 : c = s.C.size
+      · subst h2; simp [show x ≠ s.C.size by omega, h1, Ne.symm h1]
+      · by_cases h3 : c = x
+        · subst h3; simp [h1, h2, Ne.symm h1, Ne.symm h2]; omega
+        · simp [h1, h2, h3, Ne.symm h1, Ne.symm h2, Ne.symm h3]
+  have e2 : ∀ c, cSz s2 c = cSz (push2 s) c ∧ cLs s2 c = cLs (push2 s) c ∧
+      cSt s2 c = cSt (push2 s) c ∧ cSrc s2 c = cSrc (push2 s) c ∧ cLl s2 c = cLl (push2 s) c ∧
+      cRr s2 c = cRr (push2 s) c := fun c => ⟨S.csz c, S.clast c, S.cst c, S.csrc c, S.cl c, S.cr c⟩
+  refine ⟨?_, ?_, ?_, fun c hc hcx => ?_, ?_, fun c hc => ?_⟩
+  · show s2.Gs = s.Gs; exact S.Gs
+  · show s2.P = s.P; exact S.P
+  · simp [markState, hsz2]
+  · have h1 : c ≠ s.C.size + 1 := by omega
+    have h2 : c ≠ s.C.size := by omega
+    obtain ⟨a1, a2, a3, a4, a5, a6⟩ := e2 c
+    simp only [cSz, cLs, cSt, cSrc, cLl, cRr] at a1 a2 a3 a4 a5 a6 ⊢
+    rw [hm, if_neg h1, if_neg h2, if_neg hcx, a1, a2, a3, a4, a5, a6, hp, if_neg h1, if_neg h2]
+    simp
+  · have h1 : x ≠ s.C.size + 1 := by omega
+    have h2 : x ≠ s.C.size := by omega
+    obtain ⟨a1, a2, -, -, -, -⟩ := e2 x
+    simp only [cSz, cLs, cSt, cLl, cRr] at a1 a2 ⊢
+    rw [hm, if_neg h1, if_neg h2, if_pos rfl]
+    simp only
+    rw [a1, a2, hp, if_neg h1, if_neg h2]
+    simp
+  · obtain ⟨a1, a2, -, -, -, -⟩ := e2 c
+    simp only [cSz, cLs, cSt, cSrc] at a1 a2 ⊢
+    rcases hc with rfl | rfl
+    · rw [hm, if_neg (by omega), if_pos rfl]
+      simp only
+      rw [a1, a2, hp, if_neg (by omega), if_pos rfl]
+      simp
+    · rw [hm, if_pos rfl]
+      simp only
+      rw [a1, a2, hp, if_pos rfl]
+      simp
+
+end OM.Proof
