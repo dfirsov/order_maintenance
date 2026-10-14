@@ -187,3 +187,84 @@ theorem CoreOK.markDead {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν 
   exact ⟨_, hr, ⟨hC', h.cnt, hmk⟩, rfl, rfl⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- A core whose top structure is being built: it holds the sentinel alone. -/
+structure PrepOK (mk : Nat → Params) (PI : Core → Prop) (n : Core) : Prop where
+  pi : PI n
+  low : LowInv n initAbs.elist
+  inv : INV n initAbs
+  cnt : n.count = 1
+  pmk : n.P = mk n.P.N
+
+theorem newCore_run {P : Params} {lazy : Bool} :
+    ∃ n, newCore P lazy = .ok n ∧ (initCore lazy).run { P := P } = .ok () n := by
+  obtain ⟨n, hr, -, -⟩ := initCore_run lazy { P := P }
+  exact ⟨n, by unfold newCore; rw [runCore_ok hr]; rfl, hr⟩
+
+theorem initCore_fields {s n : Core} {lazy : Bool} (h : (initCore lazy).run s = .ok () n) :
+    n.count = 1 ∧ n.P = s.P := by
+  obtain ⟨n', hr, -, -⟩ := initCore_run lazy s
+  rw [hr] at h; cases h
+  have hR : LowRel (initState s.P) n := by
+    unfold initCore at hr
+    simp only [run_getP_bind] at hr
+    rw [run_bind, run_set] at hr
+    dsimp only at hr
+    have := low_initTop lazy (initState s.P)
+    rw [hr] at this; exact this
+  exact ⟨hR.1.count, hR.1.P⟩
+
+/-- **A lazily built fresh core.** -/
+theorem newCore_lazy (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
+    ∃ n, newCore (mk N) true = .ok n ∧ PrepOK mk PI n ∧ ν n ≤ (mk N).H + 1 := by
+  obtain ⟨n, hnew, hr⟩ := newCore_run (P := mk N) (lazy := true)
+  obtain ⟨hcnt, hP⟩ := initCore_fields hr
+  obtain ⟨hL, hI⟩ := lowinv_initCore (S.gp N) (S.cp N) (S.lp N) hr
+  obtain ⟨hPI, hν⟩ := S.prep.lazy _ _ hr
+  exact ⟨n, hnew, ⟨hPI, hL, hI, hcnt, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hν⟩
+
+/-- **An eagerly built fresh core** is in service. -/
+theorem newCore_eager (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
+    ∃ n, newCore (mk N) false = .ok n ∧ CoreOK mk TI μ Jf nf Rf n initAbs.elist ∧ n.count = 1 ∧
+      n.P = mk N := by
+  obtain ⟨n, hnew, hr⟩ := newCore_run (P := mk N) (lazy := false)
+  obtain ⟨hcnt, hP⟩ := initCore_fields hr
+  obtain ⟨hL, hI⟩ := lowinv_initCore (S.gp N) (S.cp N) (S.lp N) hr
+  obtain ⟨hTI, hres⟩ := S.prep.eager _ _ hr
+  refine ⟨n, hnew, ⟨costInv_fresh hL hTI hres (by rw [hP]; exact S.n1 N) (gval_fresh hL hI),
+    by rw [hcnt, initAbs_elist]; rfl, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hcnt, hP⟩
+
+/-- **A preparation step** of a core being built: it finishes (the core is in service) or it
+decreases `ν`. -/
+theorem PrepOK.step (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {n : Core}
+    (h : PrepOK mk PI n) :
+    ∃ b n', runCore n prepareStep = .ok (b, n') ∧ n'.count = n.count ∧ n'.P = n.P ∧
+      INV n' initAbs ∧
+      (b = true → CoreOK mk TI μ Jf nf Rf n' initAbs.elist) ∧
+      (b = false → PrepOK mk PI n' ∧ ν n' < ν n) := by
+  obtain ⟨b, n', hr, hL', hI', hR⟩ := prepareStep_low h.low h.inv
+  obtain ⟨b2, n2, hr2, hT, hF⟩ := S.prep.step n h.pi
+  rw [hr] at hr2; cases hr2
+  have hP : n'.P = n.P := hR.1.P
+  refine ⟨b, n', by rw [runCore_ok hr], hR.1.count, hP, hI', fun hb => ?_, fun hb => ?_⟩
+  · obtain ⟨hTI, hres⟩ := hT hb
+    have hpm := h.pmk
+    have hn1 : 1 ≤ nf n'.P := by rw [hP, hpm]; exact S.n1 _
+    have hc1 : n'.count = initAbs.elist.length := by rw [hR.1.count, h.cnt, initAbs_elist]; rfl
+    have hpm' : n'.P = mk n'.P.N := by rw [hP]; exact hpm
+    exact ⟨costInv_fresh hL' hTI hres hn1 (gval_fresh hL' hI'), hc1, hpm'⟩
+  · obtain ⟨hPI, hν⟩ := hF hb
+    have hc1 : n'.count = 1 := by rw [hR.1.count, h.cnt]
+    have hpm' : n'.P = mk n'.P.N := by rw [hP]; exact h.pmk
+    exact ⟨⟨hPI, hL', hI', hc1, hpm'⟩, hν⟩
+
+end OM.Proof
