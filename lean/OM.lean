@@ -6,3 +6,4 @@ import OM.Machine.Examples
 import OM.Model
 import OM.Proof.Cost.Zeroing
 import OM.Proof.Correct
+import OM.Proof.Cost.Wrap

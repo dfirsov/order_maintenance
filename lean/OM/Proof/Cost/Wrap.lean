@@ -1384,3 +1384,71 @@ theorem delete_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp :
       exact ⟨om4, finish om4 hrb, hWC4⟩
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+  {Jf capf nf Rf : Params → Nat}
+
+/-- **Initialization** establishes the wrapper's cost invariant. -/
+theorem init_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {KB : Nat} (hKB : 4 ≤ KB) :
+    ∃ om, OM.init mk KB = .ok om ∧ WC mk TI PI μ ν Jf nf Rf om OM.Spec.State.empty := by
+  obtain ⟨om, hinit, hW⟩ := init_ok S.core KB
+  obtain ⟨n, hn, hok, hcnt, hP⟩ := newCore_eager S N_MIN
+  have hom : om = { cur := n, KB := KB } := by
+    unfold OM.init at hinit
+    simp only [bind, Except.bind, hn] at hinit
+    injection hinit with h; exact h.symm
+  subst hom
+  refine ⟨_, hinit, hW, rfl, hKB, ?_, fun A hA => ?_, fun _ => ?_, fun n' hn' => by cases hn'⟩
+  · show 64 ≤ n.P.N; rw [hP, S.PN]; rfl
+  · obtain ⟨A0, hA0, hel⟩ := hok.inv
+    rw [INV.elist_unique hA hA0, hel]; exact hok
+  · show n.count < n.P.N / 2; rw [hcnt, hP, S.PN]; decide
+
+/-- **Each operation** keeps the wrapper's cost invariant. -/
+theorem apply_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+    (hW : WC mk TI PI μ ν Jf nf Rf om Sp) {op : OM.Spec.Op} (hv : op.Valid Sp) :
+    ∃ om', om.apply mk op = .ok ((OM.Spec.step Sp op).2, om') ∧
+      WC mk TI PI μ ν Jf nf Rf om' (OM.Spec.step Sp op).1 := by
+  cases op with
+  | insertFirst =>
+    obtain ⟨om', h, hW'⟩ := insert_cost S hW none hv
+    exact ⟨om', by simp only [OM.apply, bind, Except.bind, h]; rfl, hW'⟩
+  | insertAfter x =>
+    obtain ⟨om', h, hW'⟩ := insert_cost S hW (some x) hv
+    exact ⟨om', by simp only [OM.apply, bind, Except.bind, h]; rfl, hW'⟩
+  | delete x =>
+    obtain ⟨om', h, hW'⟩ := delete_cost S hW hv
+    exact ⟨om', by simp only [OM.apply, bind, Except.bind, h]; rfl, hW'⟩
+  | order x y =>
+    exact ⟨om, by simp only [OM.apply, bind, Except.bind, order_ok hW.w hv.1 hv.2]; rfl, hW⟩
+
+/-- **The wrapper's cost theorem (Level F).** Under the setup, the structure initializes into a
+state satisfying the cost invariant, and every valid operation keeps it. In every such state,
+both cores satisfy the cost invariant within their capacities, so each of their insertions takes
+no FALLBACK (`CoreOK.insert`, `insertAfter_cost`). -/
+theorem wrapper_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {KB : Nat} (hKB : 4 ≤ KB) :
+    (∃ om, OM.init mk KB = .ok om ∧ WC mk TI PI μ ν Jf nf Rf om OM.Spec.State.empty) ∧
+    ∀ om Sp op, WC mk TI PI μ ν Jf nf Rf om Sp → op.Valid Sp →
+      ∃ om', om.apply mk op = .ok ((OM.Spec.step Sp op).2, om') ∧
+        WC mk TI PI μ ν Jf nf Rf om' (OM.Spec.step Sp op).1 :=
+  ⟨init_cost S hKB, fun _ _ _ hW hv => apply_cost S hW hv⟩
+
+/-- In a state satisfying the wrapper's cost invariant, `cur` is a core in service with room for
+an insertion, and so is `nxt` once its preparation is over. -/
+theorem WC.cores {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+    (h : WC mk TI PI μ ν Jf nf Rf om Sp) :
+    (∀ A, INV om.cur A → CoreOK mk TI μ Jf nf Rf om.cur A.elist) ∧
+      om.cur.count + 1 ≤ om.cur.P.N ∧
+      ∀ n, om.nxt = some n → om.cursorSet = true →
+        (∀ B, INV n B → CoreOK mk TI μ Jf nf Rf n B.elist) ∧ n.count + 1 ≤ n.P.N := by
+  refine ⟨h.cur, h.cur_room S, fun n hn hs => ⟨fun B hB => ?_, h.nxt_room S hn hs⟩⟩
+  obtain ⟨c₀, live₀, I, D, hRW⟩ := h.busy n hn
+  exact ((hRW.serve hs).1 B hB).1
+
+end OM.Proof
