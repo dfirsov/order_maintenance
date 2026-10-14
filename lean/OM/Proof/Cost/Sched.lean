@@ -243,3 +243,166 @@ theorem xgroup_frame {L : List Nat} {c : Nat} (s₀ : Core) :
   · intro t A _ g labL labR hI _ _ hg _ _ _ _ hX; exact hX.trans (cframe_split hI hg)
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+/-! ### What the chunk drive leaves alone -/
+
+/-- The queue, the top structure and the chunk list are unchanged, and so are the queued chunks,
+their sizes and the game values. -/
+structure DFrame (s s' : Core) : Prop where
+  Csize : s'.C.size = s.C.size
+  P : s'.P = s.P
+  pq : PQSame s s'
+  top : s'.nodes = s.nodes ∧ s'.path = s.path ∧ s'.cin = s.cin ∧ s'.lpar = s.lpar ∧
+    s'.resJob = s.resJob ∧ s'.prep = s.prep ∧ s'.ready = s.ready ∧ s'.firstChunk = s.firstChunk
+  links : ∀ c, cN s' c = cN s c ∧ cP s' c = cP s c ∧ cT s' c = cT s c
+  inq : ∀ c, inQC s' c = inQC s c
+  qsz : ∀ c, inQC s c = true → cSz s' c = cSz s c
+  gv : ∀ c, gval s' c = gval s c
+
+theorem DFrame.refl (s : Core) : DFrame s s :=
+  ⟨rfl, rfl, PQSame.refl s, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ⟨rfl, rfl, rfl⟩,
+    fun _ => rfl, fun _ _ => rfl, fun _ => rfl⟩
+
+theorem DFrame.trans {a b c : Core} (h1 : DFrame a b) (h2 : DFrame b c) : DFrame a c := by
+  obtain ⟨s1, P1, q1, ⟨t1, t2, t3, t4, t5, t6, t7, t8⟩, l1, i1, z1, g1⟩ := h1
+  obtain ⟨s2, P2, q2, ⟨u1, u2, u3, u4, u5, u6, u7, u8⟩, l2, i2, z2, g2⟩ := h2
+  refine ⟨s2.trans s1, P2.trans P1, q1.trans q2, ⟨u1.trans t1, u2.trans t2, u3.trans t3,
+    u4.trans t4, u5.trans t5, u6.trans t6, u7.trans t7, u8.trans t8⟩, fun d => ?_,
+    fun d => (i2 d).trans (i1 d), fun d hd => ?_, fun d => (g2 d).trans (g1 d)⟩
+  · exact ⟨(l2 d).1.trans (l1 d).1, (l2 d).2.1.trans (l1 d).2.1, (l2 d).2.2.trans (l1 d).2.2⟩
+  · rw [z2 d (by rw [i1 d]; exact hd), z1 d hd]
+
+theorem PQC.dframe {s s' : Core} (h : PQC s) (D : DFrame s s') : PQC s' := h.frame D.pq D.inq D.qsz
+
+theorem DFrame.gvec {s s' : Core} (D : DFrame s s') (n : Nat) : gvec n s' = gvec n s := by
+  funext i; unfold OM.Proof.gvec; rw [D.gv]
+
+/-- A frame from equal quiet sizes and states. -/
+theorem DFrame.of_qsame {s s' : Core} (Q : QSame s s') (hq : PQSame s s')
+    (ht : s'.nodes = s.nodes ∧ s'.path = s.path ∧ s'.cin = s.cin ∧ s'.lpar = s.lpar ∧
+      s'.resJob = s.resJob ∧ s'.prep = s.prep ∧ s'.ready = s.ready ∧ s'.firstChunk = s.firstChunk)
+    (hl : ∀ c, cN s' c = cN s c ∧ cP s' c = cP s c ∧ cT s' c = cT s c) : DFrame s s' :=
+  ⟨Q.Csize, Q.P, hq, ht, hl, Q.inQC, fun c hc => by
+    unfold OM.Proof.inQC at hc; simp only [decide_eq_true_eq] at hc; exact Q.sz c hc.1 hc.2.1,
+    Q.gval⟩
+
+theorem CFrame.dframe {s s' : Core} (h : CFrame s s') : DFrame s s' :=
+  DFrame.of_qsame h.qsame h.pq h.top fun c => ⟨(h.C c).2.2.2.2.2.1, (h.C c).2.2.2.2.2.2.1,
+    (h.C c).2.2.2.2.2.2.2⟩
+
+/-- A chunk-split move leaves the quiet chunks alone. -/
+theorem cmoveL_dframe {s : Core} {x : Nat} {u labs : List Nat} (hxy : x ≠ cLl s x)
+    (hx : x < s.C.size) (hy : cLl s x < s.C.size) (hxs : cSt s x = .splitting)
+    (hys : cSt s (cLl s x) = .overflow) : DFrame s (cmoveLState s x u labs) := by
+  have hCs : (moveGroupsLeft s x (cLl s x) u labs).C.size = s.C.size := by simp [moveGroupsLeft]
+  have hC := fun c => cmoveSizes_C (t := moveGroupsLeft s x (cLl s x) u labs) (u := u) hxy
+    (by rw [hCs]; exact hx) (by rw [hCs]; exact hy) c
+  have hCm := fun c => moveGroupsLeft_C (s := s) (u := u) (labs := labs) hxy hx hy c
+  have fld : ∀ c, cSt (cmoveLState s x u labs) c = cSt s c ∧ cN (cmoveLState s x u labs) c = cN s c ∧
+      cP (cmoveLState s x u labs) c = cP s c ∧ cT (cmoveLState s x u labs) c = cT s c ∧
+      (c ≠ x → c ≠ cLl s x → cSz (cmoveLState s x u labs) c = cSz s c) := by
+    intro c
+    simp only [cSt, cN, cP, cT, cSz, cmoveLState]
+    rw [hC c, hCm c]
+    by_cases h1 : c = x
+    · subst h1; simp only [if_true, if_neg hxy]; split <;> simp
+    · by_cases h2 : c = cLl s x
+      · subst h2; simp [h1]
+      · simp [h1, h2]
+  have hCsz : (cmoveLState s x u labs).C.size = s.C.size := by
+    simp [cmoveLState, cmoveSizes, hCs]
+  refine DFrame.of_qsame ⟨hCsz, rfl, fun c _ => by rw [(fld c).1], fun c _ hq => ?_⟩
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    fun c => ⟨(fld c).2.1, (fld c).2.2.1, (fld c).2.2.2.1⟩
+  refine (fld c).2.2.2.2 ?_ ?_
+  · rintro rfl; rw [hxs] at hq; cases hq
+  · rintro rfl; rw [hys] at hq; cases hq
+
+theorem cmoveR_dframe {s : Core} {x : Nat} {u labs : List Nat} (hxz : x ≠ cRr s x)
+    (hx : x < s.C.size) (hz : cRr s x < s.C.size) (hxs : cSt s x = .splitting)
+    (hzs : cSt s (cRr s x) = .overflow) : DFrame s (cmoveRState s x u labs) := by
+  have hCs : (moveGroupsRight s x (cRr s x) u labs).C.size = s.C.size := by simp [moveGroupsRight]
+  have hC := fun c => cmoveSizes_C (t := moveGroupsRight s x (cRr s x) u labs) (u := u) hxz
+    (by rw [hCs]; exact hx) (by rw [hCs]; exact hz) c
+  have hCm := fun c => moveGroupsRight_C (s := s) (u := u) (labs := labs) hxz hx hz c
+  have fld : ∀ c, cSt (cmoveRState s x u labs) c = cSt s c ∧ cN (cmoveRState s x u labs) c = cN s c ∧
+      cP (cmoveRState s x u labs) c = cP s c ∧ cT (cmoveRState s x u labs) c = cT s c ∧
+      (c ≠ x → c ≠ cRr s x → cSz (cmoveRState s x u labs) c = cSz s c) := by
+    intro c
+    simp only [cSt, cN, cP, cT, cSz, cmoveRState]
+    rw [hC c, hCm c]
+    by_cases h1 : c = x
+    · subst h1; simp only [if_true, if_neg hxz]; split <;> simp
+    · by_cases h2 : c = cRr s x
+      · subst h2; simp [h1]
+      · simp [h1, h2]
+  have hCsz : (cmoveRState s x u labs).C.size = s.C.size := by
+    simp [cmoveRState, cmoveSizes, hCs]
+  refine DFrame.of_qsame ⟨hCsz, rfl, fun c _ => by rw [(fld c).1], fun c _ hq => ?_⟩
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    fun c => ⟨(fld c).2.1, (fld c).2.2.1, (fld c).2.2.2.1⟩
+  refine (fld c).2.2.2.2 ?_ ?_
+  · rintro rfl; rw [hxs] at hq; cases hq
+  · rintro rfl; rw [hzs] at hq; cases hq
+
+/-- A chunk removal: the siblings turn quiet at sizes at most `θ`, so no game value changes and the
+queue stays as it is. -/
+theorem cremove_dframe {s : Core} {x : Nat} (hx : x < s.C.size) (hl : cLl s x < s.C.size)
+    (hr : cRr s x < s.C.size) (hlx : cLl s x ≠ x) (hrx : cRr s x ≠ x)
+    (hxs : cSt s x = .splitting) (hls : cSt s (cLl s x) = .overflow)
+    (hrs : cSt s (cRr s x) = .overflow) (hszl : cSz s (cLl s x) ≤ s.P.theta)
+    (hszr : cSz s (cRr s x) ≤ s.P.theta) : DFrame s (cremoveState s x) := by
+  have hC' := cremoveState_C hx hl hr hlx hrx
+  have hsz : ∀ c, cSz (cremoveState s x) c = cSz s c := by
+    intro c; simp only [cSz, hC']; split_ifs <;> rfl
+  have hlk : ∀ c, cN (cremoveState s x) c = cN s c ∧ cP (cremoveState s x) c = cP s c ∧
+      cT (cremoveState s x) c = cT s c := by
+    intro c; simp only [cN, cP, cT, hC']; split_ifs <;> simp [deadC, quietC]
+  have hst : ∀ c, cSt (cremoveState s x) c = if c = x then .dead
+      else if c = cLl s x ∨ c = cRr s x then .quiet else cSt s c := by
+    intro c; simp only [cSt, hC']; split_ifs <;> simp [deadC, quietC]
+  have hLC : ∀ c, LiveC (cremoveState s x) c ↔ LiveC s c := by
+    intro c; simp [LiveC, cremoveState]
+  have hP : (cremoveState s x).P = s.P := rfl
+  have hval : ∀ c, (cSt (cremoveState s x) c = .quiet ∧ s.P.theta < cSz s c) ↔
+      (cSt s c = .quiet ∧ s.P.theta < cSz s c) := by
+    intro c
+    rw [hst]
+    by_cases h1 : c = x
+    · subst h1; simp [hxs]
+    · by_cases h2 : c = cLl s x ∨ c = cRr s x
+      · have hn : ¬ s.P.theta < cSz s c := by rcases h2 with rfl | rfl <;> omega
+        simp [h1, h2, hn]
+      · simp [h1, h2]
+  refine ⟨by simp [cremoveState], hP, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, hlk, fun c => ?_, fun c _ => hsz c, fun c => ?_⟩
+  · unfold OM.Proof.inQC
+    rw [hsz, hP]
+    have := hval c
+    by_cases hc : LiveC s c
+    · simp only [hc, (hLC c).mpr hc, true_and]; exact decide_eq_decide.mpr this
+    · simp [hc, (hLC c).not.mpr hc]
+  · unfold gval
+    rw [hsz, hP]
+    by_cases hc : LiveC s c
+    · simp only [hc, (hLC c).mpr hc, true_and]
+      by_cases hq : cSt (cremoveState s x) c = .quiet
+      · by_cases hq' : cSt s c = .quiet
+        · rw [if_pos hq, if_pos hq']
+        · rw [if_pos hq, if_neg hq']
+          have : ¬ s.P.theta < cSz s c := fun h => hq' ((hval c).mp ⟨hq, h⟩).1
+          omega
+      · by_cases hq' : cSt s c = .quiet
+        · rw [if_neg hq, if_pos hq']
+          have : ¬ s.P.theta < cSz s c := fun h => hq ((hval c).mpr ⟨hq', h⟩).1
+          omega
+        · rw [if_neg hq, if_neg hq']
+    · simp [hc, (hLC c).not.mpr hc]
+
+end OM.Proof
