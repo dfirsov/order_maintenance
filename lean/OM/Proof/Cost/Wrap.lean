@@ -383,3 +383,80 @@ theorem WC.nxt_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν
   omega
 
 end OM.Proof
+
+namespace OM.Proof
+
+open OM.Model
+
+set_option linter.deprecated false
+
+theorem length_insertAfterL_le (x y : Nat) (l : List Nat) :
+    (OM.Spec.insertAfterL x y l).length ≤ l.length + 1 := by
+  induction l with
+  | nil => simp [OM.Spec.insertAfterL]
+  | cons a t ih =>
+    simp only [OM.Spec.insertAfterL]
+    split <;> simp <;> omega
+
+/-- An insertion adds at most one element to the part from the cursor on. -/
+theorem postOf_insertAfterL_le {a b c : Nat} (hbc : b ≠ c) (l : List Nat) :
+    (postOf (OM.Spec.insertAfterL a b l) c).length ≤ (postOf l c).length + 1 := by
+  induction l with
+  | nil => simp [OM.Spec.insertAfterL, postOf]
+  | cons x t ih =>
+    simp only [OM.Spec.insertAfterL]
+    by_cases hxa : x = a
+    · rw [if_pos hxa]
+      by_cases hxc : x = c
+      · simp [postOf, hxc]
+      · simp only [postOf, List.dropWhile_cons, ne_eq, decide_not, hxc, not_false_eq_true,
+          decide_true, Bool.not_true, Bool.false_eq_true, if_false, hbc] at ih ⊢
+        simp
+    · rw [if_neg hxa]
+      by_cases hxc : x = c
+      · simp only [postOf, List.dropWhile_cons, hxc, ne_eq, not_true_eq_false, decide_false,
+          Bool.not_false, if_true, List.length_cons]
+        subst hxc
+        have := length_insertAfterL_le a b t
+        simp [hxa]; omega
+      · simp only [postOf, List.dropWhile_cons, ne_eq, decide_not, hxc, not_false_eq_true,
+          decide_true, Bool.not_true, Bool.false_eq_true, if_false] at ih ⊢
+        exact ih
+
+/-- Advancing the cursor drops one element. -/
+theorem postOf_succOf {l : List Nat} (hnd : l.Nodup) (hnil : NIL ∉ l) {c : Nat} (hc : c ∈ l) :
+    postOf l (succOf l c) = (postOf l c).tail := by
+  induction l with
+  | nil => simp at hc
+  | cons x t ih =>
+    have hxt : x ∉ t := (List.nodup_cons.mp hnd).1
+    have hx0 : x ≠ NIL := fun e => hnil (by rw [← e]; simp)
+    by_cases hxc : x = c
+    · subst hxc
+      rw [succOf_cons_self]
+      cases t with
+      | nil => simp [postOf]; exact hx0
+      | cons y t' =>
+        have hxy : x ≠ y := fun e => hxt (by rw [e]; simp)
+        simp [postOf, hxy]
+    · have hct : c ∈ t := by simp at hc; rcases hc with h | h; exact absurd h.symm hxc; exact h
+      rw [succOf_cons_ne hxc]
+      have hxs : x ≠ succOf t c := by
+        intro e
+        by_cases h : succOf t c = NIL
+        · exact hx0 (e.trans h)
+        · have : succOf t c ∈ t := by
+            obtain ⟨l1, l2, e2⟩ := succOf_split (rfl : succOf t c = succOf t c) h
+            have hm : succOf t c ∈ l1 ++ c :: succOf t c :: l2 := by simp
+            rwa [← e2] at hm
+          exact hxt (e ▸ this)
+      simp only [postOf, List.dropWhile_cons, ne_eq, decide_not, hxs, hxc, not_false_eq_true,
+        decide_true, Bool.not_true, Bool.false_eq_true, if_false]
+      exact ih (List.nodup_cons.mp hnd).2 (fun h => hnil (List.mem_cons_of_mem _ h)) hct
+
+theorem postOf_headD {l : List Nat} (hne : l ≠ []) : postOf l (l.headD NIL) = l := by
+  cases l with
+  | nil => exact absurd rfl hne
+  | cons a t => simp [postOf]
+
+end OM.Proof
