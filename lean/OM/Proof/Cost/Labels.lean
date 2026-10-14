@@ -116,9 +116,9 @@ structure LInv (s : Core) (lg : LGh) (s₀ δ δu : Nat → Nat) : Prop where
   insS : ∀ c, LiveC s c → cSt s c = .splitting → lg.ins c ≤ famC s c + kC s.P s.P.T
   /-- Arrivals: a source's moved units, and the frozen total afterwards. -/
   arrS : ∀ x, LiveC s x → cSt s x = .splitting →
-    lg.arB (cLl s x) + lg.arF (cLl s x) + lg.arB (cRr s x) + lg.arF (cRr s x) + 3 * units s x ≤
-      3 * (unitsOf s.P (s₀ x) + ((cSz s (cLl s x) - δ (cLl s x)) + (cSz s x - δ x) +
-        (cSz s (cRr s x) - δ (cRr s x)) - s₀ x)) + 3 * δu x
+    lg.arB (cLl s x) + lg.arF (cLl s x) + lg.arB (cRr s x) + lg.arF (cRr s x) + 3 * units s x +
+        3 * (δ (cLl s x) + δ x + δ (cRr s x)) + 3 * s₀ x ≤
+      3 * (unitsOf s.P (s₀ x) + famC s x) + 3 * δu x
   arrN : ∀ c, LiveC s c → cSt s c ≠ .overflow → lg.arB c + lg.arF c ≤ 3 * Mu s.P
   /-- The quiet size at the start of the quiet period. -/
   e0 : ∀ c, LiveC s c → cSt s c = .quiet → lg.e0 c ≤ cSz s c
@@ -773,7 +773,7 @@ theorem linv_splitStart {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀
     rw [hfamC, S.P]; exact hL.insS d hd hds
   · intro x hx hxs
     rw [hLC] at hx; rw [(hcf x).2.1] at hxs
-    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2, hunits, (hcf _).1, (hcf x).1, (hcf _).1, S.P]
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2, hunits, hfamC, S.P]
     exact hL.arrS x hx hxs
   · intro d hd hds
     rw [hLC] at hd; rw [(hcf d).2.1] at hds
@@ -897,7 +897,7 @@ theorem linv_move {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ
   · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [hfamC, M.P]
     exact hL.insS d hd hds
   · intro x hx hxs; rw [hLC] at hx; rw [(hcf x).2.1] at hxs
-    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2.1, hunits, (hcf _).1, (hcf x).1, (hcf _).1, M.P]
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2.1, hunits, hfamC, M.P]
     exact hL.arrS x hx hxs
   · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [M.P]; exact hL.arrN d hd hds
   · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [(hcf d).1]; exact hL.e0 d hd hds
@@ -1122,7 +1122,7 @@ theorem linv_remove {s : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ 
   · intro d hd hds; rw [hLC] at hd; rw [(hcf d).2.1] at hds; rw [hfamC, R.P]
     exact hL.insS d hd hds
   · intro x hx hxs; rw [hLC] at hx; rw [(hcf x).2.1] at hxs
-    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2.1, (hcf _).1, (hcf x).1, (hcf _).1, R.P]
+    rw [(hcf x).2.2.2.1, (hcf x).2.2.2.2.1, hfamC, R.P]
     have h1 := hL.arrS x hx hxs
     have h2 := hunits x
     omega
@@ -1259,7 +1259,7 @@ theorem linv_ins {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ 
     intro d; ext z; simp only [mem_GrpsC, S.live, S.chk]
   have hunits : ∀ d, units s' d = units s d := fun d =>
     units_congr fun z => by unfold UnitG; rw [S.live, S.chk, S.st]
-  have hcd : ∀ d, cSz s' d - Function.update δ c (δ c + 1) d = cSz s d - δ d := by
+  have hcd : ∀ d, cSz s' d + δ d = cSz s d + Function.update δ c (δ c + 1) d := by
     intro d; rw [hcsz]
     by_cases hdc : d = c
     · subst hdc; rw [Function.update_self, if_pos rfl]; omega
@@ -1311,7 +1311,11 @@ theorem linv_ins {s s' : Core} {A : Abs} {L : List Nat} {gh : GGh} {δg s₀ δ 
     · subst hdc; rw [Function.update_self, if_pos (rfl : d = d)]; omega
     · rw [Function.update_of_ne hdc]; omega
   · intro x hx hxs; rw [hLC] at hx; rw [S.cst] at hxs
-    rw [S.cl, S.cr, S.P, hunits, hcd, hcd, hcd]; exact hL.arrS x hx hxs
+    have h1 := hL.arrS x hx hxs
+    unfold famC at h1 ⊢
+    rw [S.cl, S.cr, S.P, hunits]
+    have e1 := hcd (cLl s x); have e2 := hcd x; have e3 := hcd (cRr s x)
+    dsimp only at h1 ⊢; omega
   · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [S.P]; exact hL.arrN d hd hds
   · intro d hd hds; rw [hLC] at hd; rw [S.cst] at hds; rw [hcsz]
     exact le_trans (hL.e0 d hd hds) (Nat.le_add_right _ _)
