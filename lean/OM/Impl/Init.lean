@@ -512,4 +512,82 @@ theorem isAgree_stage {κ : Caps} {P : Params} {h : Nat} {s : Core} (S : Stage P
         (by rw [hP]; simp [pr]; omega) (by simp [pr, hCs]) (by have := hK.C; simp [pr]; omega)
       exact ⟨L', c, ev, by simp [hd, b2n], by omega⟩
 
+/-! ### The eager construction loop -/
+
+/-- The body of Level F's construction loop (as elaborated). -/
+def initF : Nat → PUnit → CM (ForInStep PUnit) := fun _ _ => do
+  let b ← initStep
+  if b = true then pure (ForInStep.done PUnit.unit) else pure (ForInStep.yield PUnit.unit)
+
+def initLoopBody : Stm := .ite ("dn" =ₑ 0) (initStepP.call [] ["d"] ;; .ite "d" ("dn" ::= 1) .skip) .skip
+def initLoopS : Stm := "dn" ::= 0 ;; .loop "ii" (.prm .H + 1) initLoopBody
+
+theorem initLoopS_agree (κ : Caps) (s : Core) (L : Loc) {D : Nat} (I : Nat → Core → Prop) (h0 : I 0 s)
+    (hstep : ∀ j t, I j t → j < s.P.H + 1 → ∃ b t', initStep.run t = .ok b t' ∧ (b = false → I (j + 1) t') ∧
+      ISAgree κ t D ∧ t'.P = s.P) :
+    ∃ t' L' n, (forIn (List.range (s.P.H + 1)) PUnit.unit initF).run s = .ok () t' ∧
+      evalF κ initLoopS s L = .ok t' L' n ∧ n ≤ 10 + (s.P.H + 1) * (D + 12) := by
+  set K := s.P.H + 1
+  set R := fun (l : List Nat) (t : Core) => (forIn l PUnit.unit initF).run t
+  have hF : ∀ (n j : Nat) (t : Core), I j t → j + n = K → ∃ tF, R ((List.range K).drop j) t = .ok () tF := by
+    intro n; induction n with
+    | zero =>
+      intro j t _ hj; refine ⟨t, ?_⟩
+      simp only [R, show j = K by omega]; rw [List.drop_of_length_le (by simp)]; rfl
+    | succ n ih =>
+      intro j t hI hj
+      have hjK : j < K := by omega
+      rw [List.drop_eq_getElem_cons (by simpa using hjK), List.getElem_range]
+      obtain ⟨b, t', hr, hI', -, -⟩ := hstep j t hI hjK
+      cases b
+      · obtain ⟨tF, h⟩ := ih (j + 1) t' (hI' rfl) (by omega)
+        exact ⟨tF, by simp only [R, List.forIn_cons, OM.Proof.run_bind, initF, hr]; exact h⟩
+      · exact ⟨_, by simp only [R, List.forIn_cons, OM.Proof.run_bind, initF, hr]; rfl⟩
+  obtain ⟨tF, hR0⟩ := hF K 0 s h0 (by omega)
+  simp only [List.drop_zero] at hR0
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "dn") (e := (0 : Exp)) (v := 0) rfl
+  obtain ⟨S', L', c, he, hc, hI⟩ := evalF_loop (κ := κ) (x := "ii") (n := .prm .H + 1) (b := initLoopBody) (s := s)
+    (L := upd L "dn" 0) (N := K) (by simp [Exp.ev, PF.get, K, OM.Machine.BinOp.eval])
+    (fun j S L' => (L' "dn" = 0 ∧ I j S ∧ R ((List.range K).drop j) S = .ok () tF) ∨ (L' "dn" = 1 ∧ S = tF)) (D + 11)
+    (Or.inl ⟨by simp [OM.Machine.State.upd], h0, by simpa using hR0⟩)
+    (by
+      intro j hj S L1 hcase
+      set L2 := upd L1 "ii" j
+      rcases hcase with ⟨hdn, hIj, hR⟩ | ⟨hdn, hSF⟩
+      · have hc0 : ("dn" =ₑ 0 : Exp).ev κ S L2 = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, L2,
+          OM.Machine.State.upd, hdn]
+        obtain ⟨b, t', hr, hI', hA, -⟩ := hstep j S hIj hj
+        obtain ⟨Lg, ng, eg, hd, hng⟩ := hA b t' hr
+        have ec := evalF_call_ok (q := initStepP) (args := []) (ds := ["d"]) (L := L2) (by simp [evList]) eg
+        set L3 := OM.Machine.State.setLocs L2 ["d"] (initStepP.rets.map Lg)
+        have h3d : L3 "d" = b2n b := by simp [L3, initStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hd]
+        have h3dn : L3 "dn" = 0 := by simp [L3, L2, initStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hdn]
+        rw [List.drop_eq_getElem_cons (by simpa using hj), List.getElem_range] at hR
+        cases b
+        · simp only [R, List.forIn_cons, OM.Proof.run_bind, initF, hr] at hR
+          refine ⟨t', _, _, evalF_ite_t hc0 one_ne_zero (evalF_seq_ok2 ec (evalF_ite_f
+            (by simp [Exp.ev, h3d, b2n]) evalF_skip)), ?_, Or.inl ⟨h3dn, hI' rfl, hR⟩⟩
+          simp [Exp.cost, costList] at hng ⊢; omega
+        · simp only [R, List.forIn_cons, OM.Proof.run_bind, initF, hr] at hR
+          injection hR with _ hT; subst hT
+          have e4 := evalF_assign_ok (κ := κ) (s := t') (L := L3) (x := "dn") (e := (1 : Exp)) (v := 1) rfl
+          refine ⟨t', _, _, evalF_ite_t hc0 one_ne_zero (evalF_seq_ok2 ec (evalF_ite_t (v := 1)
+            (by simp [Exp.ev, h3d, b2n]) one_ne_zero e4)), ?_, Or.inr ⟨by simp [OM.Machine.State.upd], rfl⟩⟩
+          simp [Exp.cost, costList] at hng ⊢; omega
+      · subst hSF
+        have hc0 : ("dn" =ₑ 0 : Exp).ev κ S L2 = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, L2,
+          OM.Machine.State.upd, hdn]
+        exact ⟨S, L2, _, evalF_ite_f hc0 evalF_skip, by simp [Exp.cost],
+          Or.inr ⟨by simp [L2, OM.Machine.State.upd, hdn], rfl⟩⟩)
+  have hS' : S' = tF := by
+    rcases hI with ⟨hdn, hIK, hR⟩ | ⟨hdn, h⟩
+    · rw [List.drop_of_length_le (by simp)] at hR
+      simp only [R] at hR
+      injection hR
+    · exact h
+  subst hS'
+  refine ⟨S', L', _, hR0, evalF_seq_ok2 a1 he, ?_⟩
+  have e : K * (1 + (D + 11)) = K * (D + 12) := by ring
+  simp only [Exp.cost, PF.get] at hc ⊢; omega
+
 end OM.Impl
