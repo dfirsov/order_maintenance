@@ -1148,4 +1148,297 @@ theorem stage4S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
   · intro r h1 h2 h3 h4
     rw [hF4 r h2 h3 h4]; simp only [OM.Machine.State.upd, if_neg h1]; exact hfr2 r h1 h2 h3 h4
 
+/-! ### Stages 5, 6: the children of `v1`, `v2` -/
+
+def chSel : Exp := "f" &&ₑ ("x" =ₑ "sd")
+def setParS : Stm := .ite ("h" =ₑ 1) (.wr (.a .lpar) "e" "u") (.wr (.n .livePar) "e" "u")
+def chBody : Stm :=
+  "e" ::= .lrd .children false "v" "j" ;;
+  (lookupP .side).call [.var "v", .var "e"] ["f", "x"] ;;
+  .ite chSel (setParS ;; .lgrow .children "u" "e" 0 ;; wtS ;; "ws" ::= "ws" + "w") .skip
+/-- **The children of a new node `u`**: `v`'s children on side `sd`, with their parent and weight. -/
+def chS : Stm :=
+  "ws" ::= 0 ;; "nk" ::= .llen .children "v" ;; .loop "j" "nk" chBody ;;
+  .wr (.n .weight) "u" "ws" ;; .wr (.n .livePar) "u" (.rd (.n .livePar) "v") ;; .wr (.n .overflow) "u" "v"
+
+/-- What `chS` produces (Level F's `sd8` / `sd10` step). -/
+def chRes (h u v lp wsum : Nat) (ch : List Nat) (St : Core) : Core :=
+  let s7 := ch.foldl (fun s e => setParentS h u e s) St
+  { s7 with nodes := s7.nodes.modify u fun n => { n with children := ch, weight := wsum, livePar := lp, overflowOf := v } }
+
+theorem setParentS_getX_ne {h u e x : Nat} {s : Core} (hx : x ≠ e) :
+    (setParentS h u e s).nodes.getX x = s.nodes.getX x := by
+  unfold setParentS; split
+  · rfl
+  · simp only [getX_modify']; rw [if_neg (fun h => hx h.1)]
+
+theorem setParentS_fields (h u e x : Nat) (s : Core) :
+    ((setParentS h u e s).nodes.getX x).children = (s.nodes.getX x).children ∧
+    ((setParentS h u e s).nodes.getX x).side = (s.nodes.getX x).side ∧
+    ((setParentS h u e s).nodes.getX x).weight = (s.nodes.getX x).weight := by
+  unfold setParentS; split
+  · exact ⟨rfl, rfl, rfl⟩
+  · simp only [getX_modify']; split <;> exact ⟨rfl, rfl, rfl⟩
+
+theorem fold_setParentS_fields (h u x : Nat) : ∀ (l : List Nat) (s : Core),
+    ((l.foldl (fun s e => setParentS h u e s) s).nodes.getX x).children = (s.nodes.getX x).children ∧
+    ((l.foldl (fun s e => setParentS h u e s) s).nodes.getX x).side = (s.nodes.getX x).side ∧
+    ((l.foldl (fun s e => setParentS h u e s) s).nodes.getX x).weight = (s.nodes.getX x).weight
+  | [], _ => ⟨rfl, rfl, rfl⟩
+  | e :: l, s => by
+    simp only [List.foldl_cons]
+    obtain ⟨a1, a2, a3⟩ := fold_setParentS_fields h u x l (setParentS h u e s)
+    obtain ⟨b1, b2, b3⟩ := setParentS_fields h u e x s
+    exact ⟨a1.trans b1, a2.trans b2, a3.trans b3⟩
+
+theorem fold_setParentS_getX_notin {h u x : Nat} : ∀ (l : List Nat) (s : Core), x ∉ l →
+    (l.foldl (fun s e => setParentS h u e s) s).nodes.getX x = s.nodes.getX x
+  | [], _, _ => rfl
+  | e :: l, s, hx => by
+    simp only [List.foldl_cons]
+    rw [fold_setParentS_getX_notin l _ (fun h => hx (List.mem_cons_of_mem _ h)),
+      setParentS_getX_ne (fun h => hx (by simp [h]))]
+
+theorem setParentS_size (h u e : Nat) (s : Core) : (setParentS h u e s).nodes.size = s.nodes.size := by
+  unfold setParentS; split <;> simp
+
+theorem fold_setParentS_size (h u : Nat) : ∀ (l : List Nat) (s : Core),
+    (l.foldl (fun s e => setParentS h u e s) s).nodes.size = s.nodes.size
+  | [], _ => rfl
+  | e :: l, s => by simp only [List.foldl_cons]; rw [fold_setParentS_size h u l, setParentS_size]
+
+/-- Setting a parent commutes with replacing the children of another node. -/
+theorem setParentS_put {h u e : Nat} {s : Core} {l : List (Nat × Nat)} (he : e ≠ u) :
+    setParentS h u e (LK.put s u l .children) = LK.put (setParentS h u e s) u l .children := by
+  unfold setParentS LK.put; split
+  · rfl
+  · simp only
+    congr 1
+    rw [Array.modify_comm _ (Ne.symm he)]
+
+theorem put_getX_ne_c {St : Core} {w u : Nat} {l : List (Nat × Nat)} (h : u ≠ w) :
+    (LK.put St w l .children).nodes.getX u = St.nodes.getX u := by
+  simp only [LK.put, getX_modify']; rw [if_neg (fun e => h e.1)]
+
+theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat × Side)} {sd : Side}
+    (hkids : (St.nodes.getX v).children = (t.nodes.getX v).children) (hside : (St.nodes.getX v).side = side)
+    (hwt : ∀ e ∈ (t.nodes.getX v).children, (St.nodes.getX e).weight = (t.nodes.getX e).weight)
+    (hlp : (St.nodes.getX v).livePar = (t.nodes.getX v).livePar) (hu0 : (St.nodes.getX u).children = [])
+    (huv : u ≠ v) (huk : u ∉ (t.nodes.getX v).children) (hvk : v ∉ (t.nodes.getX v).children)
+    (hus : u < St.nodes.size) (hvsz : v < St.nodes.size)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, e < St.nodes.size ∧ e < κ.tbl .N ∧ e < κ.arr .lpar)
+    (hLv : L "v" = v) (hLu : L "u" = u) (hLh : L "h" = sH t v) (hLs : L "sd" = sideN sd)
+    (hvc : v < κ.lrec .children) (hvs : v < κ.lrec .side) (huc : u < κ.lrec .children)
+    (huN : u < κ.tbl .N) (hvN : v < κ.tbl .N) (hcap : (t.nodes.getX v).children.length ≤ κ.lcap .children) :
+    ∃ L' c, evalF κ chS St L = .ok (chRes (sH t v) u v (t.nodes.getX v).livePar
+      ((((t.nodes.getX v).children.filter (lookup side · == some sd)).map (sWt t v)).sum)
+      ((t.nodes.getX v).children.filter (lookup side · == some sd)) St) L' c ∧
+      c ≤ 30 + (t.nodes.getX v).children.length * (140 + 20 * side.length) ∧
+      ∀ r, r ≠ "ws" → r ≠ "nk" → r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" → L' r = L r := by
+  set kids := (t.nodes.getX v).children
+  set sel := fun e => lookup side e == some sd
+  set F := fun (s : Core) (e : Nat) => setParentS (sH t v) u e s
+  have hvC : LK.view St v .children = kids.map fun e => (e, 0) := by simp [LK.view, hkids, kids]
+  have hput0 : LK.put St u [] .children = St := by
+    have := LK.put_view (k := .children) (s := St) (i := u) (by simp [LK.idOk, LK.recOk, hus])
+    simp only [LK.view, hu0, List.map_nil] at this; exact this
+  have a1 := evalF_assign_ok (κ := κ) (s := St) (L := L) (x := "ws") (e := (0 : Exp)) (v := 0) rfl
+  have a2 := evalF_assign_ok (κ := κ) (s := St) (L := upd L "ws" 0) (x := "nk") (e := .llen .children "v")
+    (v := kids.length) (by simp [Exp.ev, OM.Machine.State.upd, hLv, hvc, hvC])
+  set L2 := upd (upd L "ws" 0) "nk" kids.length
+  have hL2 : ∀ r, r ≠ "ws" → r ≠ "nk" → L2 r = L r := fun r h1 h2 => by simp [L2, OM.Machine.State.upd, h1, h2]
+  -- states during the loop
+  have hfv : ∀ (pre : List Nat) (l : List (Nat × Nat)),
+      ((LK.put (pre.foldl F St) u l .children).nodes.getX v).children = kids ∧
+      ((LK.put (pre.foldl F St) u l .children).nodes.getX v).side = side := by
+    intro pre l
+    rw [put_getX_ne_c huv.symm]
+    obtain ⟨a, b, -⟩ := fold_setParentS_fields (sH t v) u v pre St
+    exact ⟨a.trans hkids, b.trans hside⟩
+  have hfw : ∀ (pre : List Nat) (l : List (Nat × Nat)) e, e ∈ kids →
+      ((LK.put (pre.foldl F St) u l .children).nodes.getX e).weight = (t.nodes.getX e).weight := by
+    intro pre l e he
+    rw [put_getX_ne_c (fun h => huk (by rw [← h]; exact he))]
+    obtain ⟨-, -, c⟩ := fold_setParentS_fields (sH t v) u e pre St
+    exact c.trans (hwt e he)
+  have hfs : ∀ (pre : List Nat) (l : List (Nat × Nat)),
+      (LK.put (pre.foldl F St) u l .children).nodes.size = St.nodes.size := by
+    intro pre l; simp [LK.put, F, fold_setParentS_size]
+  obtain ⟨S', L', c, he, hc, hS', hws', hF⟩ := evalF_loop (κ := κ) (x := "j") (n := .var "nk") (b := chBody)
+    (s := St) (L := L2) (N := kids.length) (by simp [Exp.ev, L2, OM.Machine.State.upd])
+    (fun j S L' => S = LK.put (((kids.take j).filter sel).foldl F St) u
+        (((kids.take j).filter sel).map fun e => (e, 0)) .children ∧
+      L' "ws" = (((kids.take j).filter sel).map (sWt t v)).sum ∧
+      ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" → r ≠ "ws" → L' r = L2 r)
+    (130 + 20 * side.length)
+    ⟨by simp [hput0], by simp [L2, OM.Machine.State.upd], fun _ _ _ _ _ _ _ => rfl⟩
+    (by
+      intro j hj S L1 ⟨hS, hws1, hF1⟩
+      subst hS
+      set pre := (kids.take j).filter sel
+      set S := LK.put (pre.foldl F St) u (pre.map fun e => (e, 0)) .children
+      have hkj : kids[j] ∈ kids := List.getElem_mem hj
+      obtain ⟨hkS, hkN, hkA⟩ := hks _ hkj
+      have hfr : ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" → r ≠ "ws" → r ≠ "nk" → L1 r = L r := by
+        intro r h1 h2 h3 h4 h5 h6 h7; rw [hF1 r h1 h2 h3 h4 h5 h6, hL2 r h6 h7]
+      have hv1 : L1 "v" = v := by
+        rw [hfr "v" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLv]
+      have hvCS : LK.view S v .children = kids.map fun e => (e, 0) := by simp [LK.view, (hfv pre _).1, S]
+      have hvSS : LK.view S v .side = encS side := by simp [LK.view, (hfv pre _).2, S]
+      have e1 := evalF_assign_ok (κ := κ) (s := S) (L := upd L1 "j" j) (x := "e") (e := .lrd .children false "v" "j")
+        (v := kids[j]) (by simp [Exp.ev, OM.Machine.State.upd, hv1, hvc, hvCS, hj])
+      set L3 := upd (upd L1 "j" j) "e" kids[j]
+      obtain ⟨Lk, ck, ek, hfk, hvk', -, -, hck⟩ := lookupP_agree κ .side S
+        (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [v, kids[j] ]) (i := v) (x := kids[j])
+        (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+        (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hvs
+      rw [hvSS, lookup_encS] at hfk hvk'
+      rw [hvSS] at hck
+      have e2 := evalF_call_ok (q := lookupP .side) (args := [.var "v", .var "e"]) (ds := ["f", "x"]) (L := L3)
+        (by simp [evList, Exp.ev, L3, OM.Machine.State.upd, hv1]) ek
+      set L4 := OM.Machine.State.setLocs L3 ["f", "x"] ((lookupP .side).rets.map Lk)
+      have h4f : L4 "f" = if ((lookup side kids[j]).map sideN).isSome then 1 else 0 := by
+        simp [L4, lookupP, OM.Machine.State.setLocs, OM.Machine.State.upd, hfk]
+      have h4x : L4 "x" = ((lookup side kids[j]).map sideN).getD 0 := by
+        simp [L4, lookupP, OM.Machine.State.setLocs, OM.Machine.State.upd, hvk']
+      have hfr4 : ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" → r ≠ "ws" → r ≠ "nk" → L4 r = L r := by
+        intro r h1 h2 h3 h4 h5 h6 h7
+        simp only [L4, L3, lookupP, OM.Machine.State.setLocs, List.map, OM.Machine.State.upd, if_neg h1, if_neg h2,
+          if_neg h3, if_neg h4]
+        exact hfr r h1 h2 h3 h4 h5 h6 h7
+      have h4s : L4 "sd" = sideN sd := by
+        rw [hfr4 "sd" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLs]
+      have htk : (kids.take (j + 1)).filter sel = pre ++ (if sel kids[j] then [kids[j] ] else []) := by
+        rw [List.take_succ_eq_append_getElem hj, List.filter_append]
+        by_cases hs : sel kids[j] = true <;> simp [hs, pre]
+      by_cases hs : sel kids[j] = true
+      · have hlk : lookup side kids[j] = some sd := by simpa [sel] using hs
+        have hsel1 : chSel.ev κ S L4 = some 1 := by
+          simp [chSel, Exp.ev, h4f, h4x, h4s, hlk, OM.Machine.BinOp.eval]
+        have h4h : L4 "h" = sH t v := by
+          rw [hfr4 "h" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLh]
+        have h4u : L4 "u" = u := by
+          rw [hfr4 "u" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLu]
+        have h4e : L4 "e" = kids[j] := by simp [L4, L3, lookupP, OM.Machine.State.setLocs, OM.Machine.State.upd]
+        have hku : kids[j] ≠ u := fun h => huk (by rw [← h]; exact hkj)
+        set S5 := setParentS (sH t v) u kids[j] S
+        have e5 : ∃ c5, evalF κ setParS S L4 = .ok S5 L4 c5 ∧ c5 ≤ 7 := by
+          by_cases h1 : sH t v = 1
+          · have ew : evalF κ (.wr (.a .lpar) "e" "u") S L4 = .ok S5 L4 3 := by
+              simp only [evalF, Exp.ev, h4e, h4u, Fld.set, hkA, if_true, AF.set, AF.get, Exp.cost]
+              simp only [S5, setParentS, h1, if_true]
+            exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h4h, h1]) one_ne_zero ew,
+              by simp [Exp.cost]⟩
+          · have ew := evalF_wrN_ok (κ := κ) (s := S) (L := L4) (k := .livePar) (i := .var "e") (e := .var "u")
+              (j := kids[j]) (w := u) (by simp [Exp.ev, h4e]) (by simp [Exp.ev, h4u]) (by rw [hfs]; exact hkS) hkN rfl
+            have hs5 : { S with nodes := S.nodes.modify kids[j] (NF.set · u .livePar) } = S5 := by
+              simp only [S5, setParentS, h1, if_false]; rfl
+            rw [hs5] at ew
+            exact ⟨_, evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h4h, h1]) ew, by simp [Exp.cost]⟩
+        obtain ⟨c5, e5, hc5⟩ := e5
+        have hS5 : S5 = LK.put ((pre ++ [kids[j] ]).foldl F St) u (pre.map fun e => (e, 0)) .children := by
+          show setParentS (sH t v) u kids[j] (LK.put (pre.foldl F St) u _ .children) = _
+          rw [setParentS_put hku, List.foldl_append]; rfl
+        set S6 := LK.put ((pre ++ [kids[j] ]).foldl F St) u ((pre ++ [kids[j] ]).map fun e => (e, 0)) .children
+        have hpl : pre.length + 1 ≤ kids.length := by
+          have := htk; rw [if_pos hs] at this
+          have h2 := List.length_filter_le sel (kids.take (j + 1))
+          rw [this] at h2; simp at h2; omega
+        have e6 : evalF κ (.lgrow .children "u" "e" 0) S5 L4 = .ok S6 L4 22 := by
+          have hsz5 : u < (List.foldl F St (pre ++ [kids[j] ])).nodes.size := by
+            show u < (List.foldl (fun s e => setParentS (sH t v) u e s) St (pre ++ [kids[j] ])).nodes.size
+            rw [fold_setParentS_size]; exact hus
+          have hrec5 : LK.children.recOk (List.foldl F St (pre ++ [kids[j] ])) u = true := by
+            simp only [LK.recOk, decide_eq_true_eq]; exact hsz5
+          have hvU : LK.view S5 u .children = pre.map fun e => (e, 0) := by
+            rw [hS5, LK.view_put hrec5 (by simp [LK.valid])]; simp
+          have hso : LK.set κ S5 u ((pre.map fun e => (e, 0)) ++ [(kids[j], 0)]) .children = some S6 := by
+            rw [LK.set_ok (by rw [hS5, LK.recOk_put]; exact hrec5) (by simp [LK.valid]) (by simp; omega) huc,
+              hS5, LK.put_put]
+            simp [S6]
+          simp only [evalF, Exp.ev, h4u, h4e, hvU, hso, Exp.cost]
+        obtain ⟨c7, e7, hc7⟩ := wtS_ok (κ := κ) (s := S6) (L := L4) (h := sH t v) (e := kids[j]) h4h h4e hkN
+        have hwj : drainWt S6.nodes (sH t v) kids[j] = sWt t v kids[j] := by
+          simp only [sWt, drainWt]; split
+          · rfl
+          · exact hfw _ _ _ hkj
+        rw [hwj] at e7
+        set L7 := upd L4 "w" (sWt t v kids[j])
+        have e8 := evalF_assign_ok (κ := κ) (s := S6) (L := L7) (x := "ws") (e := "ws" + "w")
+          (v := (pre.map (sWt t v)).sum + sWt t v kids[j])
+          (by simp [Exp.ev, OM.Machine.BinOp.eval, L7, L4, L3, lookupP, OM.Machine.State.setLocs,
+            OM.Machine.State.upd, hws1])
+        refine ⟨_, _, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_ite_t hsel1 one_ne_zero
+          (evalF_seq_ok2 e5 (evalF_seq_ok2 e6 (evalF_seq_ok2 e7 e8))))), ?_, ?_, ?_, ?_⟩
+        · simp only [encS, List.length_map] at hck
+          simp only [Exp.cost, costList, chSel, List.map, List.sum_cons, List.sum_nil, List.length_cons,
+            List.length_nil] at hck hc5 hc7 ⊢
+          omega
+        · rw [htk, if_pos hs]
+        · rw [htk, if_pos hs]; simp [OM.Machine.State.upd]
+        · intro r h1 h2 h3 h4 h5 h6
+          simp only [L7, OM.Machine.State.upd, if_neg h5, if_neg h6]
+          simp only [L4, L3, lookupP, OM.Machine.State.setLocs, List.map, OM.Machine.State.upd, if_neg h1,
+            if_neg h2, if_neg h3, if_neg h4]
+          exact hF1 r h1 h2 h3 h4 h5 h6
+      · have hsel0 : chSel.ev κ S L4 = some 0 := by
+          have hn : lookup side kids[j] ≠ some sd := by simpa [sel] using hs
+          cases hl : lookup side kids[j] with
+          | none => simp [chSel, Exp.ev, h4f, h4x, h4s, hl, OM.Machine.BinOp.eval]
+          | some st =>
+            rw [hl] at hn
+            have : sideN st ≠ sideN sd := by cases st <;> cases sd <;> simp_all [sideN]
+            simp [chSel, Exp.ev, h4f, h4x, h4s, hl, OM.Machine.BinOp.eval, this]
+        refine ⟨_, _, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_ite_f hsel0 evalF_skip)), ?_, ?_, ?_, ?_⟩
+        · simp only [encS, List.length_map] at hck
+          simp only [Exp.cost, costList, chSel, List.map, List.sum_cons, List.sum_nil, List.length_cons,
+            List.length_nil] at hck ⊢
+          omega
+        · rw [htk, if_neg hs, List.append_nil]
+        · rw [htk, if_neg hs, List.append_nil]
+          simp only [L4, L3, lookupP, OM.Machine.State.setLocs, List.map, OM.Machine.State.upd]
+          simpa using hws1
+        · intro r h1 h2 h3 h4 h5 h6
+          simp only [L4, L3, lookupP, OM.Machine.State.setLocs, List.map, OM.Machine.State.upd, if_neg h1,
+            if_neg h2, if_neg h3, if_neg h4]
+          exact hF1 r h1 h2 h3 h4 h5 h6)
+  rw [List.take_length] at hS' hws'
+  subst hS'
+  set ch := kids.filter sel
+  set S7 := LK.put (ch.foldl F St) u (ch.map fun e => (e, 0)) .children
+  have hS7sz : S7.nodes.size = St.nodes.size := hfs ch _
+  have hfr' : ∀ r, r ≠ "ws" → r ≠ "nk" → r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" → L' r = L r := by
+    intro r h1 h2 h3 h4 h5 h6 h7; rw [hF r h3 h4 h5 h6 h7 h1, hL2 r h1 h2]
+  have hLu' : L' "u" = u := by
+    rw [hfr' "u" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLu]
+  have hLv' : L' "v" = v := by
+    rw [hfr' "v" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLv]
+  have w1 := evalF_wrN_ok (κ := κ) (s := S7) (L := L') (k := .weight) (i := .var "u") (e := .var "ws") (j := u)
+    (w := (ch.map (sWt t v)).sum) (by simp [Exp.ev, hLu']) (by simp [Exp.ev, hws']) (by rw [hS7sz]; exact hus) huN rfl
+  set S8 := { S7 with nodes := S7.nodes.modify u (NF.set · (ch.map (sWt t v)).sum .weight) }
+  have hvch : v ∉ ch := fun h => hvk (List.mem_of_mem_filter h)
+  have hS8v : (S8.nodes.getX v).livePar = (t.nodes.getX v).livePar := by
+    simp only [S8, getX_modify']; rw [if_neg (fun h => huv h.1.symm)]
+    rw [put_getX_ne_c huv.symm, fold_setParentS_getX_notin ch St hvch, hlp]
+  have w2 := evalF_wrN_ok (κ := κ) (s := S8) (L := L') (k := .livePar) (i := .var "u") (e := .rd (.n .livePar) "v")
+    (j := u) (w := (t.nodes.getX v).livePar) (by simp [Exp.ev, hLu'])
+    (by simp [Exp.ev, hLv', hvN, Fld.cap, Fld.get, NF.get, hS8v]) (by simp [S8, hS7sz, hus]) huN rfl
+  set S9 := { S8 with nodes := S8.nodes.modify u (NF.set · (t.nodes.getX v).livePar .livePar) }
+  have w3 := evalF_wrN_ok (κ := κ) (s := S9) (L := L') (k := .overflow) (i := .var "u") (e := .var "v")
+    (j := u) (w := v) (by simp [Exp.ev, hLu']) (by simp [Exp.ev, hLv']) (by simp [S9, S8, hS7sz, hus]) huN rfl
+  have hfin : { S9 with nodes := S9.nodes.modify u (NF.set · v .overflow) } =
+      chRes (sH t v) u v (t.nodes.getX v).livePar ((ch.map (sWt t v)).sum) ch St := by
+    simp only [S9, S8, S7, chRes, LK.put, Array.modify_modify_same]
+    congr 2
+    funext n
+    simp [NF.set, Function.comp_def]
+  rw [hfin] at w3
+  refine ⟨L', _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_seq_ok2 he (evalF_seq_ok2 w1 (evalF_seq_ok2 w2 w3)))),
+    ?_, hfr'⟩
+  simp only [Exp.cost] at hc ⊢
+  have e : kids.length * (1 + (130 + 20 * side.length)) = kids.length * (131 + 20 * side.length) := by ring
+  have e2 : kids.length * (131 + 20 * side.length) ≤ kids.length * (140 + 20 * side.length) :=
+    Nat.mul_le_mul_left _ (by omega)
+  rw [e] at hc; omega
+
 end OM.Impl
