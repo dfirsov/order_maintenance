@@ -291,4 +291,105 @@ theorem moveElemS_right (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g" =
   simp only [Exp.cost, costList, Exp.gF, List.map, List.sum_cons, List.sum_nil, List.length_nil] at hc3 hcm ⊢
   omega
 
+/-! ### `groupSplitStep` -/
+
+def gssChkE : Exp := .gF .chk "d" =ₑ .gF .chk "g"
+/-- After a move: the sizes, and (unreachable under invariant F) a move across chunks. -/
+def gssTail : Stm :=
+  .wgF .size "g" (Exp.monus (.gF .size "g") 1) ;; .wgF .size "d" (.gF .size "d" + 1) ;;
+  .ite gssChkE .skip .bug ;; "ok" ::= 1
+/-- `ok := groupSplitStep g` (local `g`): one move of the split, or the removal of the empty group. -/
+def groupSplitStepS : Stm :=
+  "gf" ::= .gF .first "g" ;;
+  .ite ("gf" =ₑ 0) (removeGroupS ;; "ok" ::= 0) (moveElemS ;; gssTail)
+
+theorem gssTail_ok {κ : Caps} {S1 : Core} {L : Loc} {p d : Nat} (hg : L "g" = p) (hd : L "d" = d)
+    (hpS : p < S1.Gs.size) (hdS : d < S1.Gs.size) (hpT : p < κ.tbl .G) (hdT : d < κ.tbl .G)
+    (hchk : (S1.Gs.getX d).chk = (S1.Gs.getX p).chk) :
+    ∃ n, evalF κ gssTail S1 L = .ok (OM.Proof.sizeAdj S1 p d) (upd L "ok" 1) n ∧ n ≤ 60 := by
+  have hm := Exp.ev_monus κ S1 L (a := .gF .size "g") (b := (1 : Exp)) (x := (S1.Gs.getX p).size) (y := 1)
+    (by simp [Exp.gF, Exp.ev, hg, hpT, Fld.cap, Fld.get, GF.get]) rfl
+  have w1 := evalF_wrG_ok (κ := κ) (s := S1) (L := L) (k := .size) (i := .var "g") (e := Exp.monus (.gF .size "g") 1)
+    (j := p) (w := (S1.Gs.getX p).size - 1) (by simp [Exp.ev, hg]) hm hpS hpT rfl
+  set A1 := S1.Gs.modify p (GF.set · ((S1.Gs.getX p).size - 1) .size)
+  have hA1 : A1 = S1.Gs.modify p fun X => { X with size := X.size - 1 } := by
+    apply Array.modify_congr_getX; rfl
+  have w2 := evalF_wrG_ok (κ := κ) (s := { S1 with Gs := A1 }) (L := L) (k := .size) (i := .var "d")
+    (e := .gF .size "d" + 1) (j := d) (w := (A1.getX d).size + 1) (by simp [Exp.ev, hd])
+    (by simp [Exp.gF, Exp.ev, OM.Machine.BinOp.eval, hd, hdT, Fld.cap, Fld.get, GF.get]) (by simp [A1, hdS]) hdT rfl
+  set A2 := A1.modify d (GF.set · ((A1.getX d).size + 1) .size)
+  have hA2 : A2 = A1.modify d fun X => { X with size := X.size + 1 } := by
+    apply Array.modify_congr_getX; rfl
+  have hchk2 : ∀ z, (A2.getX z).chk = (S1.Gs.getX z).chk := by
+    intro z; simp only [A2, A1, getX_modify']; split_ifs <;> rfl
+  have hc : gssChkE.ev κ { S1 with Gs := A2 } L = some 1 := by
+    simp [gssChkE, Exp.gF, Exp.ev, OM.Machine.BinOp.eval, hd, hg, hdT, hpT, Fld.cap, Fld.get, GF.get, hchk2, hchk]
+  have hfin : ({ S1 with Gs := A2 } : Core) = OM.Proof.sizeAdj S1 p d := by
+    simp only [OM.Proof.sizeAdj, hA2, hA1]
+  rw [hfin] at hc
+  refine ⟨_, evalF_seq_ok2 (by simp only [Stm.wgF]; exact w1) (evalF_seq_ok2 (by simp only [Stm.wgF]; rw [← hfin]; exact w2)
+    (evalF_seq_ok2 (evalF_ite_t hc one_ne_zero evalF_skip) (evalF_assign_ok (v := 1) rfl))), ?_⟩
+  simp [Exp.cost, gssChkE, Exp.gF]
+
+open OM.Proof in
+theorem groupSplitStepS_left (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g" = p) (h : MoveLOK s p)
+    (hlS : gLl s p < s.Gs.size) (hrS : gRr s p < s.Gs.size) (heE : gF s p < s.E.size)
+    (hlast : gLs s (gLl s p) < κ.tbl .E) (hG : s.Gs.size ≤ κ.tbl .G) (hE : s.E.size ≤ κ.tbl .E) :
+    ∃ L' n, evalF κ groupSplitStepS s L = .ok (moveLState s p) L' n ∧ L' "ok" = 1 ∧ L' "g" = p ∧ n ≤ 300 := by
+  have hpT : p < κ.tbl .G := by have := h.live.2.1; omega
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "gf") (e := .gF .first "g") (v := gF s p)
+    (by simp [Exp.gF, Exp.ev, hg, hpT, Fld.cap, Fld.get, GF.get, gF])
+  obtain ⟨L2, c2, e2, h2d, h2g, hc2⟩ := moveElemS_left κ s (upd L "gf" (gF s p)) (p := p)
+    (by simp [OM.Machine.State.upd, hg]) h hlS hrS heE hlast hG hE
+  obtain ⟨n1, n2, n3, -, -, n6, -⟩ := moveFirstLeft_same (s := s) (g := p) (gl := gLl s p) (e := gF s p)
+    (lab := labMoveL s p)
+  obtain ⟨c3, e3, hc3⟩ := gssTail_ok (κ := κ) (S1 := moveFirstLeft s p (gLl s p) (gF s p) (labMoveL s p)) (L := L2)
+    (p := p) (d := gLl s p) h2g h2d (by rw [n6]; exact h.live.2.1) (by rw [n6]; exact hlS) hpT (by omega)
+    (by have := n3 (gLl s p); have := n3 p; have hc := h.chk; simp only [gC] at *; omega)
+  have hc : ("gf" =ₑ 0 : Exp).ev κ s (upd L "gf" (gF s p)) = some 0 := by
+    have := h.ne; simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.State.upd]; simpa [NIL] using this
+  exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f hc (evalF_seq_ok2 e2 e3)), by simp [OM.Machine.State.upd],
+    by simp [OM.Machine.State.upd, h2g], by simp [Exp.cost, Exp.gF] at hc2 hc3 ⊢; omega⟩
+
+open OM.Proof in
+theorem groupSplitStepS_right (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g" = p) (h : MoveROK s p)
+    (hlS : gLl s p < s.Gs.size) (hrS : gRr s p < s.Gs.size) (heE : gLs s p < s.E.size)
+    (hfst : gF s (gRr s p) < κ.tbl .E) (hG : s.Gs.size ≤ κ.tbl .G) (hE : s.E.size ≤ κ.tbl .E) :
+    ∃ L' n, evalF κ groupSplitStepS s L = .ok (moveRState s p) L' n ∧ L' "ok" = 1 ∧ L' "g" = p ∧ n ≤ 300 := by
+  have hpT : p < κ.tbl .G := by have := h.live.2.1; omega
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "gf") (e := .gF .first "g") (v := gF s p)
+    (by simp [Exp.gF, Exp.ev, hg, hpT, Fld.cap, Fld.get, GF.get, gF])
+  obtain ⟨L2, c2, e2, h2d, h2g, hc2⟩ := moveElemS_right κ s (upd L "gf" (gF s p)) (p := p)
+    (by simp [OM.Machine.State.upd, hg]) h hlS hrS heE hfst hG hE
+  obtain ⟨n1, n2, n3, -, -, n6, -⟩ := moveLastRight_same (s := s) (g := p) (gr := gRr s p) (e := gLs s p)
+    (lab := labMoveR s p)
+  obtain ⟨c3, e3, hc3⟩ := gssTail_ok (κ := κ) (S1 := moveLastRight s p (gRr s p) (gLs s p) (labMoveR s p)) (L := L2)
+    (p := p) (d := gRr s p) h2g h2d (by rw [n6]; exact h.live.2.1) (by rw [n6]; exact hrS) hpT (by omega)
+    (by have := n3 (gRr s p); have := n3 p; have hc := h.chk; simp only [gC] at *; omega)
+  have hc : ("gf" =ₑ 0 : Exp).ev κ s (upd L "gf" (gF s p)) = some 0 := by
+    have := h.ne; simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.State.upd]; simpa [NIL] using this
+  exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f hc (evalF_seq_ok2 e2 e3)), by simp [OM.Machine.State.upd],
+    by simp [OM.Machine.State.upd, h2g], by simp [Exp.cost, Exp.gF] at hc2 hc3 ⊢; omega⟩
+
+open OM.Proof in
+theorem groupSplitStepS_remove (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g" = p)
+    (hp : LiveG s p) (he : gF s p = NIL) (hlr : gLl s p ≠ gRr s p)
+    (hl : gSt s (gLl s p) = .overflow ∧ gSrc s (gLl s p) = p)
+    (hr : gSt s (gRr s p) = .overflow ∧ gSrc s (gRr s p) = p)
+    (hszl : gSz s (gLl s p) < s.P.G) (hszr : gSz s (gRr s p) < s.P.G)
+    (hlS : gLl s p < s.Gs.size) (hrS : gRr s p < s.Gs.size)
+    (hpG : gP s p < s.Gs.size) (hnG : gN s p < s.Gs.size) (hcC : gC s p < s.C.size)
+    (hG : s.Gs.size ≤ κ.tbl .G) (hC : s.C.size ≤ κ.tbl .C)
+    (hF : s.freeG.length + 1 ≤ κ.lcap .freeG) (hF0 : 0 < κ.lrec .freeG) :
+    ∃ L' n, evalF κ groupSplitStepS s L = .ok (removeState s p) L' n ∧ L' "ok" = 0 ∧ n ≤ 350 := by
+  have hpT : p < κ.tbl .G := by have := hp.2.1; omega
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "gf") (e := .gF .first "g") (v := gF s p)
+    (by simp [Exp.gF, Exp.ev, hg, hpT, Fld.cap, Fld.get, GF.get, gF])
+  obtain ⟨L2, c2, e2, hc2⟩ := removeGroupS_agree κ s (upd L "gf" (gF s p)) (p := p)
+    (by simp [OM.Machine.State.upd, hg]) hp he hlr hl hr hszl hszr hlS hrS hpG hnG hcC hG hC hF hF0
+  have hc : ("gf" =ₑ 0 : Exp).ev κ s (upd L "gf" (gF s p)) = some 1 := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.State.upd]; simpa [NIL] using he
+  exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t hc one_ne_zero (evalF_seq_ok2 e2 (evalF_assign_ok (v := 0) rfl))),
+    by simp [OM.Machine.State.upd], by simp [Exp.cost, Exp.gF] at hc2 ⊢; omega⟩
+
 end OM.Impl
