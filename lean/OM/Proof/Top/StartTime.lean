@@ -15,6 +15,14 @@ theorem foldr_sum (l : List Nat) (f : Nat → Nat) : l.foldr (fun e acc => acc +
   | nil => rfl
   | cons a t ih => simp [ih]; omega
 
+/-- The insertion events after a drain starts: one more in each table holding `v`, none in the new. -/
+def drSD (dr : Nat → Nat) (tabs : List Nat) (N : Nat) (T : Nat) : Nat :=
+  if T ∈ tabs then dr T + 1 else if T = N ∨ T = N + 1 then 0 else dr T
+
+/-- The initial sizes after a drain starts. -/
+def n0SD (n0 : Nat → Nat) (N lL lR : Nat) (T : Nat) : Nat :=
+  if T = N then lL else if T = N + 1 then lR else n0 T
+
 /-- The job after the walk starts a drain at `v` (`up` its live parent). -/
 def drainJob (j : Job) (v up : Nat) : Job := { j with pc := .afterDrain v up }
 
@@ -600,6 +608,152 @@ theorem growth_same {X : Nat} (hX : Top.isN (ts s) X) (h2 : 2 ≤ Top.ht (ts s) 
       List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
         decide_eq_decide.mpr (hl e he).1])
     rw [ef]
+
+theorem new_notTab {w : Nat} (hw : w = s.nodes.size ∨ w = s.nodes.size + 1) : w ∉ (nd (ts s) v).inTables :=
+  fun h => by have : w < s.nodes.size := (C.inTab w h).1.2.1; omega
+
+/-- **The label room after a drain starts.** -/
+theorem room : Room S' cl (drSD dr (nd (ts s) v).inTables s.nodes.size)
+    (n0SD n0 s.nodes.size (sLeft (wiC s v) v side).length (sRight (wiC s v) v side).length) := by
+  have Ro := C.I.room
+  have hvlt := C.H.hv
+  have hNH := C.NH
+  have hP' := C.H.P
+  have hnewlive : ∀ w, (w = s.nodes.size ∨ w = s.nodes.size + 1) → ew S' cl w = tw S' cl w := by
+    intro w hw
+    have hd : (nd S' w).draining = false := by
+      rw [C.draining', if_neg (show ¬(w = v) by omega), if_pos hw]
+    unfold ew; rw [if_neg (by rw [hd]; simp)]
+  refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1 => ?_, fun X hX h2 => ?_⟩
+  · -- gaps
+    rw [hP']
+    rw [C.isN] at hX
+    rcases hX with hX | hw | hw
+    · have hXn := C.nN X hX
+      unfold drSD n0SD
+      rw [if_neg hXn.1, if_neg hXn.2]
+      by_cases hT : X ∈ (nd (ts s) v).inTables
+      · rw [if_pos hT]
+        obtain ⟨A, le, Bs, htab, hA, hl⟩ := C.labs_tab hT
+        rw [hl, gapB_succ]
+        obtain ⟨A', le', Bs', htab', hA', -, -, -, -, hg⟩ := room_up C.I C.TP C.vl.1 hT s.nodes.size (s.nodes.size + 1)
+        rw [htab] at htab'
+        obtain ⟨rfl, rfl, rfl⟩ := split_unique htab' hA hA'
+        exact hg
+      · rw [if_neg hT, if_neg (fun h => h.elim hXn.1 hXn.2)]
+        have : Top.labs S' X = Top.labs (ts s) X := by
+          unfold Top.labs; rw [C.H.table, if_neg hXn.1, if_neg hXn.2, if_neg hT]
+        rw [this]; exact Ro.gaps X hX
+    · subst hw
+      unfold drSD n0SD
+      rw [if_neg (C.new_notTab (Or.inl rfl)), if_pos (Or.inl rfl), if_pos rfl]
+      unfold Top.labs gapB; rw [C.H.table, if_pos rfl, pow_zero, Nat.div_one]
+      exact evenTable_gaps s.P.beta _
+    · subst hw
+      unfold drSD n0SD
+      rw [if_neg (C.new_notTab (Or.inr rfl)), if_pos (Or.inr rfl), if_neg (by omega), if_pos rfl]
+      unfold Top.labs gapB; rw [C.H.table, if_neg (by omega), if_pos rfl, pow_zero, Nat.div_one]
+      exact evenTable_gaps s.P.beta _
+  · -- n0le
+    rw [hP']
+    rw [C.isN] at hX
+    unfold n0SD
+    rcases hX with hX | hw | hw
+    · have hXn := C.nN X hX
+      rw [if_neg hXn.1, if_neg hXn.2, C.ht X, if_neg (fun h => h.elim hXn.1 hXn.2)]; exact Ro.n0le X hX
+    · subst hw; rw [if_pos rfl, C.ht _, if_pos (Or.inl rfl)]
+      exact sc_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look
+    · subst hw; rw [if_neg (by omega), if_pos rfl, C.ht _, if_pos (Or.inr rfl)]
+      exact sc_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look
+  · -- pot1
+    rw [hP']
+    rw [C.isN] at hX
+    rcases hX with hX | hw | hw
+    · have hXn := C.nN X hX
+      have hXnn : ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) := fun h => h.elim hXn.1 hXn.2
+      rw [C.ht X, if_neg hXnn] at h1
+      have hT : X ∉ (nd (ts s) v).inTables := fun h => by have := (C.inTab X h).2.1; have := C.h1; omega
+      unfold drSD; rw [if_neg hT, if_neg hXnn, C.ew_old hX]
+      exact Ro.pot1 X hX h1
+    all_goals
+      rw [C.ht _, if_pos (by omega)] at h1
+      unfold drSD; rw [if_neg (C.new_notTab (by omega)), if_pos (by omega), hnewlive _ (by omega), if_pos (by omega)]
+      have := (C.tw_new_range X (by omega)).1
+      rw [h1] at this; omega
+  · -- pot2
+    rw [hP']
+    rw [C.isN] at hX
+    rcases hX with hX | hw | hw
+    · have hXn := C.nN X hX
+      have hXnn : ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) := fun h => h.elim hXn.1 hXn.2
+      have hht : Top.ht S' X = Top.ht (ts s) X := by rw [C.ht X, if_neg hXnn]
+      rw [hht] at h2 ⊢
+      have hp := Ro.pot2 X hX h2
+      rw [show (ts s).P = s.P from rfl] at hp
+      unfold drSD n0SD
+      rw [if_neg hXn.1, if_neg hXn.2, C.ew_old hX]
+      by_cases hT : X ∈ (nd (ts s) v).inTables
+      · rw [if_pos hT]
+        obtain ⟨hgr, hol⟩ := C.growth_tab hT
+        have hXh := (C.inTab X hT).2.1
+        have hXv : X ≠ v := fun e => by rw [e] at hXh; omega
+        rw [hXh, Nat.add_sub_cancel] at hp ⊢
+        have htv := sd_tw C.pc C.v0 C.I C.lp
+        have hW := C.W
+        have hτ : gamd s.P (Top.ht (ts s) v) ≤ tw (ts s) cl v - taud s.P (Top.ht (ts s) v) := by
+          unfold gamd; omega
+        rw [Nat.mul_succ]
+        rcases Nat.lt_or_gt_of_ne hXv with hlt | hlt
+        · rw [if_pos hlt] at hgr; rw [if_neg (show ¬(v < X) by omega), Nat.add_zero] at hol
+          rw [hol]
+          omega
+        · rw [if_neg (by omega)] at hgr; rw [if_pos hlt] at hol
+          have e : gamd s.P (Top.ht (ts s) v) * oldLive (ts s) X =
+              gamd s.P (Top.ht (ts s) v) * oldLive S' X + gamd s.P (Top.ht (ts s) v) := by rw [← hol, Nat.mul_succ]
+          omega
+      · rw [if_neg hT, if_neg hXnn]
+        obtain ⟨hgr, hol⟩ := C.growth_same hX h2 hT
+        rw [hgr, hol]; exact hp
+    all_goals
+      have hwn : X = s.nodes.size ∨ X = s.nodes.size + 1 := by omega
+      have hht : Top.ht S' X = Top.ht (ts s) v := by rw [C.ht X, if_pos hwn]
+      rw [hht] at h2 ⊢
+      unfold drSD n0SD
+      rw [if_neg (C.new_notTab hwn), if_pos hwn, hnewlive _ hwn, if_pos (by omega)]
+      have hgr : growth S' cl X = 0 := by
+        unfold growth
+        rw [foldr_sum]
+        have : ((Top.order S' X).filter fun e => decide (Top.liveN S' e) && decide (X < e)) = [] := by
+          apply List.filter_eq_nil_iff.mpr
+          intro e he
+          rw [C.order_mem] at he
+          have heo : e ∈ Top.order (ts s) v := by
+            rcases he with ⟨-, h⟩ | ⟨-, h⟩ | ⟨h1, h2, -⟩
+            · exact C.left_mem h
+            · exact C.right_mem h
+            · exact absurd hwn (fun h => h.elim h1 h2)
+          have : e < s.nodes.size := ((sp_entry C.pc C.v0 C.I C.lp C.TP C.of C.W heo).2 h2).1.2.1
+          simp only [Bool.and_eq_true, decide_eq_true_eq, not_and]; intro; omega
+        rw [this]; rfl
+      have hol : oldLive S' X ≤ (Top.order S' X).length := List.length_filter_le _ _
+      have hlen : (Top.order S' X).length =
+          if X = s.nodes.size then (sLeft (wiC s v) v side).length else (sRight (wiC s v) v side).length := by
+        rw [C.order]
+        rcases hwn with h | h
+        · rw [if_pos h, if_pos h]
+        · rw [if_neg (show ¬(X = s.nodes.size) by omega), if_pos h, if_neg (show ¬(X = s.nodes.size) by omega)]
+      have hge := (C.tw_new_range X hwn).1
+      rw [hgr]
+      have hm : gamd s.P (Top.ht (ts s) v - 1) * oldLive S' X ≤
+          gamd s.P (Top.ht (ts s) v - 1) * (if X = s.nodes.size then (sLeft (wiC s v) v side).length
+            else if X = s.nodes.size + 1 then (sRight (wiC s v) v side).length else n0 X) := by
+        apply Nat.mul_le_mul_left
+        rcases hwn with h | h
+        · rw [if_pos h]; rw [if_pos h] at hlen; omega
+        · rw [if_neg (show ¬(X = s.nodes.size) by omega), if_pos h]
+          rw [if_neg (show ¬(X = s.nodes.size) by omega)] at hlen; omega
+      simp only [Nat.mul_zero, Nat.zero_add]
+      omega
 
 end SDCtx
 
