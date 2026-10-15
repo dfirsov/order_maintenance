@@ -1,4 +1,5 @@
 import OM.Impl.Background
+import OM.Proof.Top.PrepContract
 
 /-!
 # M6: building a core at Level M (`initCore`, `initStep`, `prepareStep`)
@@ -451,5 +452,64 @@ theorem initStepP_first {κ : Caps} {s : Core} {L : Loc} {pr : Prep} (hp : s.pre
       (evalF_seq_ok2 e4 (evalF_seq_ok2 e5 e6))))))
   rw [hfin] at e
   exact ⟨_, _, e, by simp [OM.Machine.State.upd], by simp [Exp.cost] at hc3 hc4 hc5 ⊢; omega⟩
+
+/-! ### `initStep` along Level F's stages -/
+
+/-- The program agrees with Level F's `initStep` from `s` (within `D` steps). -/
+def ISAgree (κ : Caps) (s : Core) (D : Nat) : Prop :=
+  ∀ b s', initStep.run s = .ok b s' →
+    ∃ L' c, evalF κ initStepP.body s (OM.Machine.State.setLocs (fun _ => 0) [] []) = .ok s' L' c ∧
+      L' "done" = b2n b ∧ c ≤ D
+
+/-- The capacities the construction needs. -/
+structure InitCaps (κ : Caps) (P : Params) : Prop where
+  pw : κ.pw = P.H + 1
+  N : P.H + 2 ≤ κ.tbl .N
+  C : 2 ≤ κ.tbl .C
+  rc : P.H + 2 ≤ κ.lrec .children
+  rt : P.H + 2 ≤ κ.lrec .table
+  ri : P.H + 2 ≤ κ.lrec .inTab
+  rcin : 2 ≤ κ.lrec .cin
+  alp : 2 ≤ κ.arr .lpar
+  cc : 1 ≤ κ.lcap .children
+  ct : 1 ≤ κ.lcap .table
+  ci : 1 ≤ κ.lcap .inTab
+  ccin : 1 ≤ κ.lcap .cin
+
+theorem isAgree_stage {κ : Caps} {P : Params} {h : Nat} {s : Core} (S : Stage P h s) (h1 : 1 ≤ h)
+    (hle : h ≤ P.H + 1) (hb : 1 ≤ P.beta) (hH : 1 ≤ P.H) (hK : InitCaps κ P)
+    (hfirst : h = 1 → s.nodes = #[default] ∧ s.path = #[] ∧ s.cin = #[] ∧ s.lpar = #[]) :
+    ISAgree κ s 400 := by
+  intro b s' hr
+  have hP := S.P
+  obtain ⟨pa, hp, hsz, hpa⟩ := S.pr
+  set pr : Prep := { chunk := 1, h := h, below := if h = 1 then 1 else h - 1, tag := chainTag P (h - 1), path := pa }
+  by_cases e1 : h = 1
+  · obtain ⟨hn, hpth, hci, hlp⟩ := hfirst e1
+    have hpr1 : pr.h = 1 := e1
+    have hrun := initStep_first s pr hp hpr1 (by rw [hP]; exact hH)
+    rw [hrun] at hr; injection hr with hb' hs'; subst hb'; subst hs'
+    obtain ⟨L', c, ev, hd, hc⟩ := initStepP_first (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) hp hpr1
+      (by rw [hP]; exact hH) (by simp [pr, e1, chainTag]) (by rw [hP]; exact hb) hn hpth hci hlp
+      (by rw [hK.pw]; omega) (by have := hK.N; omega) (by have := hK.rc; omega) (by have := hK.rt; omega) hK.cc hK.ct
+      (by have := hK.rcin; simp [pr]; omega) hK.ccin (by have := hK.alp; simp [pr]; omega)
+    exact ⟨L', c, ev, by simp [hd, b2n], by omega⟩
+  · by_cases e2 : h ≤ P.H
+    · have hsn : s.nodes.size = h := S.nsz (by omega)
+      have hrun := initStep_mid s pr hp e1 (by rw [hP]; exact e2)
+      rw [hrun] at hr; injection hr with hb' hs'; subst hb'; subst hs'
+      obtain ⟨L', c, ev, hd, hc⟩ := initStepP_mid (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) hp e1
+        (by rw [hP]; exact e2) (by simp [pr]; omega) (by rw [hP]; exact chainTag_lt hb _) (by rw [hP]; exact hb)
+        (by simp [pr, e1, hsn]; omega) (by rw [hK.pw]; simp [pr]; omega) (by rw [hsn]; have := hK.N; omega)
+        (by rw [hsn]; have := hK.rc; omega) (by rw [hsn]; have := hK.rt; omega) hK.cc hK.ct
+        (by have := hK.ri; simp [pr, e1]; omega) hK.ci
+      exact ⟨L', c, ev, by simp [hd, b2n], hc⟩
+    · have e3 : h = P.H + 1 := by omega
+      have hCs : s.C.size = 2 := by rw [S.low.Csize]; rfl
+      have hrun := initStep_last s pr hp e1 (by rw [hP]; simp [pr]; omega)
+      rw [hrun] at hr; injection hr with hb' hs'; subst hb'; subst hs'
+      obtain ⟨L', c, ev, hd, hc⟩ := initStepP_last (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) hp e1
+        (by rw [hP]; simp [pr]; omega) (by simp [pr, hCs]) (by have := hK.C; simp [pr]; omega)
+      exact ⟨L', c, ev, by simp [hd, b2n], by omega⟩
 
 end OM.Impl
