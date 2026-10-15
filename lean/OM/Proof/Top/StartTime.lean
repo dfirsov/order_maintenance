@@ -105,6 +105,60 @@ theorem ew_old {X : Nat} (hX : Top.isN (ts s) X) : ew S' cl X = ew (ts s) cl X :
       rw [C.H.t1, C.H.t2, if_neg hXv, if_neg hXv, if_neg hnn, if_neg hnn, C.tw_old g1.1 ht1v, C.tw_old g2.1 ht2v]
     · exact C.tw_old hX hXv
 
+/-- Live nodes above `v` keep their live parents. -/
+theorem livePar_high {x : Nat} (hx : Top.liveN (ts s) x) (hh : Top.ht (ts s) v + 1 ≤ Top.ht (ts s) x) :
+    (nd S' x).livePar = (nd (ts s) x).livePar :=
+  C.livePar_old hx.1 (fun e => by rw [e] at hh; omega) (fun h1 hk => by
+    have := ((C.S.mem_children C.vl).mp hk).1; rw [if_neg h1] at this; omega)
+
+theorem upChain_high : ∀ f x, (x = NIL ∨ (Top.liveN (ts s) x ∧ Top.ht (ts s) v + 1 ≤ Top.ht (ts s) x)) →
+    upChain S' f x = upChain (ts s) f x
+  | 0, _, _ => rfl
+  | f + 1, x, hx => by
+    simp only [upChain]
+    split
+    · rfl
+    · next hx0 =>
+      rcases hx with h | ⟨hl, hh⟩
+      · exact absurd h hx0
+      rw [C.livePar_high hl hh]
+      congr 1
+      apply upChain_high
+      by_cases hH : Top.ht (ts s) x < s.P.H
+      · obtain ⟨h1, h2, -⟩ := C.S.up x hl hH
+        exact Or.inr ⟨h1, by omega⟩
+      · left
+        have hc := C.Ti.chain
+        have hroot : x = s.P.H := by
+          have h' : Top.ht (ts s) x ≤ s.P.H := (C.S.htN x hl.1).2
+          have hm := (C.S.ordMem (ts s).P.H (by have := C.S.H3; omega) le_rfl x).mpr ⟨hl.1, by
+            show Top.ht (ts s) x = s.P.H; omega⟩
+          rw [C.S.root.1] at hm
+          have : x = (ts s).P.H := by simpa using hm
+          exact this
+        rw [hroot]; exact C.S.root.2.2
+
+/-- **The lagging nodes after the drain starts**: `v` has caught up. -/
+theorem pend_mem {x : Nat} : x ∈ pend S' (some { j with pc := .afterDrain v (nd (ts s) v).livePar }) ↔
+    x ∈ pend (ts s) (some j) ∧ x ≠ v := by
+  obtain ⟨hl, hlh, -⟩ := C.up
+  have hpold := sd_pend C.pc C.v0 C.I C.lp
+  rw [hpold]
+  unfold pend wStart
+  simp only
+  rw [C.H.P, C.upChain_high _ _ (Or.inr ⟨hl, by omega⟩)]
+  have e : (ts s).P.H = s.P.H := rfl
+  rw [e]
+  have hvn : v ∉ upChain (ts s) (s.P.H + 1) (nd (ts s) v).livePar := by
+    intro hm
+    have := (C.S.upChain_mem _ _ v hl hm).2; omega
+  constructor
+  · intro h; exact ⟨List.mem_cons_of_mem _ h, fun e => hvn (e ▸ h)⟩
+  · rintro ⟨h, hxv⟩
+    rcases List.mem_cons.mp h with h | h
+    · exact absurd h hxv
+    · exact h
+
 end SDCtx
 
 end OM.Proof.Top
