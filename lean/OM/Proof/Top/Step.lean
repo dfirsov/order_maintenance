@@ -101,7 +101,7 @@ theorem fund_run {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
         rw [hc']
         have h0 : (ts s).P.s - k = 0 := by rw [hks']; exact Nat.sub_self _
         split_ifs <;> first | rfl | simp only [h0, ite_self]
-      refine ⟨S, hI.time.congr_job hp hs (fun _ => Iff.rfl), hI.room, fun j' hj' => ?_⟩
+      refine ⟨S, hI.time.congr_job hp hs (fun _ => Iff.rfl), hI.room, fun j' hj' => ?_, hI.cap⟩
       cases hj'
       refine ⟨hpos, ?_⟩
       simp only [JobAt]
@@ -127,7 +127,7 @@ theorem inv_end {t : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat �
     simp only [slack, curH, hpc, if_true]
     split_ifs <;> first | rfl | omega
   refine ⟨S, ⟨fun u hu => ?_, Ti.wA, Ti.wB, Ti.wF, fun u hu => ?_, fun u hu => ?_, Ti.wD, Ti.big⟩,
-    hI.room, fun _ h => absurd h (by simp)⟩
+    hI.room, fun _ h => absurd h (by simp), hI.cap⟩
   · have := Ti.wts u hu; rw [hp] at this; simpa [pend] using this
   · have := Ti.wC u hu; rw [hs u hu] at this; simpa [slack] using this
   · have := Ti.wC u hu; rw [hs u hu] at this
@@ -300,7 +300,7 @@ theorem afterDrain_step {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr 
       rw [hc', hpc]
     have hp : pend (ts s) (some { j with pc := .walk (some up) }) = pend (ts s) (some j) := by
       simp only [pend, wStart, hpc]
-    refine ⟨S, hI.time.congr_job hp hs (fun _ => Iff.rfl), hI.room, fun j' hj' => ?_⟩
+    refine ⟨S, hI.time.congr_job hp hs (fun _ => Iff.rfl), hI.room, fun j' hj' => ?_, hI.cap⟩
     cases hj'
     exact ⟨hpos, Or.inr ⟨hupl, by rw [huph, hua]⟩⟩
   · simp only [jobLeft, hpc]
@@ -317,7 +317,7 @@ theorem walkNone_inv {t : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : 
   obtain ⟨hpos, hat⟩ := hI.job j rfl
   have hy : j.y ∈ cl := by obtain ⟨A, B, e⟩ := hpos; rw [e]; simp
   obtain ⟨hl, hh, -⟩ := S.lp j.y hy
-  refine ⟨⟨S, hI.time.congr_job ?_ ?_ (fun _ => Iff.rfl), hI.room, fun j' hj' => ?_⟩, hl, hh⟩
+  refine ⟨⟨S, hI.time.congr_job ?_ ?_ (fun _ => Iff.rfl), hI.room, fun j' hj' => ?_, hI.cap⟩, hl, hh⟩
   · simp only [pend, wStart, hpc]
   · intro u
     simp only [slack, curH, hpc, if_neg hl.1.1, hh]

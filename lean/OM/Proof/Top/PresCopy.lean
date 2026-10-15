@@ -115,7 +115,7 @@ theorem inv_copy {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
     by_cases h : l < s.P.H <;> simp [pend, wStart, copyNext, hpc, h]
   have hs : ∀ v, slack t (some (copyNext s.P j l)) v = slack t (some j) v := by
     intro v; by_cases h : l < s.P.H <;> simp [slack, curH, copyNext, hpc, h]
-  refine ⟨hI.shape, hI.time.congr_job hp hs hj, hI.room, fun j' hj' => ?_⟩
+  refine ⟨hI.shape, hI.time.congr_job hp hs hj, hI.room, fun j' hj' => ?_, hI.cap⟩
   cases hj'
   refine ⟨hpos, ?_⟩
   simp only [JobAt, copyNext]

@@ -173,7 +173,7 @@ theorem inv_winc {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
   have Ti := hI.time
   have hW' : ∀ u, u ≠ v → (nd (ts (wiC s v)) u).weight = (nd (ts s) u).weight := fun u hu => by
     rw [hW u, if_neg hu]
-  refine ⟨SH, ?_, ?_, ?_⟩
+  refine ⟨SH, ?_, ?_, ?_, by rw [hP]; exact hI.cap⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
       fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
     · rw [T.liveN] at hu
@@ -270,8 +270,9 @@ theorem inv_winc {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
     · rw [T.liveN] at hu; rw [hP] at hu'; rw [T.tw, T.ht, hP]; exact Ti.wD u hu hu'
     · rw [T.liveN] at hu; rw [T.srcOf] at hs; rw [hP]; exact Ti.big u hu hs
   · have Ro := hI.room
-    refine ⟨fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
+    refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
     · rw [T.isN] at hX; rw [T.labs, hP]; exact Ro.gaps X hX
+    · rw [T.isN] at hX; rw [T.ht, hP]; exact Ro.n0le X hX
     · rw [T.isN] at hX; rw [T.ht] at h1'; rw [T.ew, hP]; exact Ro.pot1 X hX h1'
     · rw [T.isN] at hX; rw [T.ht] at h2'; rw [T.ew, T.growth, T.oldLive, T.ht, hP]
       exact Ro.pot2 X hX h2'

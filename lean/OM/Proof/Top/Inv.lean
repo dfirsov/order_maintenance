@@ -38,6 +38,15 @@ def lamd : Nat → Nat
   | h + 2 => P.a ^ (h + 2) + 1 - Pid P (h + 1)
 def gamd (h : Nat) : Nat := Wd P h + 1 - taud P h
 
+/-- Entries of a fresh table of height `h` (T4's counting: children plus the ghosts between them). -/
+def n0max (h : Nat) : Nat :=
+  if h ≤ 1 then P.a + 1 else
+    (1 + (taud P h - 1) / lamd P (h - 1)) + (1 + (taud P h - 1) / lamd P (h - 1)) / 2
+
+/-- Insertion events a table of height `h` can see (from the potential of `Room`). -/
+def Dmax (h : Nat) : Nat :=
+  if h ≤ 1 then Pid P 1 / 2 else n0max P h + (Pid P h + 2) / gamd P (h - 1)
+
 end consts
 
 /-! ### Conditions on the parameters -/
@@ -48,6 +57,8 @@ structure TopParams (P : Params) : Prop where
   s3 : 3 ≤ P.s
   /-- A released target fits under the drain threshold (I6, in the form `λ_h ≥ 2 + 2K_h`). -/
   lamK : ∀ h, 1 ≤ h → 2 + 2 * Kd P h ≤ lamd P h
+  /-- Labels have room for every insertion event (our form of I7). -/
+  room : ∀ h, 1 ≤ h → 2 ^ Dmax P h * (n0max P h + 1) ≤ 2 ^ P.beta
 
 /-! ### The copy phase -/
 
@@ -171,6 +182,7 @@ def oldLive (s : TS) (X : Nat) : Nat :=
 
 structure Room (s : TS) (cl : List Nat) (dr n0 : Nat → Nat) : Prop where
   gaps : ∀ X, isN s X → GapsGe s.P.beta (gapB s.P.beta (n0 X) (dr X)) (labs s X)
+  n0le : ∀ X, isN s X → n0 X ≤ n0max s.P (ht s X)
   pot1 : ∀ X, isN s X → ht s X = 1 →
     2 * dr X + (if s.P.H < X then lamd s.P 1 else 1) ≤ ew s cl X
   pot2 : ∀ X, isN s X → 2 ≤ ht s X →
@@ -204,6 +216,8 @@ structure InvJ (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat �
   time : Timing s cl oj
   room : Room s cl dr n0
   job : ∀ j, oj = some j → JobOK s cl j
+  /-- Room for the chunks (the contract's capacity): nodes of height `H - 1` never drain. -/
+  cap : cl.length + 2 ≤ Wd s.P (s.P.H - 1)
 
 /-- **The top structure's invariant** (M5's `TI`). -/
 def TopInv (s : Core) : Prop :=

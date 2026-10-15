@@ -751,7 +751,7 @@ theorem inv_drainFinish {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr 
   have hfun : ∀ u, funded (ts (fdS v s)) (some { j with pc := .walk (some up) }) u ↔
       funded (ts s) (some { j with pc := .fund w up v k }) u := by
     intro u; unfold funded; simp only [F.anc, F.ht, F.t1, F.t2]
-  refine ⟨SH, ?_, ?_, ?_⟩
+  refine ⟨SH, ?_, ?_, ?_, by rw [F.P]; exact hI.cap⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
       fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
     · rw [hL] at hu; rw [F.weight, hpend, F.tw]; exact Ti.wts u hu
@@ -789,12 +789,13 @@ theorem inv_drainFinish {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr 
       split at hs
       · exact absurd rfl hs
       · exact Ti.big u hu hs
-  · refine ⟨fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
+  · refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
     · rw [F.isN] at hX
       unfold labs; rw [F.table, F.P]
       split
       · exact gapsGe_assocErase v (Ro.gaps X hX.1)
       · exact Ro.gaps X hX.1
+    · rw [F.isN] at hX; rw [F.ht, F.P]; exact Ro.n0le X hX.1
     · rw [F.isN] at hX; rw [F.ht] at h1'
       have : ew (ts (fdS v s)) cl X = ew (ts s) cl X := by
         unfold ew; rw [F.draining, F.t1, F.t2, F.tw, F.tw, F.tw]
