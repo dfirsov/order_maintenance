@@ -720,5 +720,5 @@ entries, entries in at most two tables). Then:
   Every loop in these programs runs over a table, a side list, a child list or an entry's tables,
   and the invariant bounds each of these by a constant.
 
-To use these lemmas at a state, Level M walks and Level F's walk must take the same branches.
-`walkS_agree` and `afterDS_agree` therefore take each agreement only on the branch that runs it.
+Level M takes the same branch as Level F at each step, so an agreement is needed only where its
+branch runs: `walkS_agree` and `afterDS_agree` take each agreement under its branch's condition.
