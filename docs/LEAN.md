@@ -612,10 +612,31 @@ reasoning for about 140 procedures, so M6 inserts a small language between the t
   chunk capacity, and stored buckets are below the bucket capacity. Each agreement lemma assumes
   them and re-establishes them.
 
-**Done.** The language, the compiler, `sim`, and the priority queue (`PQ.lean`): all eight
-procedures agree with Level F.
+**Done.**
+* The language (with list fields, paths, optional records), the compiler, and `sim` for every
+  construct.
+* The priority queue (`PQ.lean`) and the element procedures (`Elem.lean`).
+* Loops: `evalF_loop` (with a state invariant) and `evalF_loop_pure` (a fold over the iterations,
+  for loops that only change locals) (`Loop.lean`).
+* A list library (`ListLib.lean`): find, lookup, `assocSet`, insert at an index (append, then swap
+  into place), copy. Each is proved against Level F's list function.
+* `startDrain` (`Cut.lean`, `Side.lean`, `TopTab.lean`, `StartDrain.lean`). `startDrainS_ok`: from
+  `t` the program reaches exactly Level F's `sdS t v side`, within `sdCost` steps (polynomial in
+  the lengths of `v`'s children, table and tables, all at most 160 by `TabLen`). `startDrainS_noop`
+  covers the two cases where `startDrain` changes nothing. On the way: the cut (`drainCut`),
+  `roomNextTo` and `tableInsert` each agree with Level F.
 
-**Next.** List fields (children, tables, sides, paths, the free-group stack) and the optional
-records (`prep`, `resJob`) in the language; the core's procedures; the top structure's job steps;
-the wrapper; the capacities from Level F's invariants; Theorems A, B and W at Level M.
+**How `startDrain` is matched.** The program builds `v`'s side list first, directly in `v`'s side
+list, because the later steps look sides up. Level F only writes it at the end. So after the side
+list, every program state is Level F's stage `sd_k` with `v`'s side list already set
+(`phiS v side sd_k`). Every later stage touches other nodes or other fields, so it commutes with
+`phiS`, and the last step sets `v`'s side list anyway. The program never stores Level F's temporary
+lists. `left` and `right` are built directly in the new nodes' tables, and the cut and the entry
+tests are recomputed from `v`'s lists.
 
+**Also in M5.** `TabLen` in `InvJ`: every table and side list has at most 160 entries
+(`TopParams.tab`, proved for `a = 8`). The Level M loops rely on this for their constant cost.
+
+**Next.** The rest of the core (groups, chunks, background); the remaining top-structure job steps;
+the wrapper; the capacities; Theorems A, B and W at Level M. `Group.lean` is a started draft (with
+`sorry`) and is not imported.
