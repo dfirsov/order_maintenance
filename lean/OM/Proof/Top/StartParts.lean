@@ -142,6 +142,84 @@ theorem sp_par {e : Nat} (he : e ∈ order (ts s) v) : par (ts s) (ht (ts s) v -
     rw [← h] at hg
     exact absurd hg.2 (by rw [hvl.2]; simp)
 
+theorem sp_entry {e : Nat} (he : e ∈ order (ts s) v) :
+    (ht (ts s) v = 1 → e ∈ (nd (ts s) v).children) ∧
+    (2 ≤ ht (ts s) v → isN (ts s) e ∧ ht (ts s) e = ht (ts s) v - 1 ∧
+      ((nd (ts s) e).draining = false → e ∈ (nd (ts s) v).children)) := by
+  have S := hI.shape
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  have hp := sp_par hpc hv0 hI hlp hTP hof hW he
+  have hent := S.tabEnt v hvl.1 e he
+  constructor
+  · intro h1
+    rw [h1, Nat.sub_self] at hent hp
+    unfold Ent at hent; rw [S.ord0] at hent
+    exact (S.mem_children hvl).mpr ⟨by rw [if_pos h1]; exact hent, by rw [h1, Nat.sub_self]; exact hp⟩
+  · intro h2
+    obtain ⟨hn, hh⟩ := (S.ordMem _ (by omega) (by have := (sd_ht hpc hv0 hI hlp).2; show _ ≤ s.P.H; omega) e).mp hent
+    refine ⟨hn, hh, fun hd => ?_⟩
+    have hl : liveN (ts s) e := ⟨hn, hd⟩
+    exact (S.mem_children hvl).mpr ⟨by rw [if_neg (by omega)]; exact ⟨hl, hh⟩, hp⟩
+
+theorem sp_ghost (h2 : 2 ≤ ht (ts s) v) {g : Nat} (hg : g ∈ order (ts s) v) (hgd : (nd (ts s) g).draining = true) :
+    (nd (ts s) g).t1 ∈ (nd (ts s) v).children ∧ (nd (ts s) g).t2 ∈ (nd (ts s) v).children ∧
+      [(nd (ts s) g).t1, (nd (ts s) g).t2] <:+: (nd (ts s) v).children ∧
+      [(nd (ts s) g).t1, g, (nd (ts s) g).t2] <:+: order (ts s) v := by
+  have S := hI.shape
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  obtain ⟨hn, hh, -⟩ := (sp_entry hpc hv0 hI hlp hTP hof hW hg).2 h2
+  have hgh : ghostN (ts s) g := ⟨hn, hgd⟩
+  have hp := sp_par hpc hv0 hI hlp hTP hof hW hg
+  unfold par at hp; rw [if_neg (by omega), if_pos hgd] at hp
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, hinf2, hinf3⟩ := S.ghost g hgh
+  rw [hp] at hinf2
+  have hent : Ent ord (ht (ts s) g) g := (S.ordMem _ (by omega) (by
+    have := (sd_ht hpc hv0 hI hlp).2; show _ ≤ s.P.H; omega) g).mpr ⟨hn, rfl⟩
+  have hT : v ∈ tabs (ts s) (ht (ts s) g) g := (S.tabsIff _ g v hent).mpr ⟨hvl.1, by omega, hg⟩
+  have hw := S.W1 g hgh v hT
+  exact ⟨hinf2.subset (by simp), hinf2.subset (by simp), hinf2, hw⟩
+
+/-- **The sides** `startDrain` computes. -/
+theorem sp_side : ∃ side, sSideO (wiC s v) v = some side ∧ ∀ x, lookup side x =
+    if 2 ≤ ht (ts s) v ∧ x ∈ sEntries (wiC s v) v ∧ (nd (ts s) x).draining = true then
+      lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) (nd (ts s) x).t1
+    else lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) x := by
+  have S := hI.shape
+  obtain ⟨-, P, Q, hsp⟩ := sp_b hpc hv0 hI hlp hTP hof hW
+  have hnd := sp_order_nodup hpc hv0 hI hlp hTP hof hW
+  have hord : ((wiC s v).nodes.getX v).order = order (ts s) v := (wiC_sameTree s v).order v
+  have hh : ((wiC s v).nodes.getX v).height = ht (ts s) v := (wiC_sameTree s v).height v
+  unfold sSideO drainSide sB
+  rw [sd_kids_eq, hord, hh]
+  by_cases h2 : 2 ≤ ht (ts s) v
+  · rw [if_pos (by omega)]
+    obtain ⟨side', h1, h2'⟩ := fixSides_spec (wiC s v).nodes (drainEntries (wiC s v).nodes ((wiC s v).nodes.getX v))
+      (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) (by
+        intro e he hd
+        have hd' : (nd (ts s) e).draining = true := by rw [← (wiC_sameTree s v).draining e]; exact hd
+        have hem : e ∈ order (ts s) v := by rw [← hord]; exact List.mem_of_mem_filter he
+        obtain ⟨ht1, -⟩ := sp_ghost hpc hv0 hI hlp hTP hof hW h2 hem hd'
+        obtain ⟨hn, -⟩ := (sp_entry hpc hv0 hI hlp hTP hof hW hem).2 h2
+        obtain ⟨g1, -⟩ := S.ghost e ⟨hn, hd'⟩
+        have et1 : ((wiC s v).nodes.getX e).t1 = (nd (ts s) e).t1 := (wiC_sameTree s v).t1 e
+        refine ⟨by rw [et1, show ((wiC s v).nodes.getX (nd (ts s) e).t1).draining = _ from
+          (wiC_sameTree s v).draining _]; exact g1.2, ?_⟩
+        rw [et1, hsp, sidesOf_spec (hsp ▸ hnd)]
+        have hm := (sp_kids_sub hpc hv0 hI hlp hTP hof hW).subset ht1
+        rw [hsp] at hm
+        simp only [List.mem_append, List.mem_cons] at hm
+        split_ifs <;> simp_all)
+    refine ⟨side', h1, fun x => ?_⟩
+    rw [h2']
+    have e1 : ((wiC s v).nodes.getX x).draining = (nd (ts s) x).draining := (wiC_sameTree s v).draining x
+    have e2 : ((wiC s v).nodes.getX x).t1 = (nd (ts s) x).t1 := (wiC_sameTree s v).t1 x
+    rw [e1, e2]
+    by_cases hx : x ∈ drainEntries (wiC s v).nodes ((wiC s v).nodes.getX v) ∧ (nd (ts s) x).draining = true
+    · rw [if_pos hx, if_pos ⟨h2, hx⟩]
+    · rw [if_neg hx, if_neg (fun h => hx h.2)]
+  · rw [if_neg (by omega)]
+    exact ⟨_, rfl, fun x => by rw [if_neg (fun h => h2 h.1)]⟩
+
 end parts
 
 end OM.Proof.Top
