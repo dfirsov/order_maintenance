@@ -1049,6 +1049,100 @@ theorem sh_ends : ∀ u, Top.isN S' u → (nd S' u).first = (rng S' cl u).headD 
       simp only [decide_eq_true_eq]; omega
     rw [this]; exact ⟨rfl, rfl⟩
 
+theorem sh_Sr : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ (ts (sdS (wiC s v) v side)).P.H →
+    Top.ghostN S' (Top.pp S' c j) → Top.pp S' c (j - 1) ∈ Top.order S' (Top.anc S' c j) := by
+  intro c hc j hj1 hj hg
+  have hvlt := C.H.hv
+  rw [C.H.P] at hj
+  rw [C.pp, C.anc hc j hj]
+  rw [C.pp, C.ghostN] at hg
+  have hjH : j ≤ (ts s).P.H := hj
+  rcases hg with hg | hgv
+  · have hgv : Top.pp (ts s) c j ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+    have hb : ¬(j = Top.ht (ts s) v ∧ Top.anc (ts s) c (Top.ht (ts s) v) = v) := fun h => by
+      apply hgv; rw [h.1]; exact C.pp_v hc h.2
+    rw [if_neg hb]
+    obtain ⟨hal, -⟩ := C.S.anc_live hc j hj1 hjH
+    exact C.order_sup hal.1 _ (C.S.Sr c hc j hj1 hjH hg)
+  · -- the path passes through `v`: the entry below goes to a part
+    have hjv : j = Top.ht (ts s) v := by
+      have := ((C.S.ordMem j hj1 hjH _).mp (C.S.pathEnt c hc j hjH)).2; rw [hgv] at this; exact this.symm
+    subst hjv
+    have hav : Top.anc (ts s) c (Top.ht (ts s) v) = v := by
+      rcases C.S.P c hc _ hj1 hjH with h | ⟨hg', -⟩
+      · rw [← h, hgv]
+      · rw [hgv] at hg'; exact absurd hg'.2 (by rw [C.vl.2]; simp)
+    rw [if_pos ⟨rfl, hav⟩]
+    -- the child below is the ancestor one level down
+    have hak : Top.anc (ts s) c (Top.ht (ts s) v - 1) ∈ (nd (ts s) v).children := by
+      by_cases h1 : Top.ht (ts s) v = 1
+      · rw [h1]
+        exact (C.S.mem_children C.vl).mpr ⟨by rw [if_pos h1]; exact hc, by
+          rw [h1, Nat.sub_self, par_zero']; rw [h1] at hav; exact hav⟩
+      · exact (C.S.anc_eq_iff C.vl (by omega) hc).mp hav
+    have hlr : ∀ x, (x ∈ (nd (ts s) v).children.take (sK (wiC s v) v) → x ∈ sLeft (wiC s v) v side) ∧
+        (x ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) → x ∈ sRight (wiC s v) v side) := fun x =>
+      ⟨fun h => (sw_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inl h),
+       fun h => (sw_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inl h)⟩
+    by_cases h1 : Top.ht (ts s) v = 1
+    · -- chunks
+      have e0 : Top.pp (ts s) c (Top.ht (ts s) v - 1) = c := by rw [h1]; rfl
+      have e1 : Top.anc (ts s) c (Top.ht (ts s) v - 1) = c := by rw [h1]; rfl
+      rw [e0]; rw [e1] at hak ⊢
+      split
+      · next ht => rw [C.order, if_pos rfl]; exact (hlr c).1 ht
+      · next ht =>
+        rw [C.order, if_neg (by omega), if_pos rfl]
+        rcases C.kids_split hak with ⟨a, -⟩ | ⟨-, b⟩
+        · exact absurd a ht
+        · exact (hlr c).2 b
+    · have h2 : 2 ≤ Top.ht (ts s) v := by have := C.h1; omega
+      have hm1 : 1 ≤ Top.ht (ts s) v - 1 := by omega
+      have hw := C.S.W3 c hc _ hj1 hjH
+      rw [hgv] at hw
+      rcases C.S.P c hc (Top.ht (ts s) v - 1) hm1 (by omega) with h | ⟨hg', ht'⟩
+      · rw [h]
+        split
+        · next ht => rw [C.order, if_pos rfl]; exact (hlr _).1 ht
+        · next ht =>
+          rw [C.order, if_neg (by omega), if_pos rfl]
+          rcases C.kids_split hak with ⟨a, -⟩ | ⟨-, b⟩
+          · exact absurd a ht
+          · exact (hlr _).2 b
+      · -- a ghost whose range holds `c`
+        set g := Top.pp (ts s) c (Top.ht (ts s) v - 1) with hgdef
+        have hfirst : (nd (ts s) g).first ≠ NIL := by
+          rw [(C.S.ends g hg'.1).1]
+          have hcr : c ∈ rng (ts s) cl g := by
+            unfold rng; rw [List.mem_filter]
+            refine ⟨hc, ?_⟩
+            have := ((C.S.ordMem _ hm1 (by omega) g).mp (C.S.pathEnt c hc _ (by omega))).2
+            simp only [decide_eq_true_eq]; rw [this]
+          have hne : rng (ts s) cl g ≠ [] := List.ne_nil_of_mem hcr
+          intro e
+          have := headD_mem hne NIL
+          rw [e] at this
+          have := C.cl1 _ (List.mem_of_mem_filter this)
+          unfold NIL at this; omega
+        obtain ⟨hk1, hk2, hinf2, -⟩ := sp_ghost C.pc C.v0 C.I C.lp C.TP C.of C.W h2 hw hg'.2
+        have hns := sw_nosep C.pc C.v0 C.I C.lp C.TP C.of C.W C.look h2 hw hg'.2
+        have hiff : Top.anc (ts s) c (Top.ht (ts s) v - 1) ∈ (nd (ts s) v).children.take (sK (wiC s v) v) ↔
+            (nd (ts s) g).t1 ∈ (nd (ts s) v).children.take (sK (wiC s v) v) := by
+          rcases ht' with e | e <;> rw [e]
+          exact hns.symm
+        split
+        · next ht =>
+          rw [C.order, if_pos rfl]
+          exact (sw_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr
+            (Or.inr ⟨h2, hw, hg'.2, hfirst, hiff.mp ht⟩)
+        · next ht =>
+          rw [C.order, if_neg (by omega), if_pos rfl]
+          have ht1n : (nd (ts s) g).t1 ∉ (nd (ts s) v).children.take (sK (wiC s v) v) := fun h => ht (hiff.mpr h)
+          refine (sw_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inr ⟨h2, hw, hg'.2, hfirst, ?_⟩)
+          rcases C.kids_split hk1 with ⟨a, -⟩ | ⟨-, b⟩
+          · exact absurd a ht1n
+          · exact b
+
 end SDCtx
 
 end OM.Proof.Top
