@@ -285,11 +285,12 @@ theorem fdS_nodes (v : Nat) (s : Core) :
 /-- **The nodes after `finishDrain v`.** -/
 theorem fdS_getX (v : Nat) (s : Core) (hv : v < s.nodes.size)
     (hno : (s.nodes.getX v).order.Nodup) (hni : (s.nodes.getX v).inTables.Nodup)
-    (hvo : v ∉ (s.nodes.getX v).order) (hvi : v ∉ (s.nodes.getX v).inTables)
+    (hvo : (s.nodes.getX v).height - 1 ≠ 0 → v ∉ (s.nodes.getX v).order)
+    (hvi : v ∉ (s.nodes.getX v).inTables)
     (h1 : v ≠ (s.nodes.getX v).t1) (h2 : v ≠ (s.nodes.getX v).t2)
     (h12 : (s.nodes.getX v).t1 ≠ (s.nodes.getX v).t2)
-    (ho1 : (s.nodes.getX v).t1 ∉ (s.nodes.getX v).order)
-    (ho2 : (s.nodes.getX v).t2 ∉ (s.nodes.getX v).order)
+    (ho1 : (s.nodes.getX v).height - 1 ≠ 0 → (s.nodes.getX v).t1 ∉ (s.nodes.getX v).order)
+    (ho2 : (s.nodes.getX v).height - 1 ≠ 0 → (s.nodes.getX v).t2 ∉ (s.nodes.getX v).order)
     (hi1 : (s.nodes.getX v).t1 ∉ (s.nodes.getX v).inTables)
     (hi2 : (s.nodes.getX v).t2 ∉ (s.nodes.getX v).inTables)
     (hoi : ∀ u, u ∈ (s.nodes.getX v).order → (s.nodes.getX v).height - 1 ≠ 0 →
@@ -306,11 +307,12 @@ theorem fdS_getX (v : Nat) (s : Core) (hv : v < s.nodes.size)
       else s.nodes.getX u := by
   have hs2 := fd2_size v s hno hni
   have t1e : (fd2 v s).nodes.getX (s.nodes.getX v).t1 = s.nodes.getX (s.nodes.getX v).t1 := by
-    rw [fd2_getX v s hno hni, if_neg (fun h => hi1 h.1), fd1_getX v s hno, if_neg (fun h => ho1 h.1)]
+    rw [fd2_getX v s hno hni, if_neg (fun h => hi1 h.1), fd1_getX v s hno,
+      if_neg (fun h => ho1 h.2.1 h.1)]
   have t2e : (releaseS v (fd2 v s) (s.nodes.getX v).t1).nodes.getX (s.nodes.getX v).t2 =
       s.nodes.getX (s.nodes.getX v).t2 := by
     rw [releaseS_getX, if_neg (fun h => h12 h.1.symm), fd2_getX v s hno hni, if_neg (fun h => hi2 h.1),
-      fd1_getX v s hno, if_neg (fun h => ho2 h.1)]
+      fd1_getX v s hno, if_neg (fun h => ho2 h.2.1 h.1)]
   have hs4 : (fd4 v s).nodes.size = s.nodes.size := by
     unfold fd4; rw [releaseS_size, releaseS_size, hs2]
   have h4 : (fd4 v s).nodes.getX u =
@@ -326,12 +328,14 @@ theorem fdS_getX (v : Nat) (s : Core) (hv : v < s.nodes.size)
   rw [fdS_nodes, Array.getX_modify, hs4, h4, h3, fd2_getX v s hno hni, fd1_getX v s hno]
   by_cases huv : u = v
   · subst huv
-    simp [hv, h1, h2, hvo, hvi]
+    have hvo' : ¬ (u ∈ (s.nodes.getX u).order ∧ ¬ (s.nodes.getX u).height - 1 = 0) :=
+      fun h => hvo h.2 h.1
+    simp [hv, h1, h2, hvo', hvi]
   · simp only [Ne.symm huv, false_and, if_false, huv]
     by_cases hu1 : u ∈ (s.nodes.getX v).order ∧ (s.nodes.getX v).height - 1 ≠ 0 ∧ u < s.nodes.size
     · have hi : u ∉ (s.nodes.getX v).inTables := hoi u hu1.1 hu1.2.1
-      have hn1 : u ≠ (s.nodes.getX v).t1 := fun e => ho1 (e ▸ hu1.1)
-      have hn2 : u ≠ (s.nodes.getX v).t2 := fun e => ho2 (e ▸ hu1.1)
+      have hn1 : u ≠ (s.nodes.getX v).t1 := fun e => ho1 hu1.2.1 (e ▸ hu1.1)
+      have hn2 : u ≠ (s.nodes.getX v).t2 := fun e => ho2 hu1.2.1 (e ▸ hu1.1)
       simp [hu1, hi, hn1, hn2]
     · simp only [if_neg hu1]
       by_cases hu2 : u ∈ (s.nodes.getX v).inTables ∧ u < s.nodes.size
