@@ -219,4 +219,96 @@ theorem dtLoopS_ok {κ : Caps} {s : Core} {L : Loc} {v hh B : Nat} (hv : L "v" =
   have e : tab.length * (1 + (170 + 100 * B)) = tab.length * (171 + 100 * B) := by ring
   simp only [Exp.cost] at hc ⊢; omega
 
+/-! ### `dropEntry` -/
+
+def deBody : Stm :=
+  "T" ::= .lrd .inTab false "v" "j" ;;
+  (findP .table).call [.var "T", .var "v"] ["r"] ;; "n" ::= .llen .table "T" ;; .ite ("r" <ₑ "n") .skip .fail ;;
+  (filterP .table).call [.var "T", .var "v"] [] ;; (filterP .side).call [.var "T", .var "v"] []
+
+theorem encS_filter (l : List (Nat × Side)) (v : Nat) :
+    (encS l).filter (·.1 != v) = encS (assocErase l v) := by
+  simp [encS, assocErase, List.filter_map, Function.comp_def]
+
+theorem deStep_eq (S : Core) (v T : Nat) (hT : T < S.nodes.size) :
+    LK.put (LK.put S T ((S.nodes.getX T).table.filter (·.1 != v)) .table) T
+      (encS (assocErase (S.nodes.getX T).side v)) .side = dropEntryS v S T := by
+  rw [put_side_encS]
+  simp only [LK.put, dropEntryS, Array.modify_modify_same]
+  congr 1; apply Array.modify_congr_getX; simp [assocErase]
+
+theorem deBody_ok {κ : Caps} {S : Core} {L : Loc} {v T j B : Nat} (hv : L "v" = v)
+    (hj : j < (S.nodes.getX v).inTables.length) (hTj : (S.nodes.getX v).inTables[j] = T)
+    (hvi : v < κ.lrec .inTab) (hmem : v ∈ (S.nodes.getX T).order)
+    (htr : T < κ.lrec .table) (hts : T < κ.lrec .side)
+    (hct : (S.nodes.getX T).table.length ≤ κ.lcap .table) (hcs : (S.nodes.getX T).side.length ≤ κ.lcap .side)
+    (hBt : (S.nodes.getX T).table.length ≤ B) (hBs : (S.nodes.getX T).side.length ≤ B) :
+    ∃ L' c, evalF κ deBody S (upd L "j" j) = .ok (dropEntryS v S T) L' c ∧ c ≤ 300 + 200 * B ∧
+      ∀ r, r ≠ "j" → r ≠ "T" → r ≠ "r" → r ≠ "n" → L' r = L r := by
+  have hTn : T < S.nodes.size := by
+    by_contra hc
+    have : S.nodes.getX T = default := getX_size_le (by omega)
+    rw [this] at hmem; exact absurd hmem (by simp [Node.order, show (default : Node).table = [] from rfl])
+  have a1 := evalF_assign_ok (κ := κ) (s := S) (L := upd L "j" j) (x := "T") (e := .lrd .inTab false "v" "j") (v := T)
+    (by simp [Exp.ev, OM.Machine.State.upd, hv, hvi, LK.view, hj, hTj])
+  set L1 := upd (upd L "j" j) "T" T
+  have h1T : L1 "T" = T := by simp [L1, OM.Machine.State.upd]
+  have h1v : L1 "v" = v := by simp [L1, OM.Machine.State.upd, hv]
+  -- the guard
+  obtain ⟨Lf, cf, ef, hrf, hcf⟩ := findP_agree κ .table S
+    (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [T, v]) (i := T) (x := v)
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) htr
+  have e2 := evalF_call_ok (q := findP .table) (args := [.var "T", .var "v"]) (ds := ["r"]) (L := L1)
+    (by simp [evList, Exp.ev, h1T, h1v]) ef
+  set L2 := OM.Machine.State.setLocs L1 ["r"] ((findP .table).rets.map Lf)
+  have hL2 : ∀ q, q ≠ "r" → L2 q = L1 q := fun q h => by
+    simp [L2, findP, OM.Machine.State.setLocs, OM.Machine.State.upd, h]
+  have h2r : L2 "r" = (S.nodes.getX T).table.findIdx (·.1 == v) := by
+    simp [L2, OM.Machine.State.setLocs, OM.Machine.State.upd, findP, hrf]; rfl
+  have hfl : (S.nodes.getX T).table.findIdx (·.1 == v) < (S.nodes.getX T).table.length := by
+    rw [List.findIdx_lt_length]
+    simp only [Node.order, List.mem_map] at hmem
+    obtain ⟨q, hq, rfl⟩ := hmem; exact ⟨q, hq, by simp⟩
+  have a3 := evalF_assign_ok (κ := κ) (s := S) (L := L2) (x := "n") (e := .llen .table "T")
+    (v := (S.nodes.getX T).table.length) (by simp [Exp.ev, hL2 "T" (by decide), h1T, htr, LK.view])
+  set L3 := upd L2 "n" (S.nodes.getX T).table.length
+  have e4 : evalF κ (.ite ("r" <ₑ "n") .skip .fail) S L3 = .ok S L3 5 := by
+    simp [evalF, Exp.ev, L3, OM.Machine.State.upd, h2r, OM.Machine.BinOp.eval, hfl, Exp.cost, Res.addCost]
+  have h3T : L3 "T" = T := by simp [L3, OM.Machine.State.upd, hL2, h1T]
+  have h3v : L3 "v" = v := by simp [L3, OM.Machine.State.upd, hL2, h1v]
+  have hF3 : ∀ r, r ≠ "j" → r ≠ "T" → r ≠ "r" → r ≠ "n" → L3 r = L r := fun r a b c d => by
+    simp [L3, OM.Machine.State.upd, d, hL2 r c, L1, a, b]
+  -- the table
+  obtain ⟨Lt, ct, et, hct'⟩ := filterP_agree κ .table S (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [T, v])
+    (i := T) (x := v) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) (by simp [LK.idOk, LK.recOk, hTn])
+    (by simp [LK.recOk, hTn]) htr (by simpa [LK.view] using hct)
+  have e5 := evalF_call_ok (q := filterP .table) (args := [.var "T", .var "v"]) (ds := []) (L := L3)
+    (by simp [evList, Exp.ev, h3T, h3v]) et
+  set S1 := LK.put S T ((S.nodes.getX T).table.filter (·.1 != v)) .table
+  have hS1T : (S1.nodes.getX T).side = (S.nodes.getX T).side := by
+    simp only [S1, LK.put, getX_modify', hTn, and_self, if_true]
+  have hS1n : S1.nodes.size = S.nodes.size := by simp [S1]
+  -- the side list
+  obtain ⟨Ls, cs, es, hcs'⟩ := filterP_agree κ .side S1 (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [T, v])
+    (i := T) (x := v) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) (by simp [LK.idOk, LK.recOk, hS1n, hTn])
+    (by simp [LK.recOk, hS1n, hTn]) hts (by simp [LK.view, hS1T]; exact hcs)
+  have hvs : LK.view S1 T .side = encS (S.nodes.getX T).side := by simp [LK.view, hS1T]
+  rw [hvs, encS_filter] at es
+  rw [hvs] at hcs'
+  have e6 := evalF_call_ok (q := filterP .side) (args := [.var "T", .var "v"]) (ds := []) (L := OM.Machine.State.setLocs L3 [] ((filterP .table).rets.map Lt))
+    (by simp [evList, Exp.ev, OM.Machine.State.setLocs, h3T, h3v]) es
+  rw [deStep_eq S v T hTn] at e6
+  refine ⟨_, _, evalF_seq_ok2 a1 (evalF_seq_ok2 e2 (evalF_seq_ok2 a3 (evalF_seq_ok2 e4 (evalF_seq_ok2 e5 e6)))),
+    ?_, ?_⟩
+  · replace hcf : cf ≤ 20 + 20 * (S.nodes.getX T).table.length := hcf
+    replace hct' : ct ≤ 50 + 90 * (S.nodes.getX T).table.length := hct'
+    replace hcs' : cs ≤ 50 + 90 * (S.nodes.getX T).side.length := by simpa [encS] using hcs'
+    simp only [Exp.cost, costList, List.map, List.sum_cons, List.sum_nil, List.length_cons, List.length_nil]
+    omega
+  · intro r a b c d
+    simp only [OM.Machine.State.setLocs, filterP, List.map]; exact hF3 r a b c d
+
 end OM.Impl
