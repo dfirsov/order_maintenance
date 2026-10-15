@@ -1345,6 +1345,11 @@ theorem sh_OT : ∀ h', 1 ≤ h' → h' ≤ (ts (sdS (wiC s v) v side)).P.H → 
       rw [C.par_keep he' (by omega) (fun h => by have := h.1; omega)] at hpe'
       exact C.S.OT h' h1 hHt u u' e e' hul hul' huu he he' hpe hpe'
 
+/-- **The order invariant after a drain starts.** -/
+theorem shape : Shape S' cl O' :=
+  ⟨C.shapeT, C.sh_up, C.sh_lp, C.sh_kids, C.sh_OT, C.sh_ghost, C.sh_src, C.sh_tabEnt, C.sh_tabsIff,
+    C.sh_tabsNodup, C.sh_Q, C.sh_W1, C.sh_side, C.sh_pathSize, C.sh_P, C.sh_Sr, C.sh_ends, C.sh_tags⟩
+
 end SDCtx
 
 end OM.Proof.Top
