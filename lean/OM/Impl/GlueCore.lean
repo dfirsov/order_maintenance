@@ -377,4 +377,232 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
       · rw [hst'] at h; cases h
     | dead => exact absurd hst (hG.notDead g hg)
 
+theorem cremoveState_sizes {t : Core} {x : Nat} :
+    (cremoveState t x).Gs.size = t.Gs.size ∧ (cremoveState t x).C.size = t.C.size := by
+  simp [cremoveState]
+
+theorem _root_.OM.Proof.INV.mem_chunks {s : Core} {A : Abs} (hI : INV s A) {c : Nat} (hc : LiveC s c) :
+    c ∈ A.chunks := (hI.cAlloc c).mpr hc
+
+theorem _root_.OM.Proof.INV.cF_lt {s : Core} {A : Abs} (hI : INV s A) {c : Nat} (hc : c ∈ A.chunks) :
+    cF s c = NIL ∨ cF s c < s.Gs.size := by
+  have hE := (hI.cEnds c hc).1
+  rcases h : A.grps c with _ | ⟨g, gs⟩
+  · rw [h] at hE; exact Or.inl hE
+  · rw [h] at hE; simp only [List.headD_cons] at hE
+    exact Or.inr (by rw [hE]; exact hI.gAlloc _ (A.grps_sub_glist hc (by rw [h]; simp)))
+
+theorem _root_.OM.Proof.INV.cLs_lt {s : Core} {A : Abs} (hI : INV s A) {c : Nat} (hc : c ∈ A.chunks) :
+    cLs s c = NIL ∨ cLs s c < s.Gs.size := by
+  have hE := (hI.cEnds c hc).2
+  rcases (A.grps c).eq_nil_or_concat with h | ⟨l, g, h⟩
+  · rw [h] at hE; exact Or.inl hE
+  · rw [h] at hE; simp at hE
+    exact Or.inr (by rw [hE]; exact hI.gAlloc _ (A.grps_sub_glist hc (by rw [h]; simp)))
+
+/-- **A chunk split step of a drive agrees** (the cases of `CDriveInv.step`). -/
+theorem _root_.OM.Proof.CDriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L : List Nat} {δ δu s₀ : Nat → Nat}
+    {x y z a b c u₀ j : Nat} {t : Core} (hXs : CXSteps X Y L δ δu s₀ x) (hP : GParams s.P)
+    (hCP : CParams s.P) (hδ : ∀ c', c' ≠ y → c' ≠ x → c' ≠ z → δ c' = 0)
+    (hThi : a + b + c ≤ s.P.T + kC s.P s.P.T)
+    (hbal0 : a ≤ c + umax s.P + 1 ∧ c ≤ a + umax s.P + 1)
+    (hfam0 : a + b + c ≤ δ y + δ x + δ z + s₀ x + unitsOf s.P (s₀ x) / (s.P.K_C - 1))
+    (hδs : δ y + δ x + δ z ≤ 1) (hs0T : s₀ x ≤ s.P.T)
+    (hD : CDriveInv X s L δ δu s₀ x y z a b c u₀ j t) {κ : Caps} (K : GCaps κ t) :
+    ∃ bb t', (chunkSplitStep x).run t = .ok bb t' ∧ CStepAgree κ x t t' bb ∧ t'.Gs.size = t.Gs.size ∧
+      t'.C.size = t.C.size := by
+  obtain ⟨A', hI', hel⟩ := hD.inv
+  obtain ⟨gh, hG⟩ := hD.ginv
+  subst hel
+  have hPt := hD.P
+  rw [← hPt] at hP hCP hThi hbal0 hfam0 hs0T
+  have hC := hD.cinv
+  have Fx := hC.cfam x hD.live hD.st
+  have hxy : cLl t x ≠ x := Fx.lx hI' hD.live
+  have hxz : cRr t x ≠ x := Fx.rx hI' hD.live
+  have hyz : cLl t x ≠ cRr t x := Fx.lr hI' hD.live
+  have hsum := hD.sum
+  have hcnt := hD.cnt
+  have hbal := hD.bal
+  rw [← hD.ll, ← hD.rr] at hsum hbal hδ hfam0 hδs
+  rw [← hPt] at hbal
+  have hFB : FamBound t δ s₀ x := ⟨by omega, hδs, hs0T⟩
+  have hI4 := hCP.I4
+  unfold cmax at hI4
+  by_cases he : cF t x = NIL
+  · -- removal
+    have hcx : cSz t x = 0 := by rw [hC.csz x hD.live, hI'.celts_empty hD.live he]; rfl
+    have hszy' : cSz t (cLl t x) ≤ cmax t.P := by
+      unfold cmax; rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
+    have hszz' : cSz t (cRr t x) ≤ cmax t.P := by
+      unfold cmax; rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
+    have hszy : cSz t (cLl t x) ≤ t.P.theta := by
+      rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
+    have hszz : cSz t (cRr t x) ≤ t.P.theta := by
+      rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
+    have hrun := chunkSplitStep_remove he hyz hxy hxz hD.live.2 ⟨Fx.lSt, Fx.lSrc⟩ ⟨Fx.rSt, Fx.rSrc⟩
+      hszy hszz
+    refine ⟨false, _, hrun, fun Lc hLc => ?_, cremoveState_sizes.1, cremoveState_sizes.2⟩
+    obtain ⟨L', n, e, hok, hn⟩ := chunkSplitStepS_remove κ t Lc hLc he hyz hxy hxz hD.live.2 ⟨Fx.lSt, Fx.lSrc⟩
+      ⟨Fx.rSt, Fx.rSrc⟩ hszy hszz Fx.lLive.2 Fx.rLive.2 K.C
+    exact ⟨L', n, e, by rw [hok]; rfl, by omega⟩
+  · -- a move
+    obtain ⟨hxc, t0, ht0⟩ := hI'.run_ne_nil he
+    have hg0 : cF t x ∈ A'.glist := A'.grps_sub_glist hxc (by rw [ht0]; simp)
+    have hg0L := hI'.mem_glist_iff.mp hg0
+    have hg0x : gC t (cF t x) = x := hI'.chk x hxc _ (by rw [ht0]; simp)
+    by_cases hdir : cSz t (cLl t x) ≤ cSz t (cRr t x)
+    · have lu := left_unit hI' hG he
+      have hu : (unitCand t x true).length = 1 ∨ unitOK t x (unitCand t x true) = true := by
+        rcases lu with ⟨-, h⟩ | ⟨p, -, -, -, -, h⟩
+        · left; rw [h]; rfl
+        · right; exact h
+      obtain ⟨labs, hlabs, hX'⟩ := hXs.moveL t A' gh hI' rfl hG hC hD.live hD.st he hdir hFB hD.xx
+      have hrun := chunkSplitStep_left he hdir hu Fx.lAdj hlabs
+      have hlen : labs.length = (unitCand t x true).length := pushBackLabs_len hlabs
+      have UF := unit_facts (u := unitCand t x true) (x := x) hI' hG hP (by
+        rcases lu with ⟨hq, h⟩ | ⟨p, hp, hps, hl, h, hok⟩
+        · left; rw [h]; exact ⟨hq, rfl, hg0L, hg0x⟩
+        · right
+          refine ⟨p, hp, hps, by rw [h, hl], ?_⟩
+          rw [h] at hok; exact (unitOK_three hok).2.2.2.2.1)
+      obtain ⟨-, hnd, hmem, hone, hcl, hm1, hm2⟩ := UF
+      have M := cmoveL_spec (s := t) (x := x) (u := unitCand t x true) (labs := labs)
+        (Ne.symm hxy) hD.live.2 Fx.lLive.2 hnd hlen (fun g hg => (hmem g hg).1.2.1)
+      refine ⟨true, _, hrun, fun Lc hLc => ?_, M.Gsize, M.Csize⟩
+      obtain ⟨L', n, e, hok, -, hn⟩ := chunkSplitStepS_left κ t Lc hLc he hdir hlabs hD.live.2 Fx.lLive.2 Fx.rLive.2
+        (Ne.symm hxy) K.C K.G (fun g hg => (hmem g hg).1.2.1) (by have := hg0L.2.1; have := K.G; omega)
+        (fun hov => by have h2 : gSrc t (cF t x) < t.Gs.size := (hG.ovf _ hg0L hov).1.2.1; have := K.G; exact lt_of_lt_of_le h2 (by omega))
+        (by rcases hI'.cLs_lt (hI'.mem_chunks Fx.lLive) with h | h
+            · rw [h]; have := hg0L.2.1; have := K.G; unfold NIL; omega
+            · have := K.G; omega)
+      exact ⟨L', n, e, by rw [hok]; rfl, by omega⟩
+    · have ru := right_unit hI' hG he
+      have hu : (unitCand t x false).length = 1 ∨ unitOK t x (unitCand t x false) = true := by
+        rcases ru with ⟨-, h⟩ | ⟨p, -, -, -, -, h⟩
+        · left; rw [h]; rfl
+        · right; exact h
+      have hdir' : cSz t (cRr t x) < cSz t (cLl t x) := by omega
+      obtain ⟨labs, hlabs, hX'⟩ := hXs.moveR t A' gh hI' rfl hG hC hD.live hD.st he hdir' hFB hD.xx
+      have hrun := chunkSplitStep_right he hdir' hu (Fx.radj hI' hD.live) hlabs
+      have hlen : labs.length = (unitCand t x false).length := pushFrontLabs_len hlabs
+      obtain ⟨hxc', tl, htl⟩ := hI'.run_ne_nil he
+      have hE := hI'.cEnds x hxc'
+      have hlm : cLs t x ∈ A'.grps x := by rw [hE.2, htl]; exact getLastD_cons_mem _ _ _
+      have hgl : cLs t x ∈ A'.glist := A'.grps_sub_glist hxc' hlm
+      have UF := unit_facts (u := unitCand t x false) (x := x) hI' hG hP (by
+        rcases ru with ⟨hq, h⟩ | ⟨p, hp, hps, hr, h, hok⟩
+        · left; rw [h]
+          exact ⟨hq, rfl, hI'.mem_glist_iff.mp hgl, hI'.chk x hxc' _ hlm⟩
+        · right
+          refine ⟨p, hp, hps, by rw [h, hr], ?_⟩
+          rw [h] at hok; exact (unitOK_three hok).2.2.2.2.1)
+      obtain ⟨-, hnd, hmem, hone, hcl, hm1, hm2⟩ := UF
+      have M := cmoveR_spec (s := t) (x := x) (u := unitCand t x false) (labs := labs)
+        (Ne.symm hxz) hD.live.2 Fx.rLive.2 hnd hlen (fun g hg => (hmem g hg).1.2.1)
+      have hglL := hI'.mem_glist_iff.mp hgl
+      refine ⟨true, _, hrun, fun Lc hLc => ?_, M.Gsize, M.Csize⟩
+      obtain ⟨L', n, e, hok, -, hn⟩ := chunkSplitStepS_right κ t Lc hLc he hdir' hlabs hD.live.2 Fx.lLive.2 Fx.rLive.2
+        (Ne.symm hxz) K.C K.G (fun g hg => (hmem g hg).1.2.1) (by have := hglL.2.1; have := K.G; omega)
+        (fun hov => by have h2 : gSrc t (cLs t x) < t.Gs.size := (hG.ovf _ hglL hov).1.2.1; have := K.G; exact lt_of_lt_of_le h2 (by omega))
+        (by rcases hI'.cF_lt (hI'.mem_chunks Fx.rLive) with h | h
+            · rw [h]; have := hglL.2.1; have := K.G; unfold NIL; omega
+            · have := K.G; omega)
+      exact ⟨L', n, e, by rw [hok]; rfl, by omega⟩
+
+/-- **The drive of a splitting chunk agrees** (the context of `cinv_drive`). -/
+theorem cinv_driveAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {δ δu s₀ : Nat → Nat} {x : Nat}
+    (hI : INV s A) (hG : GInv s A.elist gh (fun _ => 0)) (hC : CInvE s A.elist δ δu s₀ x)
+    (hC1 : C1 s δ δu s₀ x) (hXs : CXSteps X Y A.elist δ δu s₀ x) (hX : X s) (hP : GParams s.P)
+    (hCP : CParams s.P) (hxL : LiveC s x) (hst : cSt s x = .splitting)
+    (hδ : ∀ c, c ≠ cLl s x → c ≠ x → c ≠ cRr s x → δ c = 0)
+    (hδs : δ (cLl s x) + δ x + δ (cRr s x) ≤ 1)
+    (hδle : δ (cLl s x) ≤ cSz s (cLl s x) ∧ δ x ≤ cSz s x ∧ δ (cRr s x) ≤ cSz s (cRr s x))
+    {κ : Caps} (K : GCaps κ s) :
+    ∃ s', CDriveAgree κ x s s' := by
+  have Fx := hC.cfam x hxL hst
+  generalize hl : cLl s x = y at *
+  generalize hr : cRr s x = z at *
+  generalize ha : cSz s y = a at *
+  generalize hb : cSz s x = b at *
+  generalize hc : cSz s z = c at *
+  have hK2 := hCP.K2
+  unfold C1 at hC1
+  rw [hl, hr, ha, hb, hc] at hC1
+  obtain ⟨hs0T, g1, g2, g3, g4⟩ := hC1
+  generalize hσ : s₀ x = σ at hs0T g1 g2
+  generalize hm : s.P.K_C - 1 = m at g2
+  have hm1 : 1 ≤ m := by omega
+  generalize hX0 : (a - δ y) + (b - δ x) + (c - δ z) - σ = Xs at g2
+  have hXq : Xs ≤ unitsOf s.P σ / m := by
+    rw [Nat.le_div_iff_mul_le (by omega), Nat.mul_comm]
+    have := Nat.le_add_left (m * Xs) (units s x - δu x); omega
+  have hU := unitsOf_mono s.P hs0T
+  have hUd : unitsOf s.P σ / m ≤ unitsOf s.P s.P.T / m := Nat.div_le_div_right hU
+  have hkC : kC s.P s.P.T = unitsOf s.P s.P.T / m + 1 := by unfold kC; rw [hm]
+  have hThi : a + b + c ≤ s.P.T + kC s.P s.P.T := by rw [hkC]; omega
+  have hbal0 : a ≤ c + umax s.P + 1 ∧ c ≤ a + umax s.P + 1 := by omega
+  have hfam0 : a + b + c ≤ δ y + δ x + δ z + s₀ x + unitsOf s.P (s₀ x) / (s.P.K_C - 1) := by
+    rw [hσ, hm]; omega
+  refine driveChunkFromS_agree' κ s (fun j t => CDriveInv X s A.elist δ δu s₀ x y z a b c (units s x) j t ∧
+    t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size)
+    ⟨⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hC, hxL, hst, hl, hr, by omega, by omega,
+      Or.inl ⟨rfl, ha, hc⟩⟩, rfl, rfl⟩ ?_
+  intro j t ⟨hD, hGs, hCs⟩ _
+  have K' : GCaps κ t := ⟨by rw [hGs]; exact K.G, by rw [hD.ef.size]; exact K.E, by rw [hCs]; exact K.C, K.fl, K.f0⟩
+  have hs0 : s₀ x ≤ s.P.T := by rw [hσ]; exact hs0T
+  obtain ⟨bb, t', hrun, hA, hG', hC'⟩ := hD.stepAgree hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi
+    hbal0 hfam0 hδs hs0 K'
+  refine ⟨bb, t', hrun, fun hb => ?_, hA⟩
+  subst hb
+  obtain ⟨t1, h1 | h1⟩ := hD.step hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi hbal0 hfam0 hδs hs0
+  · rw [h1.1] at hrun; injection hrun with _ e; subst e
+    exact ⟨h1.2, hG'.trans hGs, hC'.trans hCs⟩
+  · rw [h1.1] at hrun; injection hrun with e; cases e
+
+theorem CDriveAgree.of_run {κ : Caps} {q : Nat} {s s' s'' : Core} (hA : CDriveAgree κ q s s'')
+    (h : (driveChunkFrom q).run s = .ok () s') : CDriveAgree κ q s s' := by
+  rw [hA.1] at h; injection h with _ e; subst e; exact hA
+
+/-- **The chunk phase agrees** (the context of `driveChunk_ok`). -/
+theorem driveChunkAgree {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu : Nat → Nat}
+    {e : Nat → Nat} {pops c : Nat} (hI : INV t A) (hel : A.elist = L)
+    (hG : GInv t L gh (fun _ => 0)) (hC : CInv t L (δ1 c) δu s₀) (hLX : LX s₀ (δ1 c) δu t)
+    (hN : CountInv t e pops) (hGP : GParams t.P) (hCP : CParams t.P) (hcL : LiveC t c)
+    (hcnd : cSt t c ≠ .dead) (hcsz : 1 ≤ cSz t c) {κ : Caps} (K : GCaps κ t) {t4 : Core}
+    (h : (driveChunk c).run t = .ok () t4) :
+    ∃ L' n, evalF κ driveChunkS t (OM.Machine.State.setLocs (fun _ => 0) ["x"] [c]) = .ok t4 L' n ∧
+      n ≤ 30 + t.P.K_C * 751 := by
+  have hδu := hC.δu
+  have hcθ : cmax t.P ≤ t.P.theta := hCP.I4
+  have drive : ∀ x, LiveC t x → cSt t x = .splitting →
+      (c = cLl t x ∨ c = x ∨ c = cRr t x) → ∃ t4, CDriveAgree κ x t t4 := by
+    intro x hxL hxs hcx
+    subst hel
+    have Fx := hC.cfam x hxL hxs
+    have hlx := Fx.lx hI hxL
+    have hrx := Fx.rx hI hxL
+    have hlr := Fx.lr hI hxL
+    have hCx : CInvE t A.elist (δ1 c) δu s₀ x :=
+      { hC with c1 := fun z hz hzs _ => hC.c1 z hz hzs (by unfold NIL; have := hz.1; omega) }
+    have hC1 := hC.c1 x hxL hxs (by unfold NIL; have := hxL.1; omega)
+    have hXs := cxsteps_count (cxsteps_dframe (cxsteps_linv (L := A.elist) (δ := δ1 c) (δu := δu)
+      (s₀ := s₀) (x := x)) t hcθ)
+    exact cinv_driveAgree hI hG hCx hC1 hXs ⟨⟨hLX, DFrame.refl t⟩, e, pops, hN⟩ hGP hCP
+      hxL hxs (fun c' h1 h2 h3 => by
+        unfold δ1; rw [if_neg]; rintro rfl; rcases hcx with h | h | h <;> contradiction)
+      (by unfold δ1; rcases hcx with rfl | rfl | rfl <;> simp [hlx, hrx, hlr, Ne.symm hlx,
+        Ne.symm hrx, Ne.symm hlr])
+      (by
+        unfold δ1
+        refine ⟨?_, ?_, ?_⟩ <;> split <;> first | omega | (subst_vars; exact hcsz)) K
+  refine driveChunkS_agree κ t _ (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by have := hcL.2; have := K.C; omega) h (fun q hq => ?_)
+  rcases hq with ⟨hs, rfl⟩ | ⟨hs, rfl⟩
+  · obtain ⟨t5, hA⟩ := drive q hcL hs (Or.inr (Or.inl rfl))
+    rw [driveChunk_split hs] at h; exact hA.of_run h
+  · obtain ⟨hxL, hxs, hlr⟩ := hC.covf c hcL hs
+    obtain ⟨t5, hA⟩ := drive _ hxL hxs (by rcases hlr with h | h; exact Or.inl h.symm; exact Or.inr (Or.inr h.symm))
+    rw [driveChunk_ovf hs] at h; exact hA.of_run h
+
 end OM.Impl

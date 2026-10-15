@@ -131,7 +131,8 @@ theorem unitCand_eq (s : Core) (x : Nat) (left : Bool) :
 
 theorem unitS_ok {κ : Caps} {s : Core} {L : Loc} {x : Nat} {left : Bool} (hx : L "x" = x) (hlf : L "lf" = b2n left)
     (hxT : x < κ.tbl .C) (hg0T : (if left then (s.C.getX x).first else (s.C.getX x).last) < κ.tbl .G)
-    (hsrT : (s.Gs.getX (if left then (s.C.getX x).first else (s.C.getX x).last)).src < κ.tbl .G) :
+    (hsrT : (s.Gs.getX (if left then (s.C.getX x).first else (s.C.getX x).last)).st = .overflow →
+      (s.Gs.getX (if left then (s.C.getX x).first else (s.C.getX x).last)).src < κ.tbl .G) :
     ∃ L' n, evalF κ unitS s L = .ok s L' n ∧ unitOf L' = unitCand s x left ∧ (L' "uk" = 1 ∨ L' "uk" = 3) ∧
       n ≤ 80 ∧ ∀ r, r ≠ "g0" → r ≠ "uk" → r ≠ "u0" → r ≠ "u1" → r ≠ "u2" → r ≠ "sr" → L' r = L r := by
   set g0 := if left then (s.C.getX x).first else (s.C.getX x).last
@@ -168,7 +169,7 @@ theorem unitS_ok {κ : Caps} {s : Core} {L : Loc} {x : Nat} {left : Bool} (hx : 
     have h5 : L5 "sr" = sr := by simp [L5, OM.Machine.State.upd]
     have h5g0 : L5 "g0" = g0 := by simp [L5, OM.Machine.State.upd, h3g0]
     have h5lf : L5 "lf" = b2n left := by simp [L5, OM.Machine.State.upd, h3lf]
-    have hsrT' : sr < κ.tbl .G := hsrT
+    have hsrT' : sr < κ.tbl .G := hsrT hov
     have hcL : unitLE.ev κ s L5 = some (if left = true ∧ S.l = g0 then 1 else 0) := by
       cases left <;> by_cases e : S.l = g0 <;>
         simp [unitLE, Exp.gF, Exp.ev, OM.Machine.BinOp.eval, h5, h5g0, h5lf, hsrT', Fld.cap, Fld.get, GF.get, b2n, e, S]
@@ -794,7 +795,8 @@ theorem chunkSplitStepS_left (κ : Caps) (s : Core) (L : Loc) {x : Nat} {labs : 
     (hxs : x < s.C.size) (hlS : cLl s x < s.C.size) (hrS : cRr s x < s.C.size) (hxl : x ≠ cLl s x)
     (hC : s.C.size ≤ κ.tbl .C) (hG : s.Gs.size ≤ κ.tbl .G)
     (hu : ∀ g ∈ unitCand s x true, g < s.Gs.size) (hg0 : cF s x < κ.tbl .G)
-    (hsr : (s.Gs.getX (cF s x)).src < κ.tbl .G) (hyl : cLs s (cLl s x) < κ.tbl .G) :
+    (hsr : (s.Gs.getX (cF s x)).st = .overflow → (s.Gs.getX (cF s x)).src < κ.tbl .G)
+    (hyl : cLs s (cLl s x) < κ.tbl .G) :
     ∃ L' n, evalF κ chunkSplitStepS s L = .ok (cmoveLState s x (unitCand s x true) labs) L' n ∧ L' "ok" = 1 ∧
       L' "x" = x ∧ n ≤ 700 := by
   have hxT : x < κ.tbl .C := by omega
@@ -878,7 +880,8 @@ theorem chunkSplitStepS_right (κ : Caps) (s : Core) (L : Loc) {x : Nat} {labs :
     (hxs : x < s.C.size) (hlS : cLl s x < s.C.size) (hrS : cRr s x < s.C.size) (hxl : x ≠ cRr s x)
     (hC : s.C.size ≤ κ.tbl .C) (hG : s.Gs.size ≤ κ.tbl .G)
     (hu : ∀ g ∈ unitCand s x false, g < s.Gs.size) (hg0 : cLs s x < κ.tbl .G)
-    (hsr : (s.Gs.getX (cLs s x)).src < κ.tbl .G) (hyl : cF s (cRr s x) < κ.tbl .G) :
+    (hsr : (s.Gs.getX (cLs s x)).st = .overflow → (s.Gs.getX (cLs s x)).src < κ.tbl .G)
+    (hyl : cF s (cRr s x) < κ.tbl .G) :
     ∃ L' n, evalF κ chunkSplitStepS s L = .ok (cmoveRState s x (unitCand s x false) labs) L' n ∧ L' "ok" = 1 ∧
       L' "x" = x ∧ n ≤ 700 := by
   have hxT : x < κ.tbl .C := by omega
@@ -983,7 +986,7 @@ def driveChunkFromS : Stm := "dn" ::= 0 ;; .loop "jj" (.prm .KC) cdriveBody
 
 /-- A Level M split step that agrees with a Level F one (`b` = Level F's result). -/
 def CStepAgree (κ : Caps) (p : Nat) (t t' : Core) (b : Bool) : Prop :=
-  ∀ L : Loc, L "x" = p → ∃ L' n, evalF κ chunkSplitStepS t L = .ok t' L' n ∧ L' "ok" = b2n b ∧ n ≤ 350
+  ∀ L : Loc, L "x" = p → ∃ L' n, evalF κ chunkSplitStepS t L = .ok t' L' n ∧ L' "ok" = b2n b ∧ n ≤ 700
 
 /-- The body of Level F's drive loop. -/
 def cdriveF (p : Nat) : Nat → Option Unit × Unit → CM (ForInStep (Option Unit × Unit)) :=
@@ -1004,7 +1007,7 @@ theorem driveChunkFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L
     (hstep : ∀ j t, I j t → j < s.P.K_C → ∃ b t', (chunkSplitStep p).run t = .ok b t' ∧
       (b = true → I (j + 1) t') ∧ CStepAgree κ p t t' b) :
     ∃ t' L' n, (driveChunkFrom p).run s = .ok () t' ∧ evalF κ driveChunkFromS s L = .ok t' L' n ∧
-      n ≤ 5 + s.P.K_C * 401 := by
+      n ≤ 5 + s.P.K_C * 751 := by
   set K := s.P.K_C
   set R := fun (l : List Nat) (t : Core) => (forIn l ((none : Option Unit), ()) (cdriveF p)).run t
   -- Level F's loop ends
@@ -1041,7 +1044,7 @@ theorem driveChunkFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L
   obtain ⟨S', L', c, he, hc, -, hI⟩ := evalF_loop (κ := κ) (x := "jj") (n := .prm .KC) (b := cdriveBody) (s := s)
     (L := upd L "dn" 0) (N := K) (by simp [Exp.ev, PF.get, K])
     (fun j S L' => L' "x" = p ∧ ((L' "dn" = 0 ∧ I j S ∧ ∃ c, R ((List.range K).drop j) S = .ok c tF) ∨
-      (L' "dn" = 1 ∧ S = tF))) 400
+      (L' "dn" = 1 ∧ S = tF))) 750
     ⟨by simp [OM.Machine.State.upd, hg], Or.inl ⟨by simp [OM.Machine.State.upd], h0, c0, by simpa using hR0⟩⟩
     (by
       intro j hj S L1 ⟨h1x, hcase⟩
@@ -1100,7 +1103,7 @@ def driveChunkS : Stm :=
 /-- The drive of the split rooted at `q` agrees at Level M, ending in `t'`. -/
 def CDriveAgree (κ : Caps) (q : Nat) (s t' : Core) : Prop :=
   (driveChunkFrom q).run s = .ok () t' ∧
-    ∀ L : Loc, L "x" = q → ∃ L' n, evalF κ driveChunkFromS s L = .ok t' L' n ∧ n ≤ 5 + s.P.K_C * 401
+    ∀ L : Loc, L "x" = q → ∃ L' n, evalF κ driveChunkFromS s L = .ok t' L' n ∧ n ≤ 5 + s.P.K_C * 751
 
 theorem driveChunkFromS_agree' (κ : Caps) (s : Core) {p : Nat} (I : Nat → Core → Prop) (h0 : I 0 s)
     (hstep : ∀ j t, I j t → j < s.P.K_C → ∃ b t', (chunkSplitStep p).run t = .ok b t' ∧
@@ -1128,7 +1131,7 @@ theorem driveChunkS_agree (κ : Caps) (s : Core) (L : Loc) {g : Nat} (hg : L "x"
     {σ' : Core} (h : (driveChunk g).run s = .ok () σ')
     (hA : ∀ q, ((s.C.getX g).st = .splitting ∧ q = g ∨ (s.C.getX g).st = .overflow ∧ q = (s.C.getX g).src) →
       CDriveAgree κ q s σ') :
-    ∃ L' n, evalF κ driveChunkS s L = .ok σ' L' n ∧ n ≤ 30 + s.P.K_C * 401 := by
+    ∃ L' n, evalF κ driveChunkS s L = .ok σ' L' n ∧ n ≤ 30 + s.P.K_C * 751 := by
   set G := s.C.getX g
   have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "st") (e := .cF .st "x") (v := G.st.toN)
     (by simp [Exp.cF, Exp.ev, hg, hgT, Fld.cap, Fld.get, CF.get, G])
