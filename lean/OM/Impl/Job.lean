@@ -573,4 +573,61 @@ theorem dsMutS_ok {κ : Caps} {s : Core} {L : Loc} {v old new : Nat}
   obtain ⟨c7, e7, hc7⟩ := e7
   exact ⟨L3, _, evalF_seq_ok2 e14 (evalF_seq_ok2 e5 (evalF_seq_ok2 e6 e7)), by omega, h3⟩
 
+/-- A sweep step that moves a chunk (locals `v h`). -/
+def dsMoveS : Stm := dsPickS ;; dsLabS ;; dsMutS
+
+theorem dsMoveS_ok {κ : Caps} {s : Core} {L : Loc} {v pt tb pv vb : Nat}
+    (hv : L "v" = v) (hh : L "h" = (s.nodes.getX v).height)
+    -- Level F (as in `drainStep_move`)
+    (hside : goesLeft s v ∨
+      lookup (s.nodes.getX v).side (belowY s v (s.nodes.getX v).first) = some .right ∧
+      lookup (s.nodes.getX v).side (belowY s v (s.nodes.getX v).last) = some .right)
+    (hsz : (s.nodes.getX v).height + 1 < (s.path.getX (dsY s v)).size)
+    (hpt : (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).lab? (dsT s v) = some pt)
+    (htb : (s.nodes.getX (dsT s v)).lab? (belowY s v (dsY s v)) = some tb)
+    (hpv : (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).lab? v = some pv)
+    (hvb : (s.nodes.getX v).lab? (belowY s v (dsY s v)) = some vb)
+    (hold : (pv <<< ((s.nodes.getX v).height * s.P.beta)) |||
+        (vb <<< (((s.nodes.getX v).height - 1) * s.P.beta)) ≤ (s.C.getX (dsY s v)).tag)
+    (hok : OM.Proof.TagOK s (dsY s v) (dsTag s v pt tb pv vb))
+    -- the shape
+    (h1 : 1 ≤ (s.nodes.getX v).height) (hpsz : (s.path.getX (dsY s v)).size = s.P.H + 1)
+    (htbB : tb < 2 ^ s.P.beta) (hvbB : vb < 2 ^ s.P.beta) (htv : dsT s v ≠ v)
+    (hvs : v < s.nodes.size) (hts : dsT s v < s.nodes.size) (hys : dsY s v < s.C.size)
+    (hnf : notPrep s (s.nodes.getX v).first) (hnl : notPrep s (s.nodes.getX v).last)
+    -- capacities
+    (hvN : v < κ.tbl .N) (htN : dsT s v < κ.tbl .N) (hvsd : v < κ.lrec .side) (hvr : v < κ.lrec .table)
+    (htr : dsT s v < κ.lrec .table)
+    (hprr : (s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1) < κ.lrec .table)
+    (hfC : (s.nodes.getX v).first < κ.tbl .C) (hlC : (s.nodes.getX v).last < κ.tbl .C)
+    (hyP : (s.C.getX (dsY s v)).prev < κ.tbl .C) (hyN : (s.C.getX (dsY s v)).next < κ.tbl .C)
+    (hw : (s.nodes.getX v).height + 1 < κ.pw) :
+    ∃ L' c, evalF κ dsMoveS s L = .ok (dsS s v (dsTag s v pt tb pv vb)) L' c ∧
+      c ≤ 1000 + 80 * (s.nodes.getX v).side.length +
+        40 * (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).table.length +
+        20 * (s.nodes.getX (dsT s v)).table.length + 20 * (s.nodes.getX v).table.length ∧
+      L' "v" = v ∧ L' "h" = (s.nodes.getX v).height := by
+  set h := (s.nodes.getX v).height
+  have hyE : dsY s v = (s.nodes.getX v).first ∨ dsY s v = (s.nodes.getX v).last := by
+    unfold dsY; split <;> simp
+  have hnp : notPrep s (dsY s v) := by rcases hyE with e | e <;> rw [e] <;> assumption
+  have hyC : dsY s v < κ.tbl .C := by rcases hyE with e | e <;> rw [e] <;> assumption
+  obtain ⟨L1, c1, e1, h1y, h1t, h1lf, h1bl, hc1, hF1⟩ := dsPickS_ok (κ := κ) (s := s) (L := L) hv hh h1 hside hvN hvsd
+    hnf hnl hfC hlC (by omega)
+  have hF1' : ∀ r, r = "v" ∨ r = "h" → L1 r = L r := by
+    intro r hr; apply hF1 <;> rcases hr with rfl | rfl <;> decide
+  obtain ⟨L2, c2, e2, h2o, h2n, hc2, hF2⟩ := dsLabS_ok (κ := κ) (s := s) (L := L1) (v := v) (h := h)
+    (y := dsY s v) (t := dsT s v) (bl := belowY s v (dsY s v)) (pt := pt) (tb := tb) (pv := pv) (vb := vb)
+    (by rw [hF1' "v" (by simp), hv]) (by rw [hF1' "h" (by simp), hh]) h1y h1t h1bl (by omega) h1 hnp hyC hw
+    hpt htb hpv hvb htbB hvbB hprr htr hvr
+  obtain ⟨L3, c3, e3, hc3, hF3⟩ := dsMutS_ok (κ := κ) (s := s) (L := L2) (v := v)
+    (old := (pv <<< (h * s.P.beta)) ||| (vb <<< ((h - 1) * s.P.beta)))
+    (new := (pt <<< (h * s.P.beta)) ||| (tb <<< ((h - 1) * s.P.beta)))
+    (by rw [hF2 "v" (by simp), hF1' "v" (by simp), hv]) (by rw [hF2 "h" (by simp), hF1' "h" (by simp), hh])
+    (by rw [hF2 "y" (by simp), h1y]) (by rw [hF2 "t" (by simp), h1t]) (by rw [hF2 "lf" (by simp), h1lf]) h2o h2n
+    hold hok hys hyC hyP hyN hnp (by omega) hvs hts hvN htN htv
+  refine ⟨L3, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 e3), by omega, ?_, ?_⟩
+  · rw [hF3 "v" (by decide) (by decide), hF2 "v" (by simp), hF1' "v" (by simp), hv]
+  · rw [hF3 "h" (by decide) (by decide), hF2 "h" (by simp), hF1' "h" (by simp), hh]
+
 end OM.Impl
