@@ -218,7 +218,7 @@ theorem unlinkGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "
     (hgG : g < σ.Gs.size) (hpG : (σ.Gs.getX g).prev < σ.Gs.size) (hnG : (σ.Gs.getX g).next < σ.Gs.size)
     (hcC : (σ.Gs.getX g).chk < σ.C.size) (hG : σ.Gs.size ≤ κ.tbl .G) (hC : σ.C.size ≤ κ.tbl .C)
     (hF : σ.freeG.length + 1 ≤ κ.lcap .freeG) (hF0 : 0 < κ.lrec .freeG) :
-    ∃ L' n, evalF κ unlinkGroupS σ L = .ok (unlinkGroup σ g) L' n ∧ n ≤ 150 := by
+    ∃ L' n, evalF κ unlinkGroupS σ L = .ok (unlinkGroup σ g) L' n ∧ L' "g" = g ∧ n ≤ 150 := by
   set G := σ.Gs.getX g
   set c := G.chk
   set C := σ.C.getX c
@@ -340,7 +340,8 @@ theorem unlinkGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "
   have b9 : evalF κ (.lgrow .freeG 0 "g" 0) S8 L5 = .ok { S8 with freeG := g :: σ.freeG } L5 22 := by
     simp only [evalF, Exp.ev, Exp.ofNat_def, r5 "g" (by decide) (by decide), rg, hso, Exp.cost]
   refine ⟨L5, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 b4 (evalF_seq_ok2 b5
-    (evalF_seq_ok2 b6 (evalF_seq_ok2 ecf (evalF_seq_ok2 ecl (evalF_seq_ok2 b7 (evalF_seq_ok2 b8 b9))))))))), ?_⟩
+    (evalF_seq_ok2 b6 (evalF_seq_ok2 ecf (evalF_seq_ok2 ecl (evalF_seq_ok2 b7 (evalF_seq_ok2 b8 b9))))))))),
+    by rw [r5 "g" (by decide) (by decide), rg], ?_⟩
   simp only [Exp.cost, Exp.gF, Exp.cF] at hn4 hn5 hn8 ⊢
   omega
 
