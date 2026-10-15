@@ -725,4 +725,60 @@ theorem dsP_finish {κ : Caps} {s : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
   have e3 := evalF_ite_t (f := dsMoveS ;; "ok" ::= 1) hc one_ne_zero e2
   exact ⟨_, _, dsP_pre hv hvN hal e3, by simp [OM.Machine.State.upd], by simp [Exp.cost] at hc1 ⊢; omega⟩
 
+/-! ### The funding loop, the step after a drain start, the walk -/
+
+/-- The program agrees with Level F's `drainStep src` from `S` (within `D` steps). -/
+def DSAgree (κ : Caps) (S : Core) (src D : Nat) : Prop :=
+  ∀ b S', (drainStep src).run S = .ok b S' →
+    ∃ L' c, evalF κ dsP.body S (OM.Machine.State.setLocs (fun _ => 0) ["v"] [src]) = .ok S' L' c ∧
+      L' "ok" = b2n b ∧ c ≤ D ∧ S'.resJob = S.resJob
+
+/-- `fundLoop` (locals `ja jb jc jd` = `v up src k`); the job's counter is updated. -/
+def fundS : Stm :=
+  .ite ("jd" <ₑ .prm .s)
+    (dsP.call [.var "jc"] ["dk"] ;; .ite "dk" (.pcSet 4 "ja" "jb" "jc" ("jd" + 1)) (.pcSet 2 "jb" 0 0 0))
+    (.pcSet 2 "jb" 0 0 0)
+
+theorem fundS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up src k D : Nat} (hjob : S.resJob = some j)
+    (ha : L "ja" = v) (hb : L "jb" = up) (hc : L "jc" = src) (hd : L "jd" = k) (hds : DSAgree κ S src D)
+    {r : Option Job} {S' : Core} (h : (fundLoop j v up src k).run S = .ok r S') :
+    ∃ L' c, evalF κ fundS S L = .ok { S' with resJob := r } L' c ∧ c ≤ D + 80 := by
+  unfold fundLoop at h
+  simp only [OM.Proof.run_getP_bind] at h
+  by_cases hk : k < S.P.s
+  · rw [if_pos hk] at h
+    obtain ⟨b, S1, h1, h2⟩ := run_bind_ok h
+    obtain ⟨Ld, cd, ed, hdk, hcd, hj1⟩ := hds b S1 h1
+    have e1 := evalF_call_ok (q := dsP) (args := [.var "jc"]) (ds := ["dk"]) (L := L) (by simp [evList, Exp.ev, hc]) ed
+    set L1 := OM.Machine.State.setLocs L ["dk"] (dsP.rets.map Ld)
+    have hL1 : ∀ q, q ≠ "dk" → L1 q = L q := fun q hq => by
+      simp [L1, dsP, OM.Machine.State.setLocs, OM.Machine.State.upd, hq]
+    have h1dk : L1 "dk" = b2n b := by simp [L1, dsP, OM.Machine.State.setLocs, OM.Machine.State.upd, hdk]
+    cases b
+    · simp at h2
+      obtain ⟨rfl, rfl⟩ := h2
+      have e2' : evalF κ (.pcSet 2 "jb" 0 0 0) S1 L1 = .ok { S1 with resJob := some { j with pc := .walk (some up) } } L1 21 := by
+        simp [evalF, evList, Exp.ev, hj1, hjob, hL1 "jb" (by decide), hb, pcDec, costList, Exp.cost]
+      have e2 := evalF_ite_f (c := .var "dk") (t := .pcSet 4 "ja" "jb" "jc" ("jd" + 1)) (by simp [Exp.ev, h1dk, b2n]) e2'
+      refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, hd, OM.Machine.BinOp.eval, PF.get, hk]) one_ne_zero
+        (evalF_seq_ok2 e1 e2), ?_⟩
+      simp [Exp.cost, costList]; omega
+    · simp at h2
+      obtain ⟨rfl, rfl⟩ := h2
+      have e2' : evalF κ (.pcSet 4 "ja" "jb" "jc" ("jd" + 1)) S1 L1 =
+          .ok { S1 with resJob := some { j with pc := .fund v up src (k + 1) } } L1 23 := by
+        simp [evalF, evList, Exp.ev, hj1, hjob, hL1 "ja" (by decide), hL1 "jb" (by decide), hL1 "jc" (by decide),
+          hL1 "jd" (by decide), ha, hb, hc, hd, pcDec, OM.Machine.BinOp.eval, costList, Exp.cost]
+      have e2 := evalF_ite_t (c := .var "dk") (f := .pcSet 2 "jb" 0 0 0) (v := 1) (by simp [Exp.ev, h1dk, b2n]) one_ne_zero e2'
+      refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, hd, OM.Machine.BinOp.eval, PF.get, hk]) one_ne_zero
+        (evalF_seq_ok2 e1 e2), ?_⟩
+      simp [Exp.cost, costList]; omega
+  · rw [if_neg hk] at h
+    simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    have e' : evalF κ (.pcSet 2 "jb" 0 0 0) S L = .ok { S with resJob := some { j with pc := .walk (some up) } } L 21 := by
+      simp [evalF, evList, Exp.ev, hjob, hb, pcDec, costList, Exp.cost]
+    refine ⟨_, _, evalF_ite_f (by simp [Exp.ev, hd, OM.Machine.BinOp.eval, PF.get, hk]) e', ?_⟩
+    simp [Exp.cost]
+
 end OM.Impl
