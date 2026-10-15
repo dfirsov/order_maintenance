@@ -126,7 +126,7 @@ theorem inv_end {t : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat �
     have := (S.htN u hu.1).2
     simp only [slack, curH, hpc, if_true]
     split_ifs <;> first | rfl | omega
-  refine ⟨S, ⟨fun u hu => ?_, Ti.wA, Ti.wB, Ti.wF, fun u hu => ?_, fun u hu => ?_, Ti.wD, Ti.big, Ti.chain⟩,
+  refine ⟨S, ⟨fun u hu => ?_, Ti.wA, Ti.wB, Ti.wF, fun u hu => ?_, fun u hu => ?_, Ti.wD, Ti.big, Ti.chain, Ti.tw1⟩,
     hI.room, fun _ h => absurd h (by simp), hI.cap⟩
   · have := Ti.wts u hu; rw [hp] at this; simpa [pend] using this
   · have := Ti.wC u hu; rw [hs u hu] at this; simpa [slack] using this

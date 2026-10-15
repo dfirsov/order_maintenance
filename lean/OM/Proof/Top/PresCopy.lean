@@ -48,7 +48,7 @@ theorem jobStep_copy {s : Core} {j : Job} {l : Nat} (hpc : j.pc = .copy l) :
 theorem Timing.congr_job {s : TS} {cl : List Nat} {oj oj' : Option Job} (Ti : Timing s cl oj)
     (hp : pend s oj' = pend s oj) (hs : ∀ v, slack s oj' v = slack s oj v)
     (hf : ∀ v, funded s oj' v ↔ funded s oj v) : Timing s cl oj' := by
-  refine ⟨fun v hv => ?_, Ti.wA, Ti.wB, Ti.wF, fun v hv => ?_, fun v hv => ?_, Ti.wD, Ti.big, Ti.chain⟩
+  refine ⟨fun v hv => ?_, Ti.wA, Ti.wB, Ti.wF, fun v hv => ?_, fun v hv => ?_, Ti.wD, Ti.big, Ti.chain, Ti.tw1⟩
   · rw [hp]; exact Ti.wts v hv
   · rw [hs]; exact Ti.wC v hv
   · have := Ti.wC' v hv

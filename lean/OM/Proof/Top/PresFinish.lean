@@ -753,7 +753,7 @@ theorem inv_drainFinish {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr 
     intro u; unfold funded; simp only [F.anc, F.ht, F.t1, F.t2]
   refine ⟨SH, ?_, ?_, ?_, by rw [F.P]; exact hI.cap⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
-      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_⟩
+      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_, ?_⟩
     · rw [hL] at hu; rw [F.weight, hpend, F.tw]; exact Ti.wts u hu
     · rw [hL] at hu; rw [F.livePar] at hp; rw [F.weight, F.ht, F.P]
       rw [F.srcOf] at hs
@@ -790,6 +790,7 @@ theorem inv_drainFinish {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr 
       · exact absurd rfl hs
       · exact Ti.big u hu hs
     · intro u hu hH; rw [F.isN] at hu; rw [F.P] at hH; rw [F.ht]; exact Ti.chain u hu.1 hH
+    · intro u hu; rw [hL] at hu; rw [F.tw]; exact Ti.tw1 u hu
   · refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
     · rw [F.isN] at hX
       unfold labs; rw [F.table, F.P]
