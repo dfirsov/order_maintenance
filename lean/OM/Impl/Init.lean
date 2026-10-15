@@ -48,7 +48,7 @@ def iG (P : Params) : Core :=
 def iC (P : Params) : Core := { iG P with C := #[default, { first := 1, last := 1, size := 1 }] }
 
 theorem initEltS_ok {κ : Caps} {P : Params} {L : Loc} (hBe : 1 ≤ P.B_e) (hE : 2 ≤ κ.tbl .E) :
-    ∃ L' c, evalF κ initEltS (freshC P) L = .ok (iE P) L' c ∧ c ≤ 60 := by
+    ∃ L' c, evalF κ initEltS (freshC P) L = .ok (iE P) L' c ∧ c ≤ 60 ∧ ∀ r, r ≠ "t" → L' r = L r := by
   have p1 := evalF_push_ok (κ := κ) (s := freshC P) (L := L) (t := .E) (x := "t") (by simp [Tbl.size, freshC]; omega)
   have p2 := evalF_push_ok (κ := κ) (s := Tbl.push (freshC P) .E) (L := upd L "t" 0) (t := .E) (x := "t")
     (by simp [Tbl.size, Tbl.push, freshC]; omega)
@@ -68,11 +68,12 @@ theorem initEltS_ok {κ : Caps} {P : Params} {L : Loc} (hBe : 1 ≤ P.B_e) (hE :
     simp only [s4, s3, s2, iE, freshC, Tbl.push]
     congr 1
   refine ⟨_, _, evalF_seq_ok2 p1 (evalF_seq_ok2 p2 (evalF_seq_ok2 (by simp only [Stm.weF]; exact w1)
-    (evalF_seq_ok2 (by simp only [Stm.weF]; exact w2) (by simp only [Stm.weF]; rw [← hfin]; exact w3)))), ?_⟩
+    (evalF_seq_ok2 (by simp only [Stm.weF]; exact w2) (by simp only [Stm.weF]; rw [← hfin]; exact w3)))), ?_,
+    fun r h => by simp [OM.Machine.State.upd, h]⟩
   simp [pushCost, Exp.cost]
 
 theorem initGrpS_ok {κ : Caps} {P : Params} {L : Loc} (hBg : 1 ≤ P.B_g) (hG : 2 ≤ κ.tbl .G) :
-    ∃ L' c, evalF κ initGrpS (iE P) L = .ok (iG P) L' c ∧ c ≤ 80 := by
+    ∃ L' c, evalF κ initGrpS (iE P) L = .ok (iG P) L' c ∧ c ≤ 80 ∧ ∀ r, r ≠ "t" → L' r = L r := by
   have p1 := evalF_push_ok (κ := κ) (s := iE P) (L := L) (t := .G) (x := "t") (by simp [Tbl.size, iE, freshC]; omega)
   have p2 := evalF_push_ok (κ := κ) (s := Tbl.push (iE P) .G) (L := upd L "t" 0) (t := .G) (x := "t")
     (by simp [Tbl.size, Tbl.push, iE, freshC]; omega)
@@ -100,11 +101,12 @@ theorem initGrpS_ok {κ : Caps} {P : Params} {L : Loc} (hBg : 1 ≤ P.B_g) (hG :
     congr 1
   refine ⟨_, _, evalF_seq_ok2 p1 (evalF_seq_ok2 p2 (evalF_seq_ok2 (by simp only [Stm.wgF]; exact w1)
     (evalF_seq_ok2 (by simp only [Stm.wgF]; exact w2) (evalF_seq_ok2 (by simp only [Stm.wgF]; exact w3)
-    (evalF_seq_ok2 (by simp only [Stm.wgF]; exact w4) (by simp only [Stm.wgF]; rw [← hfin]; exact w5)))))), ?_⟩
+    (evalF_seq_ok2 (by simp only [Stm.wgF]; exact w4) (by simp only [Stm.wgF]; rw [← hfin]; exact w5)))))), ?_,
+    fun r h => by simp [L2, OM.Machine.State.upd, h]⟩
   simp [pushCost, Exp.cost]
 
 theorem initChkS_ok {κ : Caps} {P : Params} {L : Loc} (hC : 2 ≤ κ.tbl .C) :
-    ∃ L' c, evalF κ initChkS (iG P) L = .ok (iC P) L' c ∧ c ≤ 60 := by
+    ∃ L' c, evalF κ initChkS (iG P) L = .ok (iC P) L' c ∧ c ≤ 60 ∧ ∀ r, r ≠ "t" → L' r = L r := by
   have p1 := evalF_push_ok (κ := κ) (s := iG P) (L := L) (t := .C) (x := "t")
     (by simp [Tbl.size, iG, iE, freshC]; omega)
   have p2 := evalF_push_ok (κ := κ) (s := Tbl.push (iG P) .C) (L := upd L "t" 0) (t := .C) (x := "t")
@@ -124,11 +126,12 @@ theorem initChkS_ok {κ : Caps} {P : Params} {L : Loc} (hC : 2 ≤ κ.tbl .C) :
     simp only [s4, s3, s2, iC, iG, iE, freshC, Tbl.push]
     congr 1
   refine ⟨_, _, evalF_seq_ok2 p1 (evalF_seq_ok2 p2 (evalF_seq_ok2 (by simp only [Stm.wcF]; exact w1)
-    (evalF_seq_ok2 (by simp only [Stm.wcF]; exact w2) (by simp only [Stm.wcF]; rw [← hfin]; exact w3)))), ?_⟩
+    (evalF_seq_ok2 (by simp only [Stm.wcF]; exact w2) (by simp only [Stm.wcF]; rw [← hfin]; exact w3)))), ?_,
+    fun r h => by simp [L2, OM.Machine.State.upd, h]⟩
   simp [pushCost, Exp.cost]
 
 theorem initScS_ok {κ : Caps} {P : Params} {L : Loc} (hN : 1 ≤ κ.tbl .N) :
-    ∃ L' c, evalF κ initScS (iC P) L = .ok (initState P) L' c ∧ c ≤ 40 := by
+    ∃ L' c, evalF κ initScS (iC P) L = .ok (initState P) L' c ∧ c ≤ 40 ∧ ∀ r, r ≠ "t" → L' r = L r := by
   have p1 := evalF_push_ok (κ := κ) (s := iC P) (L := L) (t := .N) (x := "t")
     (by simp [Tbl.size, iC, iG, iE, freshC]; omega)
   set L1 := upd L "t" (Tbl.size (iC P) .N)
@@ -141,16 +144,17 @@ theorem initScS_ok {κ : Caps} {P : Params} {L : Loc} (hN : 1 ≤ κ.tbl .N) :
     (evalF_seq_ok2 (evalF_wrS_ok (k := .tail) (e := (1 : Exp)) (w := 1) rfl rfl)
       (evalF_wrS_ok (k := .count) (e := (1 : Exp)) (w := 1) rfl rfl))))
   rw [hst] at e2
-  exact ⟨_, _, evalF_seq_ok2 p1 e2, by simp [pushCost, Exp.cost]⟩
+  exact ⟨_, _, evalF_seq_ok2 p1 e2, by simp [pushCost, Exp.cost], fun r h => by simp [L1, OM.Machine.State.upd, h]⟩
 
 theorem initStateS_ok {κ : Caps} {P : Params} {L : Loc} (hBe : 1 ≤ P.B_e) (hBg : 1 ≤ P.B_g)
     (hE : 2 ≤ κ.tbl .E) (hG : 2 ≤ κ.tbl .G) (hC : 2 ≤ κ.tbl .C) (hN : 1 ≤ κ.tbl .N) :
-    ∃ L' c, evalF κ initStateS (freshC P) L = .ok (initState P) L' c ∧ c ≤ 300 := by
-  obtain ⟨L1, c1, e1, hc1⟩ := initEltS_ok (κ := κ) (L := L) hBe hE
-  obtain ⟨L2, c2, e2, hc2⟩ := initGrpS_ok (κ := κ) (L := L1) hBg hG
-  obtain ⟨L3, c3, e3, hc3⟩ := initChkS_ok (κ := κ) (L := L2) (P := P) hC
-  obtain ⟨L4, c4, e4, hc4⟩ := initScS_ok (κ := κ) (L := L3) (P := P) hN
-  exact ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 e4)), by omega⟩
+    ∃ L' c, evalF κ initStateS (freshC P) L = .ok (initState P) L' c ∧ c ≤ 300 ∧ ∀ r, r ≠ "t" → L' r = L r := by
+  obtain ⟨L1, c1, e1, hc1, hF1⟩ := initEltS_ok (κ := κ) (L := L) hBe hE
+  obtain ⟨L2, c2, e2, hc2, hF2⟩ := initGrpS_ok (κ := κ) (L := L1) hBg hG
+  obtain ⟨L3, c3, e3, hc3, hF3⟩ := initChkS_ok (κ := κ) (L := L2) (P := P) hC
+  obtain ⟨L4, c4, e4, hc4, hF4⟩ := initScS_ok (κ := κ) (L := L3) (P := P) hN
+  exact ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 e4)), by omega,
+    fun r h => by rw [hF4 r h, hF3 r h, hF2 r h, hF1 r h]⟩
 
 /-! ### `initStep` -/
 
@@ -589,5 +593,81 @@ theorem initLoopS_agree (κ : Caps) (s : Core) (L : Loc) {D : Nat} (I : Nat → 
   refine ⟨S', L', _, hR0, evalF_seq_ok2 a1 he, ?_⟩
   have e : K * (1 + (D + 11)) = K * (D + 12) := by ring
   simp only [Exp.cost, PF.get] at hc ⊢; omega
+
+/-! ### `initCore` -/
+
+/-- `initCore lz` (local `lz`), from fresh memory. -/
+def initCoreS : Stm :=
+  initStateS ;; .prepInit 1 1 ;; .ite "lz" (.wr (.s .notReady) 0 1) (initLoopS ;; .wr (.s .notReady) 0 0)
+
+/-- The state after `prepInit 1 1` on `initState P`. -/
+def prepStart (P : Params) (r : Bool) : Core :=
+  { initState P with prep := some { chunk := 1, below := 1, path := Array.replicate (P.H + 1) NIL }, ready := r }
+
+theorem prepInit_ok {κ : Caps} {P : Params} {L : Loc} (hK : InitCaps κ P) :
+    evalF κ (.prepInit 1 1) (initState P) L = .ok (prepStart P true) L 18 := by
+  have hz : rowZero κ (initState P) 1 := fun j _ => by
+    show ((#[] : Array (Array Nat)).getX 1).getX j = 0
+    rfl
+  have hc : (initState P).prep.isNone = true ∧ 1 < κ.tbl .C ∧ rowZero κ (initState P) 1 ∧
+      (initState P).P.H + 1 ≤ κ.pw := ⟨rfl, by have := hK.C; omega, hz, by rw [hK.pw]; rfl⟩
+  simp only [evalF, Exp.ev]
+  rw [if_pos hc]
+  rfl
+
+theorem initCoreS_lazy {κ : Caps} {P : Params} {L : Loc} (hL : L "lz" = 1) (hBe : 1 ≤ P.B_e) (hBg : 1 ≤ P.B_g)
+    (hK : InitCaps κ P) (hE : 2 ≤ κ.tbl .E) (hG : 2 ≤ κ.tbl .G) :
+    ∃ L' c, evalF κ initCoreS (freshC P) L = .ok (prepStart P false) L' c ∧ c ≤ 400 := by
+  obtain ⟨L1, c1, e1, hc1, hF1⟩ := initStateS_ok (κ := κ) (P := P) (L := L) hBe hBg hE hG hK.C
+    (by have := hK.N; omega)
+  have e2 := prepInit_ok (κ := κ) (P := P) (L := L1) hK
+  have e3 : evalF κ (.wr (.s .notReady) 0 1) (prepStart P true) L1 = .ok (prepStart P false) L1 3 := by
+    simp [evalF, Exp.ev, Fld.set, SF.ok, SF.set, prepStart, Exp.cost]
+  have hlz : L1 "lz" = 1 := by rw [hF1 _ (by decide), hL]
+  exact ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_ite_t (v := 1) (by simp [Exp.ev, hlz]) one_ne_zero e3)),
+    by simp [Exp.cost]; omega⟩
+
+theorem initCore_lazy_eq (s : Core) : (initCore true).run s = .ok () (prepStart s.P false) := by
+  rw [OM.Proof.Top.initCore_lazy_run]; rfl
+
+theorem initCoreS_eager {κ : Caps} {P : Params} {L : Loc} (hL : L "lz" = 0) (hBe : 1 ≤ P.B_e) (hBg : 1 ≤ P.B_g)
+    (hb : 1 ≤ P.beta) (hH : 1 ≤ P.H) (hK : InitCaps κ P) (hE : 2 ≤ κ.tbl .E) (hG : 2 ≤ κ.tbl .G)
+    {s s' : Core} (hsP : s.P = P) (h : (initCore false).run s = .ok () s') :
+    ∃ L' c, evalF κ initCoreS (freshC P) L = .ok s' L' c ∧ c ≤ 1000 + (P.H + 1) * 412 := by
+  obtain ⟨L1, c1, e1, hc1, hF1⟩ := initStateS_ok (κ := κ) (P := P) (L := L) hBe hBg hE hG hK.C
+    (by have := hK.N; omega)
+  have e2 := prepInit_ok (κ := κ) (P := P) (L := L1) hK
+  have hlz : L1 "lz" = 0 := by rw [hF1 _ (by decide), hL]
+  -- Level F's loop, along the stages
+  have S1 := stage_one (initState P) true
+  have hs0 : prepStart P true = { initState (initState P).P with
+      prep := some { chunk := 1, below := 1, path := Array.replicate ((initState P).P.H + 1) NIL }, ready := true } := rfl
+  obtain ⟨t', L2, n2, hR, e3, hn3⟩ := initLoopS_agree κ (prepStart P true) L1 (D := 400)
+    (fun j t => Stage P (j + 1) t ∧ (j = 0 → t = prepStart P true))
+    ⟨by rw [hs0]; exact S1, fun _ => rfl⟩
+    (by
+      intro j t ⟨St, h0⟩ hj
+      have hjP : j < P.H + 1 := hj
+      have hA : ISAgree κ t 400 := isAgree_stage St (by omega) (by omega) hb hH hK (fun e => by
+        have := h0 (by omega); subst this; exact ⟨rfl, rfl, rfl, rfl⟩)
+      by_cases hle : j + 1 ≤ P.H
+      · obtain ⟨t', hr, St', -⟩ := stage_next St (by omega) hle hb
+        exact ⟨false, t', hr, fun _ => ⟨St', fun e => absurd e (by omega)⟩, hA, by rw [St'.P]; rfl⟩
+      · have e : j + 1 = P.H + 1 := by omega
+        rw [e] at St
+        obtain ⟨t', hr, F, -⟩ := stage_last St hH
+        exact ⟨true, t', hr, fun h => absurd h (by simp), hA, by rw [F.low.rest.1]; rfl⟩)
+  -- Level F's result
+  have hEq : (initCore false).run s = ((forIn (List.range (P.H + 1)) PUnit.unit initF) >>=
+      fun _ => (modify fun t => { t with ready := true } : CM PUnit)).run (prepStart P true) := by
+    rw [OM.Proof.Top.initCore_eager_eq, hsP]; rfl
+  have hR' : (forIn (List.range (P.H + 1)) PUnit.unit initF).run (prepStart P true) = .ok () t' := hR
+  have hF : (initCore false).run s = .ok () { t' with ready := true } := by
+    rw [hEq, OM.Proof.run_bind, hR']; rfl
+  rw [hF] at h; injection h with _ h; subst h
+  have e4 : evalF κ (.wr (.s .notReady) 0 0) t' L2 = .ok { t' with ready := true } L2 3 := by
+    simp [evalF, Exp.ev, Fld.set, SF.ok, SF.set, Exp.cost]
+  exact ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_ite_f (by simp [Exp.ev, hlz]) (evalF_seq_ok2 e3 e4))),
+    by simp [Exp.cost, prepStart, initState] at hn3 ⊢; omega⟩
 
 end OM.Impl
