@@ -249,28 +249,44 @@ def insertAroundIn (v v1 v2 : Nat) (q : Nat × Nat × Nat) : CM Unit := do
 def setParent (h w e : Nat) : CM Unit :=
   if h == 1 then setLpar e w else modN e fun n => { n with livePar := w }
 
+/-- `startDrain`'s cut of the children with weights `ws`: the greedy cut `k0`, then (`hh`, above
+height 1) moved so as not to separate a pair (`pr k`: children `k - 1, k` are a drain's targets). -/
+def drainCut (ws : List Nat) (pr : Nat → Bool) (hh : Bool) : Nat :=
+  let n := ws.length
+  let k0 := max (cutLen (ws.take (n - 1)) (ws.sum / 2)) 1
+  let k1 := if hh then shiftR pr n n k0 else k0
+  if hh && decide (k1 ≥ n) then shiftL pr n (n - 1) else k1
+
+/-- The weight `startDrain` gives child `e` of a node of height `h`. -/
+def drainWt (ns : Array Node) (h e : Nat) : Nat := if h == 1 then 1 else (ns.getX e).weight
+
+/-- Children `k - 1`, `k` are the targets of one drain. -/
+def drainPr (ns : Array Node) (kids : List Nat) (k : Nat) : Bool :=
+  sameDrainN ns (kids.getD (k - 1) 0) (kids.getD k 0)
+
+/-- The entries of `V`'s table that move to the new nodes: chunks, children, and ghosts with a
+range. -/
+def drainEntries (ns : Array Node) (V : Node) : List Nat :=
+  V.order.filter fun e => V.height == 1 || V.children.contains e || (ns.getX e).first != NIL
+
+/-- The side of every entry of `V`'s table: by position from `boundary`, a ghost then taking the
+side of its first target. -/
+def drainSide (ns : Array Node) (V : Node) (boundary : Nat) : Option (List (Nat × Side)) :=
+  let side0 := sidesOf V.order boundary
+  if V.height > 1 then fixSides ns (drainEntries ns V) side0 else some side0
+
 def startDrain (v : Nat) : CM Unit := do
   let P ← getP
   let V ← getN v
   let h := V.height
-  let kids := V.children.toArray
-  if kids.size < 2 then return
+  let kids := V.children
+  if kids.length < 2 then return
   let s0 ← get
-  let wt (e : Nat) : Nat := if h == 1 then 1 else (s0.nodes.getX e).weight
-  let total := (kids.toList.map wt).sum
-  -- partition the live children by weight
-  let k0 := max (cutLen ((kids.toList.map wt).take (kids.size - 1)) (total / 2)) 1
-  -- never separate the two targets of a still-active drain
-  let pr (k : Nat) : Bool := sameDrainN s0.nodes kids[k - 1]! kids[k]!
-  let k1 := if h > 1 then shiftR pr kids.size kids.size k0 else k0
-  let k := if h > 1 && k1 ≥ kids.size then shiftL pr kids.size (kids.size - 1) else k1
+  -- partition the live children by weight, never separating the targets of an active drain
+  let k := drainCut (kids.map (drainWt s0.nodes h)) (drainPr s0.nodes kids) (h > 1)
   if h > 1 && k == 0 then return
-  let boundary := kids[k]!
-  let order := V.order
-  let entries := order.filter fun e =>
-    h == 1 || kids.contains e || (s0.nodes.getX e).first != NIL
-  let side0 := sidesOf order boundary
-  let some side := (if h > 1 then fixSides s0.nodes entries side0 else some side0)
+  let entries := drainEntries s0.nodes V
+  let some side := drainSide s0.nodes V (kids.getD k 0)
     | guard "start_drain: target has no side"
   let sideOf (e : Nat) : Option Side := lookup side e
   let left := entries.filter (sideOf · == some .left)
@@ -286,15 +302,17 @@ def startDrain (v : Nat) : CM Unit := do
   modN v2 fun n => { n with inTables := V.inTables, table := evenTable P.beta right }
   left.forM (addTable (h - 1) v1)
   right.forM (addTable (h - 1) v2)
-  if !kids.toList.all (fun e => (sideOf e).isSome) then guard "start_drain: child has no side"
-  let ch1 := kids.toList.filter (sideOf · == some .left)
-  let ch2 := kids.toList.filter (sideOf · == some .right)
+  if !kids.all (fun e => (sideOf e).isSome) then guard "start_drain: child has no side"
+  let ch1 := kids.filter (sideOf · == some .left)
+  let ch2 := kids.filter (sideOf · == some .right)
   ch1.forM (setParent h v1)
   modN v1 fun n => { n with
-    children := ch1, weight := (ch1.map wt).sum, livePar := V.livePar, overflowOf := v }
+    children := ch1, weight := (ch1.map (drainWt s0.nodes h)).sum, livePar := V.livePar,
+    overflowOf := v }
   ch2.forM (setParent h v2)
   modN v2 fun n => { n with
-    children := ch2, weight := (ch2.map wt).sum, livePar := V.livePar, overflowOf := v }
+    children := ch2, weight := (ch2.map (drainWt s0.nodes h)).sum, livePar := V.livePar,
+    overflowOf := v }
   let par ← getN V.livePar
   if !par.children.contains v then guard "start_drain: not a child of its parent"
   modN V.livePar fun n => { n with children := n.children.replace1 v [v1, v2] }

@@ -101,20 +101,13 @@ theorem sum_take_le (ws : List Nat) {a b : Nat} (h : a ≤ b) : (ws.take a).sum 
   rw [this]
   exact List.Sublist.sum_le_sum (List.take_sublist _ _) (by simp)
 
-/-- The cut of `startDrain` (`k0`, then the pair shifts when `hh`). -/
-def cutK (ws : List Nat) (pr : Nat → Bool) (hh : Bool) : Nat :=
-  let n := ws.length
-  let k0 := max (cutLen (ws.take (n - 1)) (ws.sum / 2)) 1
-  let k1 := if hh then shiftR pr n n k0 else k0
-  if hh && decide (k1 ≥ n) then shiftL pr n (n - 1) else k1
-
 /-- **Lemma T0.** The cut is strictly inside, does not separate a pair, and both parts weigh at
 most `⌊S/2⌋ + U`. -/
 theorem cutK_spec (ws : List Nat) (pr : Nat → Bool) (hh : Bool) (U : Nat) (hn : 2 ≤ ws.length)
     (hp : PairsOK pr ws.length) (hU1 : ∀ i, i < ws.length → ws.getD i 0 ≤ U)
     (hU2 : ∀ k, pr k = true → ws.getD (k - 1) 0 + ws.getD k 0 ≤ U)
     (hgive : hh = true → ¬ (ws.length = 2 ∧ pr 1 = true)) :
-    let k := cutK ws pr hh
+    let k := drainCut ws pr hh
     1 ≤ k ∧ k ≤ ws.length - 1 ∧ (hh = true → pr k = false) ∧
       (ws.take k).sum ≤ ws.sum / 2 + U ∧ ws.sum - (ws.take k).sum ≤ ws.sum / 2 + U := by
   intro k
@@ -167,7 +160,7 @@ theorem cutK_spec (ws : List Nat) (pr : Nat → Bool) (hh : Bool) (U : Nat) (hn 
   -- the cut
   cases hh with
   | false =>
-    have hk : k = k0 := by simp [k, cutK, hk0, hc, hnd, hS]
+    have hk : k = k0 := by simp [k, drainCut, hk0, hc, hnd, hS]
     rw [hk]
     exact ⟨hk0b.1, hk0b.2, fun h => absurd h (by simp), hk0L, hk0R⟩
   | true =>
@@ -177,7 +170,7 @@ theorem cutK_spec (ws : List Nat) (pr : Nat → Bool) (hh : Bool) (U : Nat) (hn 
     · rw [if_pos ⟨by omega, by omega, hpk⟩] at hk1
       by_cases hend : k0 + 1 < n
       · have hk : k = k0 + 1 := by
-          simp only [k, cutK, ← hnd, ← hS, ← hc, ← hk0, if_true, Bool.true_and]
+          simp only [k, drainCut, ← hnd, ← hS, ← hc, ← hk0, if_true, Bool.true_and]
           rw [hk1, if_neg (by simp; omega)]
         rw [hk]
         refine ⟨by omega, by omega, fun _ => (hp k0 hpk).2.2, ?_, ?_⟩
@@ -200,7 +193,7 @@ theorem cutK_spec (ws : List Nat) (pr : Nat → Bool) (hh : Bool) (U : Nat) (hn 
           apply hgv; refine ⟨by omega, ?_⟩
           rw [show 1 = k0 by omega]; exact hpk
         have hk : k = n - 2 := by
-          simp only [k, cutK, ← hnd, ← hS, ← hc, ← hk0, if_true, Bool.true_and]
+          simp only [k, drainCut, ← hnd, ← hS, ← hc, ← hk0, if_true, Bool.true_and]
           rw [hk1, if_pos (by simp; omega), shiftL_eq pr n hp (n - 1) n hn,
             if_pos ⟨by omega, by rw [← hkn]; exact hpk⟩]
           omega
@@ -226,7 +219,7 @@ theorem cutK_spec (ws : List Nat) (pr : Nat → Bool) (hh : Bool) (U : Nat) (hn 
           omega
     · rw [if_neg (fun h => hpk h.2.2)] at hk1
       have hk : k = k0 := by
-        simp only [k, cutK, ← hnd, ← hS, ← hc, ← hk0, if_true, Bool.true_and]
+        simp only [k, drainCut, ← hnd, ← hS, ← hc, ← hk0, if_true, Bool.true_and]
         rw [hk1, if_neg (by simp; omega)]
       rw [hk]
       exact ⟨hk0b.1, hk0b.2, fun _ => by simpa using hpk, hk0L, hk0R⟩
