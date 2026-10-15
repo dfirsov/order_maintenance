@@ -1,0 +1,222 @@
+import OM.Impl.ListErase
+import OM.Impl.StartDrain
+import OM.Proof.Top.RunFinish
+
+/-!
+# M6: the end of a drain (`finishDrain`) at Level M
+
+Ghost `v` leaves the tables of its entries (`dropTable`), the tables holding it lose its entry
+(`dropEntry`, with `assocErase`), its targets are released and it dies. The state reached is Level
+F's `fdS v s` (`finishDrain_run`).
+-/
+
+namespace OM.Impl
+
+open OM.Model
+open OM.Proof.Top
+open OM.Machine (Reg BinOp UnOp)
+
+local notation "upd" => OM.Machine.State.upd
+
+/-! ### `dropTable` -/
+
+/-- Remove `v` from list `k` of record `e`, if there (locals `e v`). -/
+def dropS (k : LK) : Stm :=
+  (findP k).call [.var "e", .var "v"] ["r"] ;; "n" ::= .llen k "e" ;;
+  .ite ("r" <ₑ "n") ((eraseIdxP k).call [.var "e", .var "r"] []) .skip
+
+theorem dropS_ok {κ : Caps} {k : LK} {s : Core} {L : Loc} {e v : Nat} (he : L "e" = e) (hv : L "v" = v)
+    (her : e < κ.lrec k) (hcap : (k.view s e).length ≤ κ.lcap k)
+    (hok : (k.view s e).findIdx (·.1 == v) < (k.view s e).length → k.idOk s e ∧ k.recOk s e = true) :
+    ∃ L' c, evalF κ (dropS k) s L =
+      .ok (if (k.view s e).findIdx (·.1 == v) < (k.view s e).length then
+        k.put s e ((k.view s e).eraseIdx ((k.view s e).findIdx (·.1 == v))) else s) L' c ∧
+      c ≤ 150 + 100 * (k.view s e).length ∧ ∀ r, r ≠ "r" → r ≠ "n" → L' r = L r := by
+  set l := k.view s e
+  set r := l.findIdx (·.1 == v)
+  obtain ⟨Lf, cf, ef, hrf, hcf⟩ := findP_agree κ k s
+    (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [e, v]) (i := e) (x := v)
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) her
+  replace hcf : cf ≤ 20 + 20 * l.length := hcf
+  have e1 := evalF_call_ok (q := findP k) (args := [.var "e", .var "v"]) (ds := ["r"]) (L := L)
+    (by simp [evList, Exp.ev, he, hv]) ef
+  set L1 := OM.Machine.State.setLocs L ["r"] ((findP k).rets.map Lf)
+  have hL1 : ∀ q, q ≠ "r" → L1 q = L q := fun q h => by
+    simp [L1, findP, OM.Machine.State.setLocs, OM.Machine.State.upd, h]
+  have h1r : L1 "r" = r := by simp [L1, OM.Machine.State.setLocs, OM.Machine.State.upd, findP, hrf]; rfl
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := L1) (x := "n") (e := .llen k "e") (v := l.length)
+    (by simp [Exp.ev, hL1 "e" (by decide), he, her, l])
+  set L2 := upd L1 "n" l.length
+  have h2 : ∀ q, q ≠ "r" → q ≠ "n" → L2 q = L q := fun q h1 h2 => by
+    simp only [L2, OM.Machine.State.upd, if_neg h2]; exact hL1 q h1
+  by_cases hf : r < l.length
+  · obtain ⟨hid, hr⟩ := hok hf
+    obtain ⟨Le, ce, ee, hce⟩ := eraseIdxP_agree κ k s (OM.Machine.State.setLocs (fun _ => 0) ["i", "p"] [e, r])
+      (i := e) (p := r) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hf hid hr her hcap
+    replace hce : ce ≤ 100 + 70 * l.length := hce
+    have e3 := evalF_call_ok (q := eraseIdxP k) (args := [.var "e", .var "r"]) (ds := []) (L := L2)
+      (by simp [evList, Exp.ev, L2, OM.Machine.State.upd, hL1 "e" (by decide), he, h1r]) ee
+    rw [if_pos hf]
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_ite_t (v := 1)
+      (by simp [Exp.ev, OM.Machine.BinOp.eval, L2, OM.Machine.State.upd, h1r, hf]) one_ne_zero e3)), ?_, ?_⟩
+    · simp only [Exp.cost, costList, List.map, List.sum_cons, List.sum_nil, List.length_nil, List.length_cons] at hcf hce ⊢
+      omega
+    · intro q h1 h2'; simp only [OM.Machine.State.setLocs, eraseIdxP, List.map]; exact h2 q h1 h2'
+  · rw [if_neg hf]
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_ite_f
+      (by simp [Exp.ev, OM.Machine.BinOp.eval, L2, OM.Machine.State.upd, h1r, hf]) evalF_skip)), ?_, h2⟩
+    · simp only [Exp.cost, costList, List.map, List.sum_cons, List.sum_nil, List.length_nil, List.length_cons] at hcf ⊢
+      omega
+
+theorem erase_eq_eraseIdx' (l : List Nat) (a : Nat) : l.erase a = l.eraseIdx (l.findIdx (· == a)) :=
+  List.erase_eq_eraseIdx_of_idxOf rfl
+
+theorem findIdx_lt_iff_contains (l : List Nat) (a : Nat) : l.findIdx (· == a) < l.length ↔ l.contains a = true := by
+  rw [List.findIdx_lt_length]; simp
+
+theorem getX_nonempty {α : Type} [Inhabited α] {a : Array (List α)} {i : Nat} (h : a.getX i ≠ [])
+    (hd : (default : List α) = []) : i < a.size := by
+  by_contra hc; apply h; unfold Array.getX Array.getD; rw [dif_neg hc]; exact hd
+
+/-- `dropS .cin` is `dropTableS` at height 0. -/
+theorem dropS_cin_eq (s : Core) (v e : Nat) :
+    (if (LK.view s e .cin).findIdx (·.1 == v) < (LK.view s e .cin).length then
+      LK.put s e ((LK.view s e .cin).eraseIdx ((LK.view s e .cin).findIdx (·.1 == v))) .cin else s) =
+    dropTableS v 0 s e := by
+  simp only [LK.view, findIdx_pair0', List.length_map, findIdx_lt_iff_contains, dropTableS, beq_self_eq_true,
+    if_true]
+  split
+  · simp only [LK.put, ← List.eraseIdx_map, List.map_map, Function.comp_def, List.map_id', erase_eq_eraseIdx']
+  · rfl
+
+/-- `dropS .inTab` is `dropTableS` above height 0. -/
+theorem dropS_inTab_eq (s : Core) (v e hh : Nat) (hh0 : hh ≠ 0) :
+    (if (LK.view s e .inTab).findIdx (·.1 == v) < (LK.view s e .inTab).length then
+      LK.put s e ((LK.view s e .inTab).eraseIdx ((LK.view s e .inTab).findIdx (·.1 == v))) .inTab else s) =
+    dropTableS v hh s e := by
+  simp only [LK.view, findIdx_pair0', List.length_map, findIdx_lt_iff_contains, dropTableS,
+    show (hh == 0) = false by simpa using hh0, Bool.false_eq_true, if_false]
+  split
+  · simp only [LK.put, ← List.eraseIdx_map, List.map_map, Function.comp_def, List.map_id', erase_eq_eraseIdx']
+  · rfl
+
+def dtBody : Stm := "e" ::= .lrd .table false "v" "j" ;; .ite ("hh" =ₑ 0) (dropS .cin) (dropS .inTab)
+
+theorem dropTableS_cin_len (v hh : Nat) (s : Core) (e e' : Nat) :
+    ((dropTableS v hh s e').cin.getX e).length ≤ (s.cin.getX e).length := by
+  unfold dropTableS
+  split_ifs
+  · simp only [getX_setX']; split
+    · next h => subst h; exact List.length_erase_le
+    · exact le_refl _
+  all_goals exact le_refl _
+
+theorem dropTableS_inTab_len (v hh : Nat) (s : Core) (e e' : Nat) :
+    ((dropTableS v hh s e').nodes.getX e).inTables.length ≤ (s.nodes.getX e).inTables.length := by
+  rw [dropTableS_getX]; split
+  · simp [List.length_erase]; split <;> omega
+  · exact le_refl _
+
+theorem dropTableS_nodes_size (v hh : Nat) (s : Core) (e : Nat) :
+    (dropTableS v hh s e).nodes.size = s.nodes.size := by
+  unfold dropTableS; split_ifs <;> simp
+
+theorem foldl_dropTableS_len (v hh : Nat) (e : Nat) : ∀ (l : List Nat) (s : Core),
+    ((l.foldl (dropTableS v hh) s).cin.getX e).length ≤ (s.cin.getX e).length ∧
+    ((l.foldl (dropTableS v hh) s).nodes.getX e).inTables.length ≤ (s.nodes.getX e).inTables.length ∧
+    (l.foldl (dropTableS v hh) s).nodes.size = s.nodes.size
+  | [], _ => ⟨le_refl _, le_refl _, rfl⟩
+  | x :: t, s => by
+    simp only [List.foldl_cons]
+    obtain ⟨h1, h2, h3⟩ := foldl_dropTableS_len v hh e t (dropTableS v hh s x)
+    exact ⟨h1.trans (dropTableS_cin_len v hh s e x), h2.trans (dropTableS_inTab_len v hh s e x),
+      h3.trans (dropTableS_nodes_size v hh s x)⟩
+
+theorem dtBody_ok {κ : Caps} {X : Core} {L : Loc} {v hh e j B : Nat} (hv : L "v" = v) (hhh : L "hh" = hh)
+    (hj : j < (X.nodes.getX v).table.length) (he : ((X.nodes.getX v).table.getD j (0, 0)).1 = e)
+    (hvr : v < κ.lrec .table) (hec : e < κ.lrec .cin) (hei : e < κ.lrec .inTab)
+    (hcc : (X.cin.getX e).length ≤ κ.lcap .cin) (hci : (X.nodes.getX e).inTables.length ≤ κ.lcap .inTab)
+    (hBc : (X.cin.getX e).length ≤ B) (hBi : (X.nodes.getX e).inTables.length ≤ B) :
+    ∃ L' c, evalF κ dtBody X (upd L "j" j) = .ok (dropTableS v hh X e) L' c ∧ c ≤ 170 + 100 * B ∧
+      ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "r" → r ≠ "n" → L' r = L r := by
+  have a1 := evalF_assign_ok (κ := κ) (s := X) (L := upd L "j" j) (x := "e") (e := .lrd .table false "v" "j") (v := e)
+    (by simp [Exp.ev, OM.Machine.State.upd, hv, hvr, LK.view, hj, ← he])
+  set L1 := upd (upd L "j" j) "e" e
+  have h1e : L1 "e" = e := by simp [L1, OM.Machine.State.upd]
+  have h1v : L1 "v" = v := by simp [L1, OM.Machine.State.upd, hv]
+  have h1F : ∀ r, r ≠ "j" → r ≠ "e" → L1 r = L r := fun r a b => by simp [L1, OM.Machine.State.upd, a, b]
+  by_cases hh0 : hh = 0
+  · obtain ⟨L2, c2, e2, hc2, hF2⟩ := dropS_ok (κ := κ) (k := .cin) (s := X) (L := L1) (e := e) (v := v) h1e h1v hec
+      (by simpa [LK.view] using hcc)
+      (fun hf => by
+        refine ⟨?_, rfl⟩
+        simp only [LK.idOk]
+        apply getX_nonempty (hd := rfl)
+        intro h0; simp [LK.view, h0] at hf)
+    rw [dropS_cin_eq] at e2
+    rw [hh0]
+    refine ⟨L2, _, evalF_seq_ok2 a1 (evalF_ite_t (v := 1)
+      (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd, hhh, hh0]) one_ne_zero e2), ?_,
+      fun r a b c d => (hF2 r c d).trans (h1F r a b)⟩
+    simp only [LK.view, List.length_map] at hc2; simp only [Exp.cost]; nlinarith
+  · obtain ⟨L2, c2, e2, hc2, hF2⟩ := dropS_ok (κ := κ) (k := .inTab) (s := X) (L := L1) (e := e) (v := v) h1e h1v hei
+      (by simpa [LK.view] using hci)
+      (fun hf => by
+        have hlt : e < X.nodes.size := by
+          by_contra hc
+          have : X.nodes.getX e = default := getX_size_le (by omega)
+          simp [LK.view, this] at hf
+          exact absurd hf (by simp [show (default : Node).inTables = [] from rfl])
+        exact ⟨by simp [LK.idOk, LK.recOk, hlt], by simp [LK.recOk, hlt]⟩)
+    rw [dropS_inTab_eq X v e hh hh0] at e2
+    refine ⟨L2, _, evalF_seq_ok2 a1 (evalF_ite_f
+      (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd, hhh, hh0]) e2), ?_,
+      fun r a b c d => (hF2 r c d).trans (h1F r a b)⟩
+    simp only [LK.view, List.length_map] at hc2; simp only [Exp.cost]; nlinarith
+
+def dtLoopS : Stm := "m" ::= .llen .table "v" ;; .loop "j" "m" dtBody
+
+theorem dtLoopS_ok {κ : Caps} {s : Core} {L : Loc} {v hh B : Nat} (hv : L "v" = v) (hhh : L "hh" = hh)
+    (hvr : v < κ.lrec .table)
+    (hcap : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
+      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B) :
+    ∃ L' c, evalF κ dtLoopS s L = .ok ((s.nodes.getX v).order.foldl (dropTableS v hh) s) L' c ∧
+      c ≤ 5 + (s.nodes.getX v).table.length * (171 + 100 * B) ∧
+      ∀ r, r ≠ "m" → r ≠ "j" → r ≠ "e" → r ≠ "r" → r ≠ "n" → L' r = L r := by
+  set tab := (s.nodes.getX v).table
+  set ord := (s.nodes.getX v).order
+  have hord : ord = tab.map (·.1) := rfl
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "m") (e := .llen .table "v") (v := tab.length)
+    (by simp [Exp.ev, hv, hvr, LK.view, tab])
+  set L1 := upd L "m" tab.length
+  obtain ⟨S', L', c, he, hc, hS', hF⟩ := evalF_loop (κ := κ) (x := "j") (n := .var "m") (b := dtBody)
+    (s := s) (L := L1) (N := tab.length) (by simp [Exp.ev, L1, OM.Machine.State.upd])
+    (fun j S L' => S = (ord.take j).foldl (dropTableS v hh) s ∧
+      ∀ r, r ≠ "m" → r ≠ "j" → r ≠ "e" → r ≠ "r" → r ≠ "n" → L' r = L r) (170 + 100 * B)
+    ⟨by simp, fun r h1 _ _ _ _ => by simp [L1, OM.Machine.State.upd, h1]⟩
+    (by
+      intro j hj S L2 ⟨hS, hF2⟩
+      subst hS
+      set X := (ord.take j).foldl (dropTableS v hh) s
+      have hjo : j < ord.length := by simp [hord]; exact hj
+      have hXt : (X.nodes.getX v).table = tab := foldl_dropTableS_table v hh _ s v
+      have hem : ord[j] ∈ ord := List.getElem_mem hjo
+      obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hcap _ hem
+      obtain ⟨g1, g2, -⟩ := foldl_dropTableS_len v hh ord[j] (ord.take j) s
+      replace g1 : (X.cin.getX ord[j]).length ≤ (s.cin.getX ord[j]).length := g1
+      replace g2 : (X.nodes.getX ord[j]).inTables.length ≤ (s.nodes.getX ord[j]).inTables.length := g2
+      obtain ⟨L3, c3, e3, hc3, hF3⟩ := dtBody_ok (κ := κ) (X := X) (L := L2) (v := v) (hh := hh) (e := ord[j]) (j := j)
+        (B := B) (by rw [hF2 "v" (by decide) (by decide) (by decide) (by decide) (by decide), hv])
+        (by rw [hF2 "hh" (by decide) (by decide) (by decide) (by decide) (by decide), hhh]) (by rw [hXt]; exact hj)
+        (by rw [hXt, List.getD_eq_getElem _ _ hj]; simp [hord]) hvr h1 h2 (by omega) (by omega) (by omega) (by omega)
+      refine ⟨_, L3, c3, e3, hc3, ?_, fun r a b c d e => (hF3 r b c d e).trans (hF2 r a b c d e)⟩
+      simp only [X, List.take_succ_eq_append_getElem hjo, List.foldl_append, List.foldl_cons, List.foldl_nil])
+  rw [hS', show tab.length = ord.length by simp [hord], List.take_length] at he
+  refine ⟨L', _, evalF_seq_ok2 a1 he, ?_, hF⟩
+  have e : tab.length * (1 + (170 + 100 * B)) = tab.length * (171 + 100 * B) := by ring
+  simp only [Exp.cost] at hc ⊢; omega
+
+end OM.Impl
