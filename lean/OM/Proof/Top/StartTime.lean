@@ -10,6 +10,9 @@ open OM.Model OM.Proof
 
 set_option linter.deprecated false
 
+/-- The job after the walk starts a drain at `v` (`up` its live parent). -/
+def drainJob (j : Job) (v up : Nat) : Job := { j with pc := .afterDrain v up }
+
 namespace SDCtx
 
 variable {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat} {j : Job} {v : Nat}
@@ -158,6 +161,93 @@ theorem pend_mem {x : Nat} : x ∈ pend S' (some { j with pc := .afterDrain v (n
     rcases List.mem_cons.mp h with h | h
     · exact absurd h hxv
     · exact h
+
+
+theorem y_mem : j.y ∈ cl := by
+  obtain ⟨⟨A, B, hAB⟩, -⟩ := C.I.job j rfl
+  rw [hAB]; simp
+
+theorem rng_old {g : Nat} (hg : Top.isN (ts s) g) : rng S' cl g = rng (ts s) cl g := by
+  have hn := C.nN g hg
+  unfold rng; rw [C.ht g, if_neg (fun h => h.elim hn.1 hn.2)]; congr 1; funext c; rw [C.pp]
+
+theorem funded_old {g : Nat} (hg : Top.ghostN (ts s) g) :
+    funded S' (some (drainJob j v (nd (ts s) v).livePar)) g ↔ funded (ts s) (some j) g := by
+  have hvlt := C.H.hv
+  have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+  have hgn := C.nN g hg.1
+  have hgnn : ¬(g = s.nodes.size ∨ g = s.nodes.size + 1) := fun h => h.elim hgn.1 hgn.2
+  obtain ⟨g1, g2, -, -, h5, h6, -⟩ := C.S.ghost g hg
+  have ht1v : (nd (ts s) g).t1 ≠ v := fun e => by rw [e] at h5; rw [show Top.srcOf (ts s) v = NIL from C.of] at h5; exact hg.1.1 h5.symm
+  have ht2v : (nd (ts s) g).t2 ≠ v := fun e => by rw [e] at h6; rw [show Top.srcOf (ts s) v = NIL from C.of] at h6; exact hg.1.1 h6.symm
+  have h1n := C.nN _ g1.1
+  have h2n := C.nN _ g2.1
+  show Top.anc S' j.y (Top.ht S' g) = (nd S' g).t1 ∨ Top.anc S' j.y (Top.ht S' g) = (nd S' g).t2 ↔
+    Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t1 ∨ Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t2
+  rw [C.ht g, if_neg hgnn, C.H.t1, C.H.t2, if_neg hgv, if_neg hgv, if_neg hgnn, if_neg hgnn,
+    C.anc C.y_mem _ (C.S.htN g hg.1).2]
+  split
+  · next hb =>
+    rw [hb.1, hb.2]
+    constructor
+    · rintro (h | h) <;> split at h <;> omega
+    · rintro (h | h)
+      · exact absurd h.symm ht1v
+      · exact absurd h.symm ht2v
+  · rfl
+
+theorem slack_old {g : Nat} (hg : Top.ghostN (ts s) g) : slack S' (some (drainJob j v (nd (ts s) v).livePar)) g = slack (ts s) (some j) g := by
+  have hvlt := C.H.hv
+  have hgn := C.nN g hg.1
+  have hgnn : ¬(g = s.nodes.size ∨ g = s.nodes.size + 1) := fun h => h.elim hgn.1 hgn.2
+  have hf := C.funded_old hg
+  have hcur : curH (ts s) j = Top.ht (ts s) v := by unfold curH; rw [C.pc]; simp [C.v0]
+  have hcur' : curH S' (drainJob j v (nd (ts s) v).livePar) = Top.ht (ts s) v + 1 := by
+    show Top.ht S' v + 1 = _
+    have hvn := C.nN v C.vl.1
+    rw [C.ht v, if_neg (fun h => h.elim hvn.1 hvn.2)]
+  -- funded ghosts are not at `v`'s height
+  have hfh : funded (ts s) (some j) g → Top.ht (ts s) g ≠ Top.ht (ts s) v := by
+    intro hfd e
+    obtain ⟨-, -, -, -, h5, h6, -⟩ := C.S.ghost g hg
+    have hvy := C.vy
+    change Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t1 ∨
+      Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t2 at hfd
+    rw [e, ← hvy] at hfd
+    rcases hfd with h | h
+    · rw [← h, show Top.srcOf (ts s) v = NIL from C.of] at h5; exact hg.1.1 h5.symm
+    · rw [← h, show Top.srcOf (ts s) v = NIL from C.of] at h6; exact hg.1.1 h6.symm
+  have hpc := C.pc
+  unfold slack
+  simp only
+  by_cases hfd : funded (ts s) (some j) g
+  · have hfd' : funded S' (some (drainJob j v (nd (ts s) v).livePar)) g := hf.mpr hfd
+    have hne := hfh hfd
+    rw [if_pos (show Top.anc S' (drainJob j v (nd (ts s) v).livePar).y (Top.ht S' g) = (nd S' g).t1 ∨
+        Top.anc S' (drainJob j v (nd (ts s) v).livePar).y (Top.ht S' g) = (nd S' g).t2 from hfd'),
+      if_pos (show Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t1 ∨
+        Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t2 from hfd)]
+    rw [hcur, hcur', C.H.P, C.ht g, if_neg hgnn]
+    by_cases hle : Top.ht (ts s) v ≤ Top.ht (ts s) g
+    · rw [if_pos (by omega), if_pos hle]; rfl
+    · rw [if_neg (by omega), if_neg hle, hpc]; rfl
+  · rw [if_neg (show ¬(Top.anc S' (drainJob j v (nd (ts s) v).livePar).y (Top.ht S' g) = (nd S' g).t1 ∨
+        Top.anc S' (drainJob j v (nd (ts s) v).livePar).y (Top.ht S' g) = (nd S' g).t2) from fun h => hfd (hf.mp h)),
+      if_neg (show ¬(Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t1 ∨
+        Top.anc (ts s) j.y (Top.ht (ts s) g) = (nd (ts s) g).t2) from hfd)]
+
+theorem slack_v : slack S' (some (drainJob j v (nd (ts s) v).livePar)) v = 0 := by
+  have hvlt := C.H.hv
+  have hvn := C.nN v C.vl.1
+  have hcur' : curH S' (drainJob j v (nd (ts s) v).livePar) = Top.ht (ts s) v + 1 := by
+    show Top.ht S' v + 1 = _
+    rw [C.ht v, if_neg (fun h => h.elim hvn.1 hvn.2)]
+  unfold slack
+  simp only
+  rw [hcur', C.ht v, if_neg (show ¬(v = s.nodes.size ∨ v = s.nodes.size + 1) from fun h => h.elim hvn.1 hvn.2)]
+  split
+  · rw [if_neg (by omega)]; rfl
+  · rfl
 
 end SDCtx
 
