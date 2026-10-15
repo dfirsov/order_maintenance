@@ -534,6 +534,134 @@ theorem par_keep {k e : Nat} (he : Ent ord k e) (hk : k ≤ s.P.H)
           rw [par_live (Or.inr hel), if_neg (by have := C.h1; omega)] at this
           rw [par_live (Or.inr hel), if_neg hk0]; exact this
 
+/-- A part's members are entries of `v`'s table. -/
+theorem left_mem {e : Nat} (he : e ∈ sLeft (wiC s v) v side) : e ∈ Top.order (ts s) v :=
+  ((sw_entries C.pc C.v0 C.I C.lp C.TP C.of C.W).mp (List.mem_of_mem_filter he)).1
+theorem right_mem {e : Nat} (he : e ∈ sRight (wiC s v) v side) : e ∈ Top.order (ts s) v :=
+  ((sw_entries C.pc C.v0 C.I C.lp C.TP C.of C.W).mp (List.mem_of_mem_filter he)).1
+
+theorem order_ent {e : Nat} (he : e ∈ Top.order (ts s) v) : Ent ord (Top.ht (ts s) v - 1) e :=
+  C.S.tabEnt v C.vl.1 e he
+
+/-- **The tables of an old entry**: the new nodes join those of a part's members. -/
+theorem tabs_old {k e : Nat} (he : Ent ord k e) (hk : k ≤ s.P.H) : tabs S' k e = tabs (ts s) k e ++
+    (if k = Top.ht (ts s) v - 1 ∧ e ∈ sLeft (wiC s v) v side then [s.nodes.size] else []) ++
+    (if k = Top.ht (ts s) v - 1 ∧ e ∈ sRight (wiC s v) v side then [s.nodes.size + 1] else []) := by
+  by_cases hk0 : k = 0
+  · subst hk0
+    unfold tabs; rw [if_pos rfl, if_pos rfl, C.H.cin]
+    by_cases h1 : Top.ht (ts s) v - 1 = 0
+    · rw [if_pos h1]
+      by_cases hr : e ∈ sRight (wiC s v) v side <;> by_cases hl : e ∈ sLeft (wiC s v) v side <;>
+        simp [hr, hl, h1]
+    · rw [if_neg h1, if_neg (fun h => h1 h.1.symm), if_neg (fun h => h1 h.1.symm)]; simp
+  · obtain ⟨hn, hh⟩ := (C.S.ordMem k (by omega) hk e).mp he
+    have hen := C.nN e hn
+    unfold tabs; rw [if_neg hk0, if_neg hk0, C.H.inTables, if_neg (fun h => h.elim hen.1 hen.2)]
+    have cl : (Top.ht (ts s) v - 1 ≠ 0 ∧ e ∈ sLeft (wiC s v) v side) ↔
+        (k = Top.ht (ts s) v - 1 ∧ e ∈ sLeft (wiC s v) v side) := by
+      constructor
+      · rintro ⟨h1, hl⟩
+        have := (C.S.ordMem _ (by omega) (by have := C.hH; show _ ≤ s.P.H; omega) e).mp (C.order_ent (C.left_mem hl))
+        exact ⟨by omega, hl⟩
+      · rintro ⟨rfl, hl⟩; exact ⟨hk0, hl⟩
+    have cr : (Top.ht (ts s) v - 1 ≠ 0 ∧ e ∈ sRight (wiC s v) v side) ↔
+        (k = Top.ht (ts s) v - 1 ∧ e ∈ sRight (wiC s v) v side) := by
+      constructor
+      · rintro ⟨h1, hl⟩
+        have := (C.S.ordMem _ (by omega) (by have := C.hH; show _ ≤ s.P.H; omega) e).mp (C.order_ent (C.right_mem hl))
+        exact ⟨by omega, hl⟩
+      · rintro ⟨rfl, hl⟩; exact ⟨hk0, hl⟩
+    by_cases a : k = Top.ht (ts s) v - 1 ∧ e ∈ sLeft (wiC s v) v side
+    · rw [if_pos (cl.mpr a), if_pos a]
+      by_cases b : k = Top.ht (ts s) v - 1 ∧ e ∈ sRight (wiC s v) v side
+      · rw [if_pos (cr.mpr b), if_pos b]
+      · rw [if_neg (fun h => b (cr.mp h)), if_neg b]
+    · rw [if_neg (fun h => a (cl.mp h)), if_neg a]
+      by_cases b : k = Top.ht (ts s) v - 1 ∧ e ∈ sRight (wiC s v) v side
+      · rw [if_pos (cr.mpr b), if_pos b]
+      · rw [if_neg (fun h => b (cr.mp h)), if_neg b]
+
+theorem tabs_new {e : Nat} (hen : e = s.nodes.size ∨ e = s.nodes.size + 1) :
+    tabs S' (Top.ht (ts s) v) e = (nd (ts s) v).inTables := by
+  unfold tabs; rw [if_neg (by have := C.h1; omega), C.H.inTables, if_pos hen]
+
+theorem order_mem {X e : Nat} : e ∈ Top.order S' X ↔
+    (X = s.nodes.size ∧ e ∈ sLeft (wiC s v) v side) ∨ (X = s.nodes.size + 1 ∧ e ∈ sRight (wiC s v) v side) ∨
+    (X ≠ s.nodes.size ∧ X ≠ s.nodes.size + 1 ∧ (e ∈ Top.order (ts s) X ∨
+      (X ∈ (nd (ts s) v).inTables ∧ (e = s.nodes.size ∨ e = s.nodes.size + 1)))) := by
+  rw [C.order]
+  by_cases h1 : X = s.nodes.size
+  · rw [if_pos h1]; simp [h1]
+  · rw [if_neg h1]
+    by_cases h2 : X = s.nodes.size + 1
+    · rw [if_pos h2]; simp [h2]
+    · rw [if_neg h2]
+      simp only [h1, h2, false_and, false_or, ne_eq, not_false_eq_true, true_and]
+      split
+      · next hT =>
+        have hv := (C.inTab X hT).2.2
+        constructor
+        · intro he
+          rcases mem_replace1 he with h | h
+          · exact Or.inl h
+          · simp only [List.mem_cons, List.not_mem_nil, or_false] at h
+            rcases h with rfl | rfl | rfl
+            · exact Or.inr ⟨hT, Or.inl rfl⟩
+            · exact Or.inl hv
+            · exact Or.inr ⟨hT, Or.inr rfl⟩
+        · rintro (h | ⟨-, rfl | rfl⟩)
+          · by_cases hev : e = v
+            · subst hev; exact mem_replace1_new hv (by simp)
+            · exact mem_replace1_of_ne h hev
+          · exact mem_replace1_new hv (by simp)
+          · exact mem_replace1_new hv (by simp)
+      · next hT => simp [hT]
+
+theorem sh_tabEnt : ∀ X, Top.isN S' X → ∀ e ∈ Top.order S' X, Ent O' (Top.ht S' X - 1) e := by
+  intro X hX e he
+  have hvlt := C.H.hv
+  unfold Ent
+  rw [C.order_mem] at he
+  rcases he with ⟨rfl, he⟩ | ⟨rfl, he⟩ | ⟨h1, h2, he⟩
+  · rw [C.ht _, if_pos (Or.inl rfl), C.ord_mem]; exact Or.inl (C.order_ent (C.left_mem he))
+  · rw [C.ht _, if_pos (Or.inr rfl), C.ord_mem]; exact Or.inl (C.order_ent (C.right_mem he))
+  · rw [C.isN] at hX
+    have hX' : Top.isN (ts s) X := by rcases hX with h | h | h; exact h; exact absurd h h1; exact absurd h h2
+    rw [C.ht _, if_neg (fun h => h.elim h1 h2), C.ord_mem]
+    rcases he with he | ⟨hT, hen⟩
+    · exact Or.inl (C.S.tabEnt X hX' e he)
+    · right; rw [(C.inTab X hT).2.1, Nat.add_sub_cancel]; exact ⟨rfl, hen⟩
+
+theorem left_par {e : Nat} (he : e ∈ sLeft (wiC s v) v side) :
+    par S' (Top.ht (ts s) v - 1) e = s.nodes.size := by
+  have ho := C.left_mem he
+  obtain ⟨hr, hp⟩ := C.par_v (C.order_ent ho) (sp_par C.pc C.v0 C.I C.lp C.TP C.of C.W ho)
+  rw [hp, if_pos]
+  obtain ⟨-, -, hkk⟩ := C.S.kids v C.vl
+  rcases (sw_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mp he with h | ⟨h2, -, hd, -, ht1⟩
+  · split
+    · next hc => have := (hkk e (List.mem_of_mem_take h)).2 hc.1; rw [this.2] at hc; exact absurd hc.2 (by simp)
+    · exact h
+  · rw [if_pos ⟨h2, hd⟩]; exact ht1
+
+theorem right_par {e : Nat} (he : e ∈ sRight (wiC s v) v side) :
+    par S' (Top.ht (ts s) v - 1) e = s.nodes.size + 1 := by
+  have ho := C.right_mem he
+  obtain ⟨hr, hp⟩ := C.par_v (C.order_ent ho) (sp_par C.pc C.v0 C.I C.lp C.TP C.of C.W ho)
+  rw [hp, if_neg]
+  obtain ⟨-, -, hkk⟩ := C.S.kids v C.vl
+  have hnot : ∀ x ∈ (nd (ts s) v).children.drop (sK (wiC s v) v),
+      x ∉ (nd (ts s) v).children.take (sK (wiC s v) v) := fun x hx => by
+    rcases C.kids_split (List.mem_of_mem_drop hx) with ⟨-, b⟩ | ⟨a, -⟩
+    · exact absurd hx b
+    · exact a
+  rcases (sw_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mp he with h | ⟨h2, -, hd, -, ht1⟩
+  · split
+    · next hc => have := (hkk e (List.mem_of_mem_drop h)).2 hc.1; rw [this.2] at hc; exact absurd hc.2 (by simp)
+    · exact hnot e h
+  · rw [if_pos ⟨h2, hd⟩]; exact hnot _ ht1
+
 end SDCtx
 
 end OM.Proof.Top
