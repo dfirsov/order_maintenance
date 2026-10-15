@@ -73,6 +73,36 @@ theorem ins_sub : cl.Sublist (clIns cl x s.C.size (s.C.size + 1)) := by
   rw [hcl', hcl]
   exact (List.Sublist.refl A).append (((List.sublist_cons_self _ _).cons_cons x).cons _)
 
+variable {f1x i1 : Nat} {t : TS} (F : InsFrame s x f1x i1 t)
+include F
+
+/-- The tables of `x` after the split: `y` right before and `z` right after `x`. -/
+theorem ins_table (hTP : TopParams s.P) {T : Nat} (hT : T ∈ s.cin.getX x) :
+    ∃ A le Bs a b, (s.nodes.getX T).table = A ++ (x, le) :: Bs ∧ x ∉ A.map (·.1) ∧
+      (nd t T).table = A ++ (s.C.size, a) :: (x, le) :: (s.C.size + 1, b) :: Bs ∧
+      GapsGe s.P.beta (gapB s.P.beta (n0 T) (dr T + 1))
+        ((A ++ (s.C.size, a) :: (x, le) :: (s.C.size + 1, b) :: Bs).map (·.2)) ∧
+      1 ≤ gapB s.P.beta (n0 T) (dr T + 1) ∧
+      ((s.nodes.getX T).draining = true → (lookup (s.nodes.getX T).side x).isSome) := by
+  obtain ⟨A, le, Bs, htab, hA, hside, h1, h2, hB, hg⟩ :=
+    start_room hI hTP hx (T := T) hT s.C.size (s.C.size + 1)
+  simp only [ts_P] at hB hg h1 h2
+  have hTs : T < s.nodes.size := by
+    have hent : Ent ord 0 x := by unfold Ent; rw [hI.shape.ord0]; exact hx
+    have hT' : T ∈ tabs (ts s) 0 x := by unfold tabs; rw [if_pos rfl]; exact hT
+    exact ((hI.shape.tabsIff 0 x T hent).mp hT').1.2.1
+  refine ⟨A, le, Bs, _, _, htab, hA, ?_, by rw [gapB_succ]; exact hg, by rw [gapB_succ]; omega, hside⟩
+  · rw [F.table, if_pos ⟨hT, hTs⟩]
+    show aroundT (nd (ts s) T).table x _ _ _ _ = _
+    rw [htab, aroundT_eq hA]
+    unfold insF aroundTab
+    have e1 := roomL_eq (β := s.P.beta) (Bs := Bs) (le := le) hA true
+    have e2 := roomL_eq (β := s.P.beta) (Bs := Bs) (le := le) hA false
+    show A ++ (s.C.size, roomL s.P.beta (s.nodes.getX T).table x true) :: (x, le) ::
+      (s.C.size + 1, roomL s.P.beta (s.nodes.getX T).table x false) :: Bs = _
+    have htab' : (s.nodes.getX T).table = A ++ (x, le) :: Bs := htab
+    rw [htab', e1, e2]
+
 end shape
 
 end OM.Proof.Top

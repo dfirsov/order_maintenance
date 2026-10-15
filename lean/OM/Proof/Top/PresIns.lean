@@ -15,6 +15,13 @@ set_option linter.deprecated false
 
 /-! ### Room for an insertion event -/
 
+theorem gapsGe_mono {β B B' : Nat} {ls : List Nat} (h : B' ≤ B) (hg : GapsGe β B ls) : GapsGe β B' ls :=
+  List.IsChain.imp (fun a b hab => by omega) hg
+
+theorem gapB_succ (β n d : Nat) : gapB β n (d + 1) = gapB β n d / 2 := by
+  unfold gapB; rw [Nat.pow_succ, Nat.div_div_eq_div_mul, Nat.div_div_eq_div_mul,
+    Nat.div_div_eq_div_mul]
+
 theorem gap_two {β n0 dr D nmax : Nat} (hn0 : n0 ≤ nmax) (hdr : dr + 1 ≤ D)
     (hroom : 2 ^ D * (nmax + 1) ≤ 2 ^ β) : 2 ≤ gapB β n0 dr := by
   unfold gapB
@@ -84,6 +91,7 @@ theorem start_room {s : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
     ∃ A le Bs, (nd s T).table = A ++ (x, le) :: Bs ∧ x ∉ A.map (·.1) ∧
       ((nd s T).draining = true → (lookup (nd s T).side x).isSome) ∧
       roomLo A le true < roomHi s.P.beta Bs le true ∧ roomLo A le false < roomHi s.P.beta Bs le false ∧
+      2 ≤ gapB s.P.beta (n0 T) (dr T) ∧
       GapsGe s.P.beta (gapB s.P.beta (n0 T) (dr T) / 2)
         ((A ++ (y, (roomLo A le true + roomHi s.P.beta Bs le true - 1) / 2) :: (x, le) ::
           (z, (roomLo A le false + roomHi s.P.beta Bs le false - 1) / 2) :: Bs).map (·.2)) := by
@@ -121,7 +129,7 @@ theorem start_room {s : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
   have hg := Ro.gaps T hTN
   unfold labs at hg; rw [htab] at hg
   obtain ⟨r1, r2, r3⟩ := gaps_room_around (y := y) (z := z) hB hg
-  refine ⟨A, le, Bs, htab, hA, fun hd => ?_, r1, r2, r3⟩
+  refine ⟨A, le, Bs, htab, hA, fun hd => ?_, r1, r2, hB, r3⟩
   have := S.side T ⟨hTN, hd⟩ x hxT
   rw [this]; rfl
 
