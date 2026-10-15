@@ -1043,4 +1043,103 @@ theorem bgAgree {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : 
   exact hm
 
 
+/-- **The capacities an insertion needs** at its start (besides those of the top structure). -/
+structure InsCaps (κ : Caps) (s : Core) : Prop where
+  E : s.E.size + 2 ≤ κ.tbl .E
+  G : s.Gs.size + 2 ≤ κ.tbl .G
+  C : s.C.size ≤ κ.tbl .C
+  fl : κ.tbl .G ≤ κ.lcap .freeG
+  f0 : 0 < κ.lrec .freeG
+  pq : PQCaps κ s
+  cC : s.C.size ≤ Ccap κ
+  cB : ∀ c, (s.C.getX c).size + 2 < Bcap κ
+
+theorem linkElem_frame (s : Core) (x y lab h : Nat) :
+    (linkElem s x y lab h).Gs.size = s.Gs.size ∧ (linkElem s x y lab h).C = s.C ∧
+    (linkElem s x y lab h).freeG = s.freeG ∧ (linkElem s x y lab h).E.size = s.E.size + 1 ∧
+    PQSame s (linkElem s x y lab h) ∧ (linkElem s x y lab h).nodes = s.nodes ∧
+    (linkElem s x y lab h).path = s.path ∧ (linkElem s x y lab h).prep = s.prep ∧
+    (linkElem s x y lab h).P = s.P := by
+  unfold linkElem; dsimp only
+  refine ⟨by simp, rfl, rfl, by split_ifs <;> simp, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl, rfl, rfl⟩
+
+/-- The cost bound of an insertion at Level M. -/
+def insBound (P : Params) : Nat := bgBound P + 220
+
+/-- **An insertion agrees** (the context of `insertAfter_cost`), relative to a predicate `Mc` on
+cores that gives the Level M side conditions of the reservation and that its rounds keep. -/
+theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap : Params → Nat} {L : List Nat}
+    {s : Core} {x : Nat} (hTC : TopContract TI μ J cap) (hTI : ∀ t, TI t → OM.Proof.Top.TopInv t)
+    (hC : CostInv TI μ J n R L s)
+    (hx : x ∈ L) (hk : 1 ≤ s.P.K_R) (hR : J / s.P.K_R + 1 ≤ R) (hn : 1 ≤ n)
+    (hsize : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
+    (hcap : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
+    (hI5 : (s.P.theta : ℝ) + R * (OM.Zeroing.Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat)
+    {κ : Caps} (Lx : Loc) (hLx : Lx "x" = x) (hLh : Lx "h" = hh) (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
+    (K : InsCaps κ s) (Mc : Core → Prop)
+    (hM4 : ∀ t, t.nodes = s.nodes → t.path = s.path → t.prep = s.prep → t.C.size = s.C.size → PQCaps κ t → Mc t)
+    (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
+      ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
+    (hMpop : ∀ t c, Mc t → Mc (delSt t c))
+    (hMjob : ∀ L s j t job r t1, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = some job →
+      (jobStep job).run t = .ok r t1 → Mc { t1 with resJob := r })
+    (hMsplit : ∀ L s j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → pqPopMax.run t = .ok c t1 →
+      (splitChunkStart c).run t1 = .ok () t2 → Mc t2) :
+    ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧
+      (∃ L' m, evalF κ insertAfterP.body s Lx = .ok s' L' m ∧ L' "y" = s.E.size ∧ m ≤ insBound s.P) ∧
+      CostInv TI μ J n R (OM.Spec.insertAfterL x s.E.size L) s' ∧ s'.count = s.count + 1 ∧
+      s'.P = s.P := by
+  obtain ⟨y, i, a, ip, js, hG, hRO⟩ := hC.game
+  have hdiv : s.count / (s.P.theta + 1 - cmax s.P) ≤ (s.count + 1) / (s.P.theta + 1 - cmax s.P) :=
+    Nat.div_le_div_right (Nat.le_succ s.count)
+  have hcnt0 : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1 := by omega
+  obtain ⟨s1, s2, hrun1, hrun2, hPost, heG, hgC, hE12, hP1⟩ := insert_step hTC hC.low hC.ti hG hRO hx
+    hk hR hn hcnt0 hI5 hh
+  have hyL : s.E.size ∈ OM.Spec.insertAfterL x s.E.size L :=
+    (OM.Spec.mem_insertAfterL hx).mpr (Or.inl rfl)
+  -- the state after the element insertion
+  obtain ⟨A, hI, hel⟩ := hC.low.inv
+  obtain ⟨gh, hG0⟩ := hC.low.ginv
+  obtain ⟨s₀, -, -, -, hGP⟩ := hC.low.cinv
+  subst hel
+  obtain ⟨lab, hrunE, -⟩ := ins_elem_ok hI hG0 hGP hx hh
+  rw [hrunE] at hrun1; injection hrun1 with _ e1; subst e1
+  obtain ⟨fG, fC, fF, fE, fPQ, fN, fPa, fPr, fP⟩ := linkElem_frame s x s.E.size lab hh
+  set s1 := linkElem s x s.E.size lab hh
+  rw [heG, hgC] at hrun2
+  have hS12 : Same s1 s2 := by have := pres_chunkSize (gC s (eG s x)) true s1; rw [hrun2] at this; exact this
+  have hgL : LiveG s (eG s x) := hI.mem_glist_iff.mp (hI.eG_mem hx)
+  obtain ⟨s₀', hCI, -⟩ := hC.low.cinv
+  have hcL : LiveC s (gC s (eG s x)) := (hCI.gchk _ hgL).1
+  obtain ⟨s2', hrun2', hPQ2, -⟩ := chunkSize_ok (lab := lab) (hh := hh) hC.low.pq hcL
+  rw [hrun2] at hrun2'; injection hrun2' with _ e2; subst e2
+  obtain ⟨-, -, hC2, -, r2⟩ := hPQ2
+  obtain ⟨-, -, -, -, -, -, -, hpr2, -, -, -, hN2, hPa2, -, -⟩ := r2
+  have hsC : (sizeState s1 (gC s (eG s x))).C.size = s1.C.size := by simp [sizeState]
+  have hsN : (sizeState s1 (gC s (eG s x))).nodes = s1.nodes := rfl
+  have hsPa : (sizeState s1 (gC s (eG s x))).path = s1.path := rfl
+  have hsPr : (sizeState s1 (gC s (eG s x))).prep = s1.prep := rfl
+  obtain ⟨s', hbg, Lb, mb, eb, hmb⟩ := bgAgree hTC hTI hPost hyL heG hgC hrun2 hE12 hP1 rfl hn
+    (by rw [hPost.count]; exact hsize) (by rw [hPost.count]; exact hcap) hI5
+    (OM.Machine.State.setLocs (fun _ => 0) ["y"] [s.E.size]) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    hpow (K.pq.of_same fPQ) (by have := hcL.2; have := K.cC; omega)
+    (by rw [fC]; have := K.cB (gC s (eG s x)); omega)
+    ⟨by rw [fG]; have := K.G; omega, by rw [fE]; have := K.E; omega, by rw [fC]; exact K.C, K.fl, K.f0⟩
+    (by rw [fG]; exact K.G) K.f0 (by rw [fF]; have := hI.freeG_len; have := K.G; have := K.fl; omega)
+    (by have := K.E; omega) Mc
+    (fun t hD hq => hM4 t (by rw [hD.top.1, hN2, hsN, fN]) (by rw [hD.top.2.1, hPa2, hsPa, fPa])
+      (by rw [hD.top.2.2.2.2.2.1, hpr2, hsPr, fPr]) (by rw [hD.Csize, hC2, hsC, fC]) hq)
+    hMc hMpop (hMjob _) (hMsplit _)
+  have hxs := hI.size_pos hx
+  obtain ⟨hrunI, Li, mi, ei, hyi, hmi⟩ := insertAfterP_agree (κ := κ) (L := Lx) hLx hLh hxs.2 hgL.2.1
+    (by rcases hI.eN_mem hx with h | h
+        · left; exact h
+        · right; exact (hI.size_pos h).2)
+    (by have := K.E; omega) (by have := K.G; omega) hrunE hbg
+    ⟨Lb, mb, eb, hmb⟩
+  obtain ⟨s'', hrun'', -, hCI', hcnt', hP''⟩ := insertAfter_cost hTC hC hx hk hR hn hsize hcap hI5 hh
+  rw [hrunI] at hrun''; injection hrun'' with _ e; subst e
+  exact ⟨s', hrunI, ⟨Li, mi, ei, hyi, by unfold insBound; omega⟩, hCI', hcnt', hP''⟩
+
+
 end OM.Impl
