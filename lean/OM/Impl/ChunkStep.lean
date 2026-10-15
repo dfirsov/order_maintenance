@@ -391,4 +391,83 @@ theorem labLS_ok {κ : Caps} {s : Core} {L : Loc} {y k : Nat} {labs : List Nat} 
     · simp [L6, L5, OM.Machine.State.upd, h3uk]
     · simp [Exp.cost] at hc2 hc3 hc5 ⊢; omega
 
+theorem labRS_ok {κ : Caps} {s : Core} {L : Loc} {y k : Nat} {labs : List Nat} (hy : L "y" = y)
+    (hk : (L "uk" = 1 ∧ k = 1) ∨ (L "uk" = 3 ∧ k = 3)) (hyT : y < κ.tbl .C) (hfT : (s.C.getX y).first < κ.tbl .G)
+    (hlabs : (pushFrontLabs (1 <<< (s.P.B_g - 1)) s.P.D_g (if (s.C.getX y).first = NIL then none
+      else some (s.Gs.getX (s.C.getX y).first).lab) k).run s = .ok labs s) :
+    ∃ L' n, evalF κ labRS s L = .ok s L' n ∧ labsOf L' = labs ∧ L' "uk" = L "uk" ∧ n ≤ 150 ∧
+      ∀ r, r ≠ "D" → r ≠ "m" → r ≠ "l0" → r ≠ "l1" → r ≠ "l2" → r ≠ "b" → r ≠ "lab" → L' r = L r := by
+  set c := 1 <<< (s.P.B_g - 1)
+  set nxt := if (s.C.getX y).first = NIL then none else some (s.Gs.getX (s.C.getX y).first).lab
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "D") (e := .prm .Dg) (v := s.P.D_g) (by simp [Exp.ev, PF.get])
+  set L1 := upd L "D" s.P.D_g
+  have h1 : ∀ r, r ≠ "D" → L1 r = L r := fun r h1 => by simp [L1, OM.Machine.State.upd, h1]
+  have h1y : L1 "y" = y := by rw [h1 "y" (by decide), hy]
+  obtain ⟨k', rfl⟩ : ∃ k', k = k' + 1 := by rcases hk with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> exact ⟨_, rfl⟩
+  obtain ⟨m1, rest, hlabs0, hrest, hnone, hsome⟩ := pushFrontLabs_inv hlabs
+  have b3 : ∃ L3 c3, evalF κ (.ite (.cF .first "y" =ₑ 0) ("m" ::= centreG)
+      ("b" ::= .gF .lab (.cF .first "y") ;; beforeS ;; "m" ::= "lab")) s L1 = .ok s L3 c3 ∧ L3 "m" = m1 ∧
+      (∀ r, r ≠ "m" → r ≠ "b" → r ≠ "lab" → L3 r = L1 r) ∧ c3 ≤ 40 := by
+    by_cases hf : (s.C.getX y).first = NIL
+    · have hm1 : m1 = c := hnone (by simp [nxt, hf])
+      have hc : (.cF .first "y" =ₑ 0 : Exp).ev κ s L1 = some 1 := by
+        simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1y, hyT, Fld.cap, Fld.get, CF.get]; simpa [NIL] using hf
+      exact ⟨_, _, evalF_ite_t hc one_ne_zero (evalF_assign_ok centreG_ev), by simp [OM.Machine.State.upd, hm1, c],
+        fun r h1 _ _ => by simp [OM.Machine.State.upd, h1], by simp [Exp.cost, centreG, Exp.cF]⟩
+    · obtain ⟨hpa, hpb, hm1⟩ := hsome (s.Gs.getX (s.C.getX y).first).lab (by simp [nxt, hf])
+      have hc : (.cF .first "y" =ₑ 0 : Exp).ev κ s L1 = some 0 := by
+        simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1y, hyT, Fld.cap, Fld.get, CF.get]; simpa [NIL] using hf
+      set p := (s.Gs.getX (s.C.getX y).first).lab
+      have b1 := evalF_assign_ok (κ := κ) (s := s) (L := L1) (x := "b") (e := .gF .lab (.cF .first "y")) (v := p)
+        (by simp [Exp.gF, Exp.cF, Exp.ev, h1y, hyT, hfT, Fld.cap, Fld.get, CF.get, GF.get]; rfl)
+      have b2 := beforeS_ok (κ := κ) (s := s) (L := upd L1 "b" p) (b := p) (D := s.P.D_g)
+        (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, L1]) hpa hpb
+      have b3 := evalF_assign_ok (κ := κ) (s := s) (L := upd (upd L1 "b" p) "lab" (p - s.P.D_g))
+        (x := "m") (e := .var "lab") (v := p - s.P.D_g) (by simp [Exp.ev, OM.Machine.State.upd])
+      exact ⟨_, _, evalF_ite_f hc (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 b3)), by simp [OM.Machine.State.upd, hm1],
+        fun r h1 h2 h3 => by simp [OM.Machine.State.upd, h1, h2, h3], by simp [Exp.cost, Exp.gF, Exp.cF]⟩
+  obtain ⟨L3, c3, e3, h3m, h3F, hc3⟩ := b3
+  have h3uk : L3 "uk" = L "uk" := by rw [h3F "uk" (by decide) (by decide) (by decide), h1 "uk" (by decide)]
+  have h3D : L3 "D" = s.P.D_g := by rw [h3F "D" (by decide) (by decide) (by decide)]; simp [L1, OM.Machine.State.upd]
+  have hfr : ∀ L' : Loc, (∀ r, r ≠ "m" → r ≠ "l0" → r ≠ "l1" → r ≠ "l2" → r ≠ "b" → r ≠ "lab" → L' r = L3 r) →
+      ∀ r, r ≠ "D" → r ≠ "m" → r ≠ "l0" → r ≠ "l1" → r ≠ "l2" → r ≠ "b" → r ≠ "lab" → L' r = L r :=
+    fun L' hL' r h1' h2 h3 h4 h5 h6 h7 => by rw [hL' r h2 h3 h4 h5 h6 h7, h3F r h2 h6 h7, h1 r h1']
+  rcases hk with ⟨huk, hk'⟩ | ⟨huk, hk'⟩
+  · obtain rfl : k' = 0 := by omega
+    obtain ⟨rfl, -⟩ := pushFrontLabs_zero hrest
+    have hc : ("uk" =ₑ 3 : Exp).ev κ s L3 = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, h3uk, huk]
+    have b := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "l0") (e := .var "m") (v := m1) (by simp [Exp.ev, h3m])
+    refine ⟨_, _, evalF_seq_ok2 a1 (evalF_seq_ok2 e3 (evalF_ite_f hc b)),
+      by simp [labsOf, OM.Machine.State.upd, h3uk, huk, hlabs0], by simp [OM.Machine.State.upd, h3uk], ?_,
+      hfr _ fun r h2 h3 h4 h5 h6 h7 => by simp [OM.Machine.State.upd, h3]⟩
+    simp [Exp.cost] at hc3 ⊢; omega
+  · obtain rfl : k' = 2 := by omega
+    obtain ⟨m2, rest2, hr1, hrest2, -, hs1⟩ := pushFrontLabs_inv hrest
+    obtain ⟨hpa1, hpb1, hm2⟩ := hs1 m1 rfl
+    obtain ⟨m3, rest3, hr2, hrest3, -, hs2⟩ := pushFrontLabs_inv hrest2
+    obtain ⟨hpa2, hpb2, hm3⟩ := hs2 m2 rfl
+    obtain ⟨rfl, -⟩ := pushFrontLabs_zero hrest3
+    have hc : ("uk" =ₑ 3 : Exp).ev κ s L3 = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, h3uk, huk]
+    have b1 := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "l2") (e := .var "m") (v := m1) (by simp [Exp.ev, h3m])
+    have b2 := evalF_assign_ok (κ := κ) (s := s) (L := upd L3 "l2" m1) (x := "b") (e := .var "m") (v := m1)
+      (by simp [Exp.ev, OM.Machine.State.upd, h3m])
+    have b3 := beforeS_ok (κ := κ) (s := s) (L := upd (upd L3 "l2" m1) "b" m1) (b := m1) (D := s.P.D_g)
+      (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, h3D]) hpa1 hpb1
+    set L5 := upd (upd (upd L3 "l2" m1) "b" m1) "lab" (m1 - s.P.D_g)
+    have b4 := evalF_assign_ok (κ := κ) (s := s) (L := L5) (x := "l1") (e := .var "lab") (v := m2)
+      (by simp [Exp.ev, L5, OM.Machine.State.upd, hm2])
+    have b5 := evalF_assign_ok (κ := κ) (s := s) (L := upd L5 "l1" m2) (x := "b") (e := .var "l1") (v := m2)
+      (by simp [Exp.ev, OM.Machine.State.upd])
+    have b6 := beforeS_ok (κ := κ) (s := s) (L := upd (upd L5 "l1" m2) "b" m2) (b := m2) (D := s.P.D_g)
+      (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, L5, h3D]) hpa2 hpb2
+    set L7 := upd (upd (upd L5 "l1" m2) "b" m2) "lab" (m2 - s.P.D_g)
+    have b7 := evalF_assign_ok (κ := κ) (s := s) (L := L7) (x := "l0") (e := .var "lab") (v := m3)
+      (by simp [Exp.ev, L7, OM.Machine.State.upd, hm3])
+    refine ⟨_, _, evalF_seq_ok2 a1 (evalF_seq_ok2 e3 (evalF_ite_t hc one_ne_zero (evalF_seq_ok2 b1 (evalF_seq_ok2 b2
+      (evalF_seq_ok2 b3 (evalF_seq_ok2 b4 (evalF_seq_ok2 b5 (evalF_seq_ok2 b6 b7)))))))), ?_, ?_, ?_,
+      hfr _ fun r h2 h3 h4 h5 h6 h7 => by simp [L7, L5, OM.Machine.State.upd, h3, h4, h5, h6, h7]⟩
+    · simp [labsOf, L7, L5, OM.Machine.State.upd, h3uk, huk, hlabs0, hr1, hr2]
+    · simp [L7, L5, OM.Machine.State.upd, h3uk]
+    · simp [Exp.cost] at hc3 ⊢; omega
+
 end OM.Impl
