@@ -495,6 +495,268 @@ theorem Shape.drain_run (hL : LList (cN s) (cP s) s.firstChunk cl) :
         ← S.ds_tagF_other hg hne tag _ (Ne.symm hpy)]
       exact lt_of_eq_of_lt hnew (ST.tagF_lt hb)
 
+/-! ### The rest of the order invariant after the step -/
+
+theorem Shape.rng_infix (u : Nat) (hu : isN (ts s) u) : rng (ts s) cl u <:+: cl :=
+  filter_infix_of_convex (S.ord0 ▸ S.ordNodup 0) fun a b d ha hd hab hbd => by
+    have := S.rng_between hu (c := a) (d := d) (e := b)
+      (List.mem_filter.mpr ⟨hab.mem_left, ha⟩) (List.mem_filter.mpr ⟨hbd.mem_right, hd⟩) hab hbd
+    exact (List.mem_filter.mp this).2
+
+/-- The ranges after the step: the chunk leaves the ghost's range and joins the target's, at the
+end next to it. -/
+theorem Shape.ds_rng (tag u : Nat) : rng (ts (dsS s v tag)) cl u =
+    if u = v then (rng (ts s) cl v).erase (dsY s v)
+    else if u = dsT s v then
+      (if goesLeft s v then rng (ts s) cl (dsT s v) ++ [dsY s v] else dsY s v :: rng (ts s) cl (dsT s v))
+    else rng (ts s) cl u := by
+  obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
+  have T := dsS_sameTree (tag := tag) hvt hv htz
+  obtain ⟨hy, hanc, hLe, hRi, -⟩ := S.pick hg hne
+  obtain ⟨hycl, hypp, -, -, -⟩ := S.rng_ghost hg hy
+  have hpp := S.ds_pp hg hne tag
+  have hcl : cl.Nodup := S.ord0 ▸ S.ordNodup 0
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, hinf⟩ := S.ghost v hg
+  have hon := S.ordNodup (ht (ts s) v)
+  have h1v := before_of_infix2 (infix3_left hinf)
+  have hv2 := before_of_infix2 (infix3_right hinf)
+  unfold rng
+  rw [T.ht]
+  have hpred : ∀ c, decide (pp (ts (dsS s v tag)) c (ht (ts s) u) = u) =
+      if c = dsY s v ∧ ht (ts s) u = ht (ts s) v then decide (dsT s v = u)
+      else decide (pp (ts s) c (ht (ts s) u) = u) := by
+    intro c; rw [hpp]; split_ifs <;> rfl
+  by_cases huv : u = v
+  · subst huv
+    rw [if_pos rfl]
+    apply filter_erase_of hcl
+    · intro c _ hc; rw [hpred, if_neg (fun h => hc h.1)]
+    · rw [hpred, if_pos ⟨rfl, rfl⟩]; simpa using Ne.symm hvt
+  · rw [if_neg huv]
+    by_cases hut : u = dsT s v
+    · subst hut
+      rw [if_pos rfl, hht]
+      have hpy : decide (pp (ts s) (dsY s v) (ht (ts s) v) = dsT s v) = false := by
+        rw [hypp]; simpa using hvt
+      by_cases hgo : goesLeft s v
+      · rw [if_pos hgo]
+        apply filter_snoc_of (p := fun c => decide (pp (ts s) c (ht (ts s) v) = dsT s v))
+          (c := dsY s v) hcl (fun c _ hc => by rw [hpp, if_neg (fun h => hc h.1)])
+          (by rw [hpp, if_pos ⟨rfl, rfl⟩]; simp) hpy hycl
+        intro c hc hpc hcy
+        simp only [decide_eq_true_eq] at hpc
+        rcases before_total hc hycl hcy with h | h
+        · exact h
+        · exfalso
+          rcases S.O2 (ht (ts s) v) (by omega) _ _ h with h2 | h2 <;> rw [hypp, hpc, (hLe hgo).2] at h2
+          · exact hvt (h2.trans (hLe hgo).2.symm)
+          · exact h2.asymm hon h1v
+      · rw [if_neg hgo]
+        apply filter_cons_of (p := fun c => decide (pp (ts s) c (ht (ts s) v) = dsT s v))
+          (c := dsY s v) hcl (fun c _ hc => by rw [hpp, if_neg (fun h => hc h.1)])
+          (by rw [hpp, if_pos ⟨rfl, rfl⟩]; simp) hpy hycl
+        intro c hc hpc hcy
+        simp only [decide_eq_true_eq] at hpc
+        rcases before_total hycl hc (Ne.symm hcy) with h | h
+        · exact h
+        · exfalso
+          rcases S.O2 (ht (ts s) v) (by omega) _ _ h with h2 | h2 <;> rw [hypp, hpc, (hRi hgo).2] at h2
+          · exact hvt (h2.symm.trans (hRi hgo).2.symm)
+          · exact h2.asymm hon hv2
+    · rw [if_neg hut]
+      apply List.filter_congr
+      intro c _
+      rw [hpred]
+      split_ifs with h
+      · obtain ⟨rfl, hh⟩ := h
+        rw [hh, hypp]
+        simp [Ne.symm hut, Ne.symm huv]
+      · rfl
+
+/-- **Range pointers after the step.** -/
+theorem Shape.ds_ends (hL : LList (cN s) (cP s) s.firstChunk cl) (tag u : Nat)
+    (hu : isN (ts s) u) :
+    (nd (ts (dsS s v tag)) u).first = (rng (ts (dsS s v tag)) cl u).headD NIL ∧
+      (nd (ts (dsS s v tag)) u).last = (rng (ts (dsS s v tag)) cl u).getLastD NIL := by
+  obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
+  obtain ⟨hy, hanc, hLe, hRi, -⟩ := S.pick hg hne
+  obtain ⟨hycl, hypp, -, -, -⟩ := S.rng_ghost hg hy
+  have hcl : cl.Nodup := S.ord0 ▸ S.ordNodup 0
+  rw [dsS_first hvt hv htz, dsS_last hvt hv htz, S.ds_rng hg hne tag]
+  have hrnd : (rng (ts s) cl v).Nodup := hcl.sublist (S.rng_sub v)
+  have hrnil : NIL ∉ rng (ts s) cl v := fun h => hL.nonil ((S.rng_sub v).subset h)
+  obtain ⟨hfv, hlv⟩ := S.ends v hg.1
+  obtain ⟨hft, hlt⟩ := S.ends (dsT s v) hlive.1
+  have hinf := S.rng_infix hg hne v hg.1
+  by_cases huv : u = v
+  · subst huv
+    simp only [if_true]
+    unfold dsFirstV dsLastV
+    have hfv' : (s.nodes.getX u).first = (rng (ts s) cl u).headD NIL := hfv
+    have hlv' : (s.nodes.getX u).last = (rng (ts s) cl u).getLastD NIL := hlv
+    rw [hfv', hlv']
+    by_cases hgo : goesLeft s u
+    · simp only [if_pos hgo]
+      obtain ⟨hyh, -⟩ := hLe hgo
+      obtain ⟨rest, hr⟩ : ∃ rest, rng (ts s) cl u = dsY s u :: rest := by
+        cases hrr : rng (ts s) cl u with
+        | nil => exact absurd hrr hne
+        | cons a t => rw [hrr] at hyh; exact ⟨t, by simp at hyh; rw [hyh]⟩
+      rw [hr] at hrnd hinf ⊢
+      cases rest with
+      | nil => simp
+      | cons z r =>
+        have hyn : dsY s u ∉ z :: r := (List.nodup_cons.mp hrnd).1
+        have hlm : (dsY s u :: z :: r).getLastD NIL ∈ z :: r := by
+          rw [List.getLastD_cons]; exact getLastD_mem (by simp) _
+        have hlast : ((dsY s u :: z :: r).headD NIL == (dsY s u :: z :: r).getLastD NIL) = false := by
+          simp only [List.headD_cons, beq_eq_false_iff_ne]
+          exact fun e => hyn (e ▸ hlm)
+        rw [hlast]
+        simp only [Bool.false_eq_true, if_false, List.erase_cons_head, List.headD_cons]
+        refine ⟨?_, by simp only [List.getLastD_cons]⟩
+        show cN s (dsY s u) = z
+        rw [hL.next _ hycl]; exact succOf_infix hcl hinf
+    · simp only [if_neg hgo]
+      obtain ⟨hyl, -⟩ := hRi hgo
+      obtain ⟨r0, hr⟩ : ∃ r0, rng (ts s) cl u = r0 ++ [dsY s u] := by
+        obtain ⟨r0, a, e⟩ := List.eq_nil_or_concat (rng (ts s) cl u) |>.resolve_left hne
+        rw [e, List.concat_eq_append] at hyl
+        simp at hyl
+        exact ⟨r0, by rw [e, List.concat_eq_append, hyl]⟩
+      rw [hr] at hrnd hinf ⊢
+      have hyn : dsY s u ∉ r0 := fun h => by
+        have h2 := List.nodup_append.mp hrnd
+        exact h2.2.2 _ h _ (List.mem_singleton_self _) rfl
+      rw [List.erase_append_right _ hyn, List.erase_cons_head, List.append_nil]
+      rcases List.eq_nil_or_concat r0 with h0 | ⟨r1, z, h0⟩
+      · subst h0; simp
+      · rw [List.concat_eq_append] at h0
+        subst h0
+        have hzy : z ≠ dsY s u := fun e => hyn (by simp [e])
+        have hF : (r1 ++ [z] ++ [dsY s u]).headD NIL = (r1 ++ [z]).headD NIL := by
+          cases r1 <;> simp
+        have hL' : (r1 ++ [z] ++ [dsY s u]).getLastD NIL = dsY s u := by simp
+        have hFy : (r1 ++ [z]).headD NIL ≠ dsY s u := fun e =>
+          hyn (e ▸ headD_mem (by simp) NIL)
+        rw [hF, hL', show ((r1 ++ [z]).headD NIL == dsY s u) = false by simpa using hFy]
+        simp only [Bool.false_eq_true, if_false]
+        refine ⟨by first | rfl | trivial, ?_⟩
+        show cP s (dsY s u) = _
+        rw [hL.prev _ hycl, predOf_infix hcl (r := r1) (z := z) (by simpa using hinf)]
+        simp
+  · simp only [huv, if_false]
+    by_cases hut : u = dsT s v
+    · subst hut
+      simp only [if_true]
+      unfold dsFirstT dsLastT
+      have hft' : (s.nodes.getX (dsT s v)).first = (rng (ts s) cl (dsT s v)).headD NIL := hft
+      have hlt' : (s.nodes.getX (dsT s v)).last = (rng (ts s) cl (dsT s v)).getLastD NIL := hlt
+      have hnilt : NIL ∉ rng (ts s) cl (dsT s v) := fun h => hL.nonil ((S.rng_sub _).subset h)
+      by_cases hgo : goesLeft s v
+      · simp only [if_pos hgo]
+        refine ⟨?_, by simp⟩
+        rw [hft']
+        by_cases he : rng (ts s) cl (dsT s v) = []
+        · rw [he]; simp
+        · rw [if_neg (by simpa using headD_ne_nil' hnilt he)]
+          cases h : rng (ts s) cl (dsT s v) with
+          | nil => exact absurd h he
+          | cons a t => simp
+      · simp only [if_neg hgo]
+        refine ⟨by simp, ?_⟩
+        rw [hlt']
+        by_cases he : rng (ts s) cl (dsT s v) = []
+        · rw [he]; simp
+        · rw [if_neg (by simpa using getLastD_ne_nil' hnilt he)]
+          cases h : rng (ts s) cl (dsT s v) with
+          | nil => exact absurd h he
+          | cons a t => simp [List.getLastD_cons]
+    · simp only [hut, if_false]
+      exact S.ends u hu
+
+/-- **The order invariant after a sweep step.** -/
+theorem Shape.drain_shape (hL : LList (cN s) (cP s) s.firstChunk cl)
+    (hcs : ∀ c ∈ cl, c < s.C.size) (tag : Nat)
+    (htag : tag = tagF (ts (dsS s v tag)) (dsY s v)) : Shape (ts (dsS s v tag)) cl ord := by
+  obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
+  have T := dsS_sameTree (tag := tag) hvt hv htz
+  have hP : (ts (dsS s v tag)).P = (ts s).P := dsS_P s v tag
+  obtain ⟨hy, hanc, hLe, hRi, -⟩ := S.pick hg hne
+  obtain ⟨hycl, hypp, -, -, -⟩ := S.rng_ghost hg hy
+  have hpp := S.ds_pp hg hne tag
+  have ST := S.drain_shapeT hg hne tag
+  have hpar : ∀ k e, par (ts (dsS s v tag)) k e = par (ts s) k e := T.par
+  refine { toShapeT := ST, up := ?_, lp := ?_, kids := ?_, OT := ?_, ghost := ?_, src := ?_, tabEnt := ?_, tabsIff := ?_, tabsNodup := ?_, Q := ?_, W1 := ?_, side := ?_, pathSize := ?_, P := ?_, Sr := ?_, ends := ?_, tags := ?_ }
+  · intro u hu hh; rw [T.liveN] at hu; rw [T.ht, hP] at hh
+    simp only [T.liveN, T.livePar, T.ht, T.children]; exact S.up u hu hh
+  · intro c hc; simp only [T.lpr, T.liveN, T.ht, T.children]; exact S.lp c hc
+  · intro u hu; rw [T.liveN] at hu; simp only [T.children, T.ht, hpar, T.liveN]; exact S.kids u hu
+  · intro h h1 h2 u u' e e' hu hu' hb he he' hpe hpe'
+    rw [hP] at h2; rw [T.liveN] at hu hu'; rw [hpar] at hpe hpe'
+    exact S.OT h h1 h2 u u' e e' hu hu' hb he he' hpe hpe'
+  · intro u hu; rw [T.ghostN] at hu
+    simp only [T.t1, T.t2, T.liveN, T.ht, T.srcOf, T.livePar, T.children, hP]; exact S.ghost u hu
+  · intro t ht' hs; rw [T.liveN] at ht'; rw [T.srcOf] at hs ⊢
+    simp only [T.ghostN, T.t1, T.t2]; exact S.src t ht' hs
+  · intro X hX e he; rw [T.isN] at hX; rw [T.order] at he; rw [T.ht]; exact S.tabEnt X hX e he
+  · intro h e X he; rw [T.tabs, T.isN, T.ht, T.order]; exact S.tabsIff h e X he
+  · intro h e he; rw [T.tabs]; exact S.tabsNodup h e he
+  · intro h e X he hX; rw [T.tabs] at hX; rw [hpar, T.srcOf]; exact S.Q h e X he hX
+  · intro u hu X hX; rw [T.ghostN] at hu; rw [T.ht, T.tabs] at hX
+    rw [T.order, T.t1, T.t2]; exact S.W1 u hu X hX
+  · intro u hu e he; rw [T.ghostN] at hu; rw [T.order] at he
+    rw [T.side, T.ht, hpar, T.t1]; exact S.side u hu e he
+  · intro c hc
+    show ((dsS s v tag).path.getX c).size = _
+    rw [dsS_path, Array.getX_setX, hP]
+    split_ifs with h
+    · subst h
+      have h1 : (s.path.getX (dsY s v)).size = s.P.H + 1 := S.pathSize _ hc
+      have h2 : (s.nodes.getX v).height < s.P.H := hhH
+      rw [Array.size_setX, if_pos (by omega)]; exact h1
+    · exact S.pathSize c hc
+  · intro c hc j hj1 hj
+    rw [hP] at hj
+    rw [hpp, T.anc]
+    by_cases hcj : c = dsY s v ∧ j = ht (ts s) v
+    · obtain ⟨rfl, rfl⟩ := hcj
+      rw [if_pos ⟨rfl, rfl⟩]; left; exact hanc.symm
+    · rw [if_neg hcj]
+      rcases S.P c hc j hj1 hj with h | ⟨h1, h2⟩
+      · left; exact h
+      · right; rw [T.ghostN, T.t1, T.t2]; exact ⟨h1, h2⟩
+  · intro c hc j hj1 hj hgj
+    rw [hP] at hj
+    rw [hpp] at hgj ⊢
+    rw [T.order, T.anc]
+    by_cases hcj : c = dsY s v ∧ j = ht (ts s) v
+    · rw [if_pos hcj] at hgj; rw [T.ghostN] at hgj
+      exact absurd hgj.2 (by rw [hlive.2]; simp)
+    · rw [if_neg hcj] at hgj; rw [T.ghostN] at hgj
+      by_cases hcj1 : c = dsY s v ∧ j - 1 = ht (ts s) v
+      · obtain ⟨rfl, hj1'⟩ := hcj1
+        rw [if_pos ⟨rfl, hj1'⟩]
+        -- the target is next to the ghost in every table holding it
+        have hsr := S.Sr _ hycl j hj1 hj hgj
+        rw [hj1', hypp] at hsr
+        obtain ⟨hal, hah⟩ := S.anc_live hycl j hj1 hj
+        have hX : anc (ts s) (dsY s v) j ∈ tabs (ts s) (ht (ts s) v) v :=
+          (S.tabsIff _ v _ ((S.ordMem _ hh1 (by omega) v).mpr ⟨hg.1, rfl⟩)).mpr
+            ⟨hal.1, by rw [hah]; omega, hsr⟩
+        have hw1 := (S.W1 v hg _ hX).subset
+        rcases (show dsT s v = (nd (ts s) v).t1 ∨ dsT s v = (nd (ts s) v).t2 by
+            by_cases h : goesLeft s v
+            · exact Or.inl (hLe h).2
+            · exact Or.inr (hRi h).2) with e | e <;> rw [e] <;> exact hw1 (by simp)
+      · rw [if_neg hcj1]; exact S.Sr c hc j hj1 hj hgj
+  · intro u hu; rw [T.isN] at hu; exact S.ds_ends hg hne hL tag u hu
+  · intro c hc
+    rw [dsS_tag s v tag (hcs _ hycl)]
+    split_ifs with h
+    · subst h; exact htag
+    · rw [S.ds_tagF_other hg hne tag c h]; exact S.tags c hc
+
 end facts
 
 end OM.Proof.Top

@@ -16,6 +16,13 @@ open OM.Model OM.Proof
 
 set_option linter.deprecated false
 
+theorem Array.size_setX {α : Type} [Inhabited α] (a : Array α) (i : Nat) (v : α) :
+    (a.setX i v).size = if i < a.size then a.size else i + 1 := by
+  unfold Array.setX
+  split
+  · simp
+  · simp; omega
+
 /-! ### Filters changed at one element -/
 
 theorem filter_erase_of {l : List Nat} (hl : l.Nodup) {p p' : Nat → Bool} {c : Nat}
@@ -188,6 +195,25 @@ theorem before_getLastD {l : List Nat} {c d : Nat} (hc : c ∈ l) (hne : c ≠ l
   rcases List.mem_append.mp hc with h | h
   · exact before_append_mem h (by simp)
   · simp at h; exact absurd h hne
+
+/-- In a block `y :: z :: _` of a nodup list, `z` follows `y`. -/
+theorem succOf_infix {l r : List Nat} {y z : Nat} (hl : l.Nodup) (h : y :: z :: r <:+: l) :
+    succOf l y = z := by
+  obtain ⟨u, w, rfl⟩ := h
+  have : u ++ y :: z :: r ++ w = u ++ y :: (z :: (r ++ w)) := by simp
+  rw [this] at hl ⊢; rw [succOf_mid hl]; rfl
+
+theorem predOf_infix {l r : List Nat} {y z : Nat} (hl : l.Nodup) (h : r ++ [z, y] <:+: l) :
+    predOf l y = z := by
+  obtain ⟨u, w, rfl⟩ := h
+  have : u ++ (r ++ [z, y]) ++ w = (u ++ r ++ [z]) ++ y :: w := by simp
+  rw [this] at hl ⊢; rw [predOf_mid hl]; simp
+
+theorem headD_ne_nil' {l : List Nat} (hnil : NIL ∉ l) (hl : l ≠ []) : l.headD NIL ≠ NIL :=
+  fun e => hnil (e ▸ headD_mem hl NIL)
+
+theorem getLastD_ne_nil' {l : List Nat} (hnil : NIL ∉ l) (hl : l ≠ []) : l.getLastD NIL ≠ NIL :=
+  fun e => hnil (e ▸ getLastD_mem hl NIL)
 
 /-! ### Infix triples -/
 
