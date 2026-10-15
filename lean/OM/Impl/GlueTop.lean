@@ -177,3 +177,149 @@ theorem Shape.drain_finish_hyps {s : Core} {cl : List Nat} {ord : Nat → List N
     exact this
 
 end OM.Proof.Top
+
+namespace OM.Impl
+
+open OM.Model OM.Proof OM.Proof.Top
+
+/-- **The capacities the top structure's programs need**, at state `s`: the record counts below the
+capacities (with room for the two records a step may add), node capacity covering chunk indices,
+and list capacities above the invariant bounds (tables of at most 160 entries, entries in at most
+2 tables). -/
+structure TopCaps (κ : Caps) (s : Core) : Prop where
+  N : s.nodes.size + 2 ≤ κ.tbl .N
+  NC : s.C.size ≤ κ.tbl .N
+  C : s.C.size + 2 ≤ κ.tbl .C
+  rc : s.nodes.size + 2 ≤ κ.lrec .children
+  rs : s.nodes.size + 2 ≤ κ.lrec .side
+  rt : s.nodes.size + 2 ≤ κ.lrec .table
+  ri : s.nodes.size + 2 ≤ κ.lrec .inTab
+  rcin : s.nodes.size + s.C.size + 2 ≤ κ.lrec .cin
+  alp : s.nodes.size + s.C.size + 2 ≤ κ.arr .lpar
+  lt : 162 ≤ κ.lcap .table
+  ls : 322 ≤ κ.lcap .side
+  li : 322 ≤ κ.lcap .inTab
+  lcin : 322 ≤ κ.lcap .cin
+  lc : 162 ≤ κ.lcap .children
+  pw : κ.pw = s.P.H + 1
+
+/-- A table holds at most 160 entries, and so does a side list (`TabLen`). -/
+theorem tab_le_160 {t : TS} {dr n0 : Nat → Nat} (h : TabLen t dr n0) (X : Nat) :
+    (nd t X).table.length ≤ 160 ∧ (nd t X).side.length ≤ 160 := by
+  obtain ⟨a, b, c⟩ := h X
+  have : (Top.order t X).length = (nd t X).table.length := by simp [Top.order, Node.order]
+  omega
+
+/-- **`startDrain` agrees at a drain start** (the context of `sr_run`). -/
+theorem sdAgree_walk {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    {j : Job} {v : Nat} (hpc : j.pc = .walk (some v)) (hv0 : v ≠ NIL) (hI : InvJ (ts s) cl ord dr n0 (some j))
+    (hlp : (nd (ts s) v).livePar ≠ NIL) (hTP : TopParams s.P) (hof : (nd (ts s) v).overflowOf = NIL)
+    (hW : Wd s.P (ht (ts s) v) < (nd (ts s) v).weight + 2)
+    {side : List (Nat × Side)} (hside : sSideO (wiC s v) v = some side)
+    (hlook : ∀ x, lookup side x =
+      if 2 ≤ ht (ts s) v ∧ x ∈ sEntries (wiC s v) v ∧ (nd (ts s) x).draining = true then
+        lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) (nd (ts s) x).t1
+      else lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) x)
+    (hcl : CLok s cl) (K : TopCaps κ s) :
+    ∃ D, SDAgree κ (wiC s v) v D := by
+  have S := hI.shape
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  obtain ⟨hl, hlh, hvL⟩ := sd_up hpc hv0 hI hlp
+  obtain ⟨h1, hhH⟩ := sd_ht hpc hv0 hI hlp
+  obtain ⟨hk2, hk1, hkn⟩ := sp_k hpc hv0 hI hlp hTP hof hW
+  have H := sr_hyps hpc hv0 hI hlp hTP hof hW hlook
+  have W := wiC_sameTree s v
+  have hsz : (wiC s v).nodes.size = s.nodes.size := by simp [wiC]
+  have hCsz : (wiC s v).C.size = s.C.size := rfl
+  have hent : Ent ord (ht (ts s) v) v := (S.ordMem _ h1 (S.htN v hvl.1).2 v).mpr ⟨hvl.1, rfl⟩
+  have hTL := tab_le_160 hI.len
+  have hsh : sH (wiC s v) v = ht (ts s) v := sd_h_eq s v
+  obtain ⟨hknd, hksub, hk⟩ := S.kids v hvl
+  -- the entries and children, by height
+  have hkeys : ∀ e ∈ ((wiC s v).nodes.getX v).table.map (·.1),
+      (ht (ts s) v - 1 ≠ 0 → e < s.nodes.size) ∧ (ht (ts s) v - 1 = 0 → e < s.C.size) := by
+    intro e he
+    have hwt : ((wiC s v).nodes.getX v).table = (nd (ts s) v).table := W.table v
+    have he' : e ∈ Top.order (ts s) v := by rw [hwt] at he; simpa [Top.order, Node.order] using he
+    have hE : Ent ord (ht (ts s) v - 1) e := S.tabEnt v hvl.1 e he'
+    refine ⟨fun h0 => ?_, fun h0 => ?_⟩
+    · exact ((S.ordMem _ (by omega) (by have := (S.htN v hvl.1).2; omega) e).mp hE).1.2.1
+    · rw [h0] at hE
+      have hE0 : e ∈ ord 0 := hE
+      rw [S.ord0] at hE0
+      have := (hcl.2 e).mp hE0; omega
+  have hkid : ∀ e ∈ (nd (ts s) v).children,
+      (ht (ts s) v ≠ 1 → e < s.nodes.size ∧ e ≠ v) ∧ (ht (ts s) v = 1 → e < s.C.size) := by
+    intro e he
+    refine ⟨fun h0 => ⟨H.kid h0 e he, fun hev => ?_⟩, fun h0 => ?_⟩
+    · have hm : e ∈ ord (ht (ts s) v - 1) := hksub.subset he
+      have := ((S.ordMem _ (by omega) (by have := (S.htN v hvl.1).2; omega) e).mp hm).2
+      rw [hev] at this; omega
+    · have hm : e ∈ ord (ht (ts s) v - 1) := hksub.subset he
+      rw [h0, Nat.sub_self, S.ord0] at hm
+      have := (hcl.2 e).mp hm; omega
+  have hkl : (nd (ts s) v).children.length ≤ 160 := by
+    have := (sp_kids_sub hpc hv0 hI hlp hTP hof hW).length_le
+    have hl2 := (hTL v).1
+    simp only [Top.order, Node.order, List.length_map] at this; omega
+  have hpl : (nd (ts s) (nd (ts s) v).livePar).children.length ≤ 160 := by
+    obtain ⟨-, hsub', -⟩ := S.kids _ hl
+    have h2 := (sublist_of_subset_common hsub' (S.O1 _ hl.1) (S.ordNodup _)
+      (fun e he => S.kid_mem hI.time hl he)).length_le
+    have hl2 := (hTL (nd (ts s) v).livePar).1
+    simp only [Top.order, Node.order, List.length_map] at h2; omega
+  have hvent : Ent ord (ht (ts s) v) v := hent
+  -- the tables holding `v` sit one level up
+  have hTv : ∀ T ∈ (nd (ts s) v).inTables, ht (ts s) T = ht (ts s) v + 1 ∧ T < s.nodes.size := by
+    intro T hT
+    have := S.tabsIff _ v T hvent
+    unfold tabs at this; rw [if_neg (by omega)] at this
+    obtain ⟨a, b, -⟩ := this.mp hT
+    exact ⟨b, a.2.1⟩
+  have hinv : (nd (ts s) v).inTables.length ≤ 2 := by
+    have := S.tabs_len hvent
+    unfold tabs at this; rw [if_neg (by omega)] at this; exact this
+  have htl : ∀ e ∈ ((wiC s v).nodes.getX v).table.map (·.1), tabsLen (wiC s v) (sH (wiC s v) v - 1) e ≤ 2 := by
+    intro e he
+    have hwt : ((wiC s v).nodes.getX v).table = (nd (ts s) v).table := W.table v
+    have he' : e ∈ Top.order (ts s) v := by rw [hwt] at he; simpa [Top.order, Node.order] using he
+    have hE : Ent ord (ht (ts s) v - 1) e := S.tabEnt v hvl.1 e he'
+    have hL := S.tabs_len hE
+    rw [hsh]; unfold tabsLen tabs at *
+    by_cases h0 : ht (ts s) v - 1 = 0
+    · rw [if_pos h0] at hL ⊢; exact hL
+    · rw [if_neg h0] at hL ⊢; rw [H.w_inTables]; exact hL
+  have hTt : ((wiC s v).nodes.getX v).table.length ≤ 160 := by rw [H.w_table]; exact (hTL v).1
+  refine ⟨_, sdAgree_ok (B := 160) (side := side) (by rw [sd_kids_eq]; exact hk2) (fun h => by omega) hside
+    (fun T hT => ?_) H.t_nd
+    (fun e he => by
+      rw [sd_kids_eq] at he
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook he]; rfl)
+    (by rw [H.w_livePar, H.w_children]; exact hvL) H.t_hv
+    (fun h => by rw [H.w_inTables] at h; have := (hTv v h).1; omega)
+    (fun h0 h => by rw [H.w_children] at h; exact (hkid v h).1 (by rw [hsh] at h0; exact h0) |>.2 rfl)
+    (fun h0 e he => by rw [hsz]; exact (hkeys e he).1 (by rwa [hsh] at h0))
+    (fun e he => by
+      by_cases h0 : ht (ts s) v - 1 = 0
+      · have := (hkeys e he).2 h0
+        exact ⟨by have := K.NC; omega, fun _ => by have := K.rcin; omega⟩
+      · have := (hkeys e he).1 h0
+        exact ⟨by have := K.N; omega, fun h => absurd (by rwa [hsh] at h) h0⟩)
+    (fun h0 e he => by rw [H.w_children] at he; rw [hsz]; exact ((hkid e he).1 (by rwa [hsh] at h0)).1)
+    (fun h0 e he => by
+      rw [H.w_children] at he; have := (hkid e he).2 (by rwa [hsh] at h0); have := K.alp; omega)
+    H.t_hL (by rw [H.w_livePar]; exact H.hLv)
+    (fun T hT => by rw [H.w_table, H.w_side]; exact hTL T)
+    (by rw [hsz]; exact K.N) (by rw [hsz]; exact K.rc) (by rw [hsz]; exact K.rs) (by rw [hsz]; exact K.rt)
+    (by rw [hsz]; exact K.ri) (by rw [hsz]; have := K.rcin; omega) (by rw [hsz]; have := K.alp; omega)
+    (fun T hT => by rw [H.w_table, H.w_side]; have := hTL T; have := K.lt; have := K.ls; omega)
+    (by have := K.ls; omega) (by have := K.lt; omega)
+    (by rw [H.w_inTables]; have := K.li; omega)
+    (fun e he => by have := htl e he; have := K.li; have := K.lcin; split <;> omega)
+    (by rw [H.w_children]; have := K.lc; omega)
+    (by rw [H.w_livePar, H.w_children]; have := K.lc; omega)⟩
+  · rw [H.w_inTables] at hT
+    obtain ⟨A, le, Bs, htab, hA, hsd, h1, h2, -⟩ := room_up hI hTP hvl.1 hT 0 0
+    exact ⟨A, le, Bs, by rw [H.w_table]; exact htab, hA, by rw [H.w_draining, H.w_side]; exact hsd, h1, h2⟩
+
+end OM.Impl
