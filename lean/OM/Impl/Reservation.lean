@@ -127,4 +127,94 @@ theorem reservationS_agree (κ : Caps) (s : Core) (L : Loc) {D : Nat}
   have e : K * (1 + (D + 5)) = K * (D + 6) := by ring
   simp only [Exp.cost] at hc ⊢; omega
 
+/-! ### The three kinds of rounds -/
+
+theorem resF_empty {t : Core} {j : Nat} (hj : t.resJob = none) (h0 : t.pqHi = 0) :
+    (resF j ((none : Option Unit), ())).run t = .ok (resOut true) t := by
+  simp [resF, OM.Proof.run_bind, hj, pqEmpty, h0, resOut]
+
+theorem resAgree_empty {κ : Caps} {t : Core} (hj : t.resJob = none) (h0 : t.pqHi = 0) : ResAgree κ t t true 40 := by
+  intro L hdn
+  obtain ⟨Le, ce, ee, her, hce⟩ := pqEmpty_agree κ t (OM.Machine.State.setLocs (fun _ => 0) [] [])
+    (b := true) (σ' := t) (by simp [pqEmpty, h0])
+  have e1 := evalF_call_ok (q := pqEmptyP) (args := []) (ds := ["em"]) (L := L) (by simp [evList]) ee
+  set L1 := OM.Machine.State.setLocs L ["em"] (pqEmptyP.rets.map Le)
+  have h1em : L1 "em" = 1 := by simp [L1, pqEmptyP, OM.Machine.State.setLocs, OM.Machine.State.upd, her, b2n]
+  have e2 := evalF_assign_ok (κ := κ) (s := t) (L := L1) (x := "dn") (e := (1 : Exp)) (v := 1) rfl
+  refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, hdn]) one_ne_zero
+    (evalF_ite_f (by simp [Exp.ev, OF.get, hj, b2n]) (evalF_seq_ok2 e1 (evalF_ite_t (v := 1)
+      (by simp [Exp.ev, h1em]) one_ne_zero e2))), by simp [OM.Machine.State.upd, b2n], ?_⟩
+  simp [Exp.cost, costList] at hce ⊢; omega
+
+/-- The program agrees with Level F's `jobStep j` from `t` (within `D` steps). -/
+def JobAgree (κ : Caps) (t : Core) (j : Job) (D : Nat) : Prop :=
+  ∀ r t1, (jobStep j).run t = .ok r t1 →
+    ∃ L' c, evalF κ jobStepS t (OM.Machine.State.setLocs (fun _ => 0) [] []) = .ok { t1 with resJob := r } L' c ∧ c ≤ D
+
+theorem resF_job {t t1 : Core} {i : Nat} {j : Job} {r : Option Job} (hj : t.resJob = some j)
+    (h : (jobStep j).run t = .ok r t1) :
+    (resF i ((none : Option Unit), ())).run t = .ok (resOut false) { t1 with resJob := r } := by
+  simp only [resF, OM.Proof.run_bind, OM.Proof.run_get, hj]
+  simp only [OM.Proof.run_bind, h]; rfl
+
+theorem resAgree_job {κ : Caps} {t t1 : Core} {j : Job} {r : Option Job} {D : Nat} (hj : t.resJob = some j)
+    (hA : JobAgree κ t j D) (h : (jobStep j).run t = .ok r t1) :
+    ResAgree κ t { t1 with resJob := r } false (D + 10) := by
+  intro L hdn
+  obtain ⟨Lj, cj, ej, hcj⟩ := hA r t1 h
+  have e1 := evalF_call_ok (q := jobP) (args := []) (ds := []) (L := L) (by simp [evList]) ej
+  refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, hdn]) one_ne_zero
+    (evalF_ite_t (v := 1) (by simp [Exp.ev, OF.get, hj, b2n]) one_ne_zero e1),
+    by simp [OM.Machine.State.setLocs, hdn, b2n], ?_⟩
+  simp [Exp.cost, costList]; omega
+
+/-- The program agrees with Level F's `splitChunkStart c` from `t` (within `D` steps). -/
+def SplitAgree (κ : Caps) (t : Core) (c D : Nat) : Prop :=
+  ∀ t2, (splitChunkStart c).run t = .ok () t2 →
+    ∃ L' n, evalF κ splitChunkStartS t (OM.Machine.State.setLocs (fun _ => 0) ["x"] [c]) = .ok t2 L' n ∧ n ≤ D
+
+theorem resF_split {t t1 t2 : Core} {i c : Nat} (hj : t.resJob = none) (h0 : t.pqHi ≠ 0)
+    (hp : pqPopMax.run t = .ok c t1) (hs : (splitChunkStart c).run t1 = .ok () t2) :
+    (resF i ((none : Option Unit), ())).run t = .ok (resOut false) t2 := by
+  simp only [resF, OM.Proof.run_bind, OM.Proof.run_get, hj]
+  simp only [pqEmpty, OM.Proof.run_bind]
+  simp [h0]
+  simp only [OM.Proof.run_bind, hp, hs]; rfl
+
+theorem resAgree_split {κ : Caps} {t t1 t2 : Core} {c D : Nat} (hj : t.resJob = none) (hq : PQCaps κ t)
+    (h0 : t.pqHi ≠ 0) (hp : pqPopMax.run t = .ok c t1) (hA : SplitAgree κ t1 c D)
+    (hs : (splitChunkStart c).run t1 = .ok () t2) :
+    ResAgree κ t t2 false (D + 300) := by
+  intro L hdn
+  obtain ⟨Le, ce, ee, her, hce⟩ := pqEmpty_agree κ t (OM.Machine.State.setLocs (fun _ => 0) [] [])
+    (b := false) (σ' := t) (by simp [pqEmpty, h0])
+  have e1 := evalF_call_ok (q := pqEmptyP) (args := []) (ds := ["em"]) (L := L) (by simp [evList]) ee
+  set L1 := OM.Machine.State.setLocs L ["em"] (pqEmptyP.rets.map Le)
+  have h1em : L1 "em" = 0 := by simp [L1, pqEmptyP, OM.Machine.State.setLocs, OM.Machine.State.upd, her, b2n]
+  have h1dn : L1 "dn" = 0 := by simp [L1, pqEmptyP, OM.Machine.State.setLocs, OM.Machine.State.upd, hdn]
+  obtain ⟨⟨Lp, cp, ep, hcp, hncp⟩, -⟩ := pqPopMax_agree κ t (OM.Machine.State.setLocs (fun _ => 0) [] []) hq hp
+  have e2 := evalF_call_ok (q := pqPopMaxP) (args := []) (ds := ["x"]) (L := L1) (by simp [evList]) ep
+  set L2 := OM.Machine.State.setLocs L1 ["x"] (pqPopMaxP.rets.map Lp)
+  have h2x : L2 "x" = c := by simp [L2, pqPopMaxP, OM.Machine.State.setLocs, OM.Machine.State.upd, hcp]
+  have h2dn : L2 "dn" = 0 := by simp [L2, pqPopMaxP, OM.Machine.State.setLocs, OM.Machine.State.upd, h1dn]
+  obtain ⟨Ls, cs, es, hcs⟩ := hA t2 hs
+  have e3 := evalF_call_ok (q := splitP) (args := [.var "x"]) (ds := []) (L := L2) (by simp [evList, Exp.ev, h2x]) es
+  refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, hdn]) one_ne_zero
+    (evalF_ite_f (by simp [Exp.ev, OF.get, hj, b2n]) (evalF_seq_ok2 e1 (evalF_ite_f
+      (by simp [Exp.ev, h1em]) (evalF_seq_ok2 e2 e3)))), by simp [OM.Machine.State.setLocs, h2dn, b2n], ?_⟩
+  simp [Exp.cost, costList] at hce hncp ⊢; omega
+
+theorem splitAgree_ok {κ : Caps} {s : Core} {x f1x i1 B : Nat} (hx0 : x ≠ NIL)
+    (hxs : x < s.C.size) (hC : s.C.size + 2 ≤ κ.tbl .C)
+    (hp : (s.C.getX x).prev ≠ NIL → (s.C.getX x).prev < s.C.size)
+    (hn : (s.C.getX x).next ≠ NIL → (s.C.getX x).next < s.C.size)
+    (hia : IAOK κ (linkChunkPair (OM.Proof.push2 s) x s.C.size (s.C.size + 1)) x s.C.size (s.C.size + 1) f1x i1 B) :
+    SplitAgree κ s x (150 + iaCost (linkChunkPair (OM.Proof.push2 s) x s.C.size (s.C.size + 1)) x B) := by
+  intro t2 h
+  rw [OM.Proof.splitChunkStart_ok hx0 hxs hia.run] at h
+  injection h with _ h2; subst h2
+  obtain ⟨L', c, e, hc, -⟩ := splitChunkStartS_ok (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["x"] [x])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hx0 hxs hC hp hn hia
+  exact ⟨L', c, e, hc⟩
+
 end OM.Impl
