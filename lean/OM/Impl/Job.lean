@@ -1,4 +1,5 @@
 import OM.Impl.Reserve
+import OM.Impl.Finish
 import OM.Proof.Top.Step
 
 /-!
@@ -629,5 +630,99 @@ theorem dsMoveS_ok {κ : Caps} {s : Core} {L : Loc} {v pt tb pv vb : Nat}
   refine ⟨L3, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 e3), by omega, ?_, ?_⟩
   · rw [hF3 "v" (by decide) (by decide), hF2 "v" (by simp), hF1' "v" (by simp), hv]
   · rw [hF3 "h" (by decide) (by decide), hF2 "h" (by simp), hF1' "h" (by simp), hh]
+
+/-! ### `drainStep` -/
+
+/-- `ok := drainStep v`. -/
+def dsP : Proc where
+  name := "drainStep"
+  params := ["v"]
+  rets := ["ok"]
+  body :=
+    .ite (.rd (.n .dead) "v") ("ok" ::= 0)
+      ("h" ::= .rd (.n .height) "v" ;;
+       .ite (.rd (.n .first) "v" =ₑ 0) (finishDrainS ;; "ok" ::= 0) (dsMoveS ;; "ok" ::= 1))
+
+theorem dsP_dead {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v) (hvN : v < κ.tbl .N)
+    (hal : (s.nodes.getX v).alive = false) :
+    ∃ L' c, evalF κ dsP.body s L = .ok s L' c ∧ L' "ok" = 0 ∧ c ≤ 10 := by
+  refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, hv, hvN, Fld.cap, Fld.get, NF.get, hal, b2n]) one_ne_zero
+    (evalF_assign_ok (v := 0) rfl), by simp [OM.Machine.State.upd], by simp [Exp.cost]⟩
+
+theorem dsP_pre {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v) (hvN : v < κ.tbl .N)
+    (hal : (s.nodes.getX v).alive = true) {s' : Core} {L' : Loc} {c : Nat}
+    (h : evalF κ (.ite (.rd (.n .first) "v" =ₑ 0) (finishDrainS ;; "ok" ::= 0) (dsMoveS ;; "ok" ::= 1)) s
+      (upd L "h" (s.nodes.getX v).height) = .ok s' L' c) :
+    evalF κ dsP.body s L = .ok s' L' (c + 6) := by
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "h") (e := .rd (.n .height) "v")
+    (v := (s.nodes.getX v).height) (by simp [Exp.ev, hv, hvN, Fld.cap, Fld.get, NF.get])
+  have := evalF_ite_f (t := ("ok" ::= 0)) (by simp [Exp.ev, hv, hvN, Fld.cap, Fld.get, NF.get, hal, b2n] :
+    (Exp.rd (.n .dead) "v").ev κ s L = some 0) (evalF_seq_ok2 a1 h)
+  convert this using 2
+  · rfl
+  · simp only [Exp.cost]; omega
+
+theorem dsP_move {κ : Caps} {s : Core} {L : Loc} {v pt tb pv vb : Nat} (hv : L "v" = v)
+    (hal : (s.nodes.getX v).alive = true) (hf : (s.nodes.getX v).first ≠ NIL)
+    (hside : goesLeft s v ∨
+      lookup (s.nodes.getX v).side (belowY s v (s.nodes.getX v).first) = some .right ∧
+      lookup (s.nodes.getX v).side (belowY s v (s.nodes.getX v).last) = some .right)
+    (hsz : (s.nodes.getX v).height + 1 < (s.path.getX (dsY s v)).size)
+    (hpt : (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).lab? (dsT s v) = some pt)
+    (htb : (s.nodes.getX (dsT s v)).lab? (belowY s v (dsY s v)) = some tb)
+    (hpv : (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).lab? v = some pv)
+    (hvb : (s.nodes.getX v).lab? (belowY s v (dsY s v)) = some vb)
+    (hold : (pv <<< ((s.nodes.getX v).height * s.P.beta)) |||
+        (vb <<< (((s.nodes.getX v).height - 1) * s.P.beta)) ≤ (s.C.getX (dsY s v)).tag)
+    (hok : OM.Proof.TagOK s (dsY s v) (dsTag s v pt tb pv vb))
+    (h1 : 1 ≤ (s.nodes.getX v).height) (hpsz : (s.path.getX (dsY s v)).size = s.P.H + 1)
+    (htbB : tb < 2 ^ s.P.beta) (hvbB : vb < 2 ^ s.P.beta) (htv : dsT s v ≠ v)
+    (hvs : v < s.nodes.size) (hts : dsT s v < s.nodes.size) (hys : dsY s v < s.C.size)
+    (hnf : notPrep s (s.nodes.getX v).first) (hnl : notPrep s (s.nodes.getX v).last)
+    (hvN : v < κ.tbl .N) (htN : dsT s v < κ.tbl .N) (hvsd : v < κ.lrec .side) (hvr : v < κ.lrec .table)
+    (htr : dsT s v < κ.lrec .table)
+    (hprr : (s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1) < κ.lrec .table)
+    (hfC : (s.nodes.getX v).first < κ.tbl .C) (hlC : (s.nodes.getX v).last < κ.tbl .C)
+    (hyP : (s.C.getX (dsY s v)).prev < κ.tbl .C) (hyN : (s.C.getX (dsY s v)).next < κ.tbl .C)
+    (hw : (s.nodes.getX v).height + 1 < κ.pw) :
+    ∃ L' c, evalF κ dsP.body s L = .ok (dsS s v (dsTag s v pt tb pv vb)) L' c ∧ L' "ok" = 1 ∧
+      c ≤ 1100 + 80 * (s.nodes.getX v).side.length +
+        40 * (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).table.length +
+        20 * (s.nodes.getX (dsT s v)).table.length + 20 * (s.nodes.getX v).table.length := by
+  obtain ⟨L1, c1, e1, hc1, -, -⟩ := dsMoveS_ok (κ := κ) (s := s) (L := upd L "h" (s.nodes.getX v).height)
+    (v := v) (by simp [OM.Machine.State.upd, hv]) (by simp [OM.Machine.State.upd]) hside hsz hpt htb hpv hvb hold hok
+    h1 hpsz htbB hvbB htv hvs hts hys hnf hnl hvN htN hvsd hvr htr hprr hfC hlC hyP hyN hw
+  have e2 := evalF_seq_ok2 e1 (evalF_assign_ok (κ := κ) (s := dsS s v (dsTag s v pt tb pv vb)) (L := L1) (x := "ok")
+    (e := (1 : Exp)) (v := 1) rfl)
+  have hc : (Exp.rd (.n .first) "v" =ₑ 0 : Exp).ev κ s (upd L "h" (s.nodes.getX v).height) = some 0 := by
+    have : ¬ (s.nodes.getX v).first = 0 := hf
+    simp [Exp.ev, OM.Machine.State.upd, hv, hvN, Fld.cap, Fld.get, NF.get, OM.Machine.BinOp.eval, this]
+  have e3 := evalF_ite_f (t := finishDrainS ;; "ok" ::= 0) hc e2
+  exact ⟨_, _, dsP_pre hv hvN hal e3, by simp [OM.Machine.State.upd], by simp [Exp.cost] at hc1 ⊢; omega⟩
+
+theorem dsP_finish {κ : Caps} {s : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
+    (hal : (s.nodes.getX v).alive = true) (hf : (s.nodes.getX v).first = NIL)
+    (hnd : (s.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (s.nodes.getX v).inTables, v ∈ (s.nodes.getX T).order)
+    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : v ∉ (s.nodes.getX v).order)
+    (hvN : v < κ.tbl .N) (hvr : v < κ.lrec .table) (hvi : v < κ.lrec .inTab)
+    (ht1 : (s.nodes.getX v).t1 < κ.tbl .N) (ht2 : (s.nodes.getX v).t2 < κ.tbl .N)
+    (hcE : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
+      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B)
+    (hcT : ∀ T ∈ (s.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
+      (s.nodes.getX T).table.length ≤ κ.lcap .table ∧ (s.nodes.getX T).side.length ≤ κ.lcap .side ∧
+      (s.nodes.getX T).table.length ≤ B ∧ (s.nodes.getX T).side.length ≤ B) :
+    ∃ L' c, evalF κ dsP.body s L = .ok (fdS v s) L' c ∧ L' "ok" = 0 ∧
+      c ≤ 300 + (s.nodes.getX v).table.length * (171 + 100 * B) +
+        (s.nodes.getX v).inTables.length * (301 + 200 * B) := by
+  obtain ⟨L1, c1, e1, hc1, -⟩ := finishDrainS_ok (κ := κ) (s := s) (L := upd L "h" (s.nodes.getX v).height)
+    (v := v) (B := B) (by simp [OM.Machine.State.upd, hv]) (by simp [OM.Machine.State.upd]) hnd hT hv0 hvs hvo hvN hvr
+    hvi ht1 ht2 hcE hcT
+  have e2 := evalF_seq_ok2 e1 (evalF_assign_ok (κ := κ) (s := fdS v s) (L := L1) (x := "ok") (e := (0 : Exp)) (v := 0) rfl)
+  have hc : (Exp.rd (.n .first) "v" =ₑ 0 : Exp).ev κ s (upd L "h" (s.nodes.getX v).height) = some 1 := by
+    have : (s.nodes.getX v).first = 0 := hf
+    simp [Exp.ev, OM.Machine.State.upd, hv, hvN, Fld.cap, Fld.get, NF.get, OM.Machine.BinOp.eval, this]
+  have e3 := evalF_ite_t (f := dsMoveS ;; "ok" ::= 1) hc one_ne_zero e2
+  exact ⟨_, _, dsP_pre hv hvN hal e3, by simp [OM.Machine.State.upd], by simp [Exp.cost] at hc1 ⊢; omega⟩
 
 end OM.Impl
