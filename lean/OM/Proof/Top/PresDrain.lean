@@ -759,4 +759,108 @@ theorem Shape.drain_shape (hL : LList (cN s) (cP s) s.firstChunk cl)
 
 end facts
 
+/-! ### Timing, room and the job after the step -/
+
+section job
+variable {s s' : TS} (T : SameTree s s')
+include T
+
+theorem SameTree.pend_fund (j : Job) (w up v k k' : Nat) :
+    pend s' (some { j with pc := .fund w up v k' }) = pend s (some { j with pc := .fund w up v k }) := by
+  show Top.upChain s' (s'.P.H + 1) up = Top.upChain s (s.P.H + 1) up
+  rw [T.upChain, T.P]
+
+theorem SameTree.funded (oj : Option Job) (u : Nat) : funded s' oj u ↔ funded s oj u := by
+  unfold Top.funded; cases oj <;> simp only [T.anc, T.ht, T.t1, T.t2]
+
+theorem SameTree.slack_other (j : Job) (w up v k k' u : Nat) (hu : u ≠ v) :
+    slack s' (some { j with pc := .fund w up v k' }) u = slack s (some { j with pc := .fund w up v k }) u := by
+  unfold slack curH
+  simp only [T.anc, T.ht, T.t1, T.t2, T.P, if_neg (Ne.symm hu)]
+
+theorem SameTree.slack_self (j : Job) (w up v k k' : Nat) (hw : Top.ht s w = Top.ht s v)
+    (hf : Top.anc s j.y (Top.ht s v) = (nd s v).t1 ∨ Top.anc s j.y (Top.ht s v) = (nd s v).t2) :
+    slack s' (some { j with pc := .fund w up v k' }) v = s.P.s - k' ∧
+      slack s (some { j with pc := .fund w up v k }) v = s.P.s - k := by
+  unfold slack curH
+  simp only [T.anc, T.ht, T.t1, T.t2, T.P, hw]
+  simp only [if_pos hf, show ¬ (Top.ht s v + 1 ≤ Top.ht s v) by omega, if_false, if_true, and_self]
+
+end job
+
+/-- **A sweep step keeps the invariant**, and moves the funding loop on. -/
+theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    {j : Job} {w up v k : Nat}
+    (hI : InvJ (ts s) cl ord dr n0 (some { j with pc := .fund w up v k }))
+    (hL : LList (cN s) (cP s) s.firstChunk cl) (hcs : ∀ c ∈ cl, c < s.C.size)
+    (hk : k < s.P.s) (hne : rng (ts s) cl v ≠ []) :
+    ∃ s', (drainStep v).run s = .ok true s' ∧ TopRel s s' ∧
+      InvJ (ts s') cl ord dr n0 (some { j with pc := .fund w up v (k + 1) }) := by
+  have S := hI.shape
+  obtain ⟨hpos, hat⟩ := hI.job _ rfl
+  simp only [JobAt] at hat
+  obtain ⟨hwl, hwa, hua, hg, hsw, hks⟩ := hat
+  obtain ⟨hrun, htag⟩ := S.drain_run hg hne hL
+  refine ⟨_, hrun, ?_, ?_⟩
+  · have := top_drainStep v s; rw [hrun] at this; exact this
+  obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
+  set tag := dsTag s v _ _ _ _
+  have T := dsS_sameTree (tag := tag) hvt hv htz
+  have SH := S.drain_shape hg hne hL hcs tag htag
+  obtain ⟨hy, -, -, -, -⟩ := S.pick hg hne
+  -- the walk node is a target of the ghost
+  have hsrc := S.src w hwl (by rw [hsw]; exact fun e => hg.1.1 e)
+  rw [hsw] at hsrc
+  have hwh : ht (ts s) w = ht (ts s) v := by
+    obtain ⟨-, -, h1, h2, -⟩ := S.ghost v hg
+    rcases hsrc.2 with e | e <;> rw [e] <;> assumption
+  have hfun : anc (ts s) j.y (ht (ts s) v) = (nd (ts s) v).t1 ∨
+      anc (ts s) j.y (ht (ts s) v) = (nd (ts s) v).t2 := by
+    rw [← hwh, ← hwa]; exact hsrc.2
+  have Ti := hI.time
+  have Ro := hI.room
+  refine ⟨SH, ?_, ?_, ?_⟩
+  · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
+      fun u hu => ?_, fun u hu hu' => ?_⟩
+    · rw [T.liveN] at hu; rw [T.weight, T.pend_fund j w up v k (k + 1), T.tw]; exact Ti.wts u hu
+    · rw [T.liveN] at hu; rw [T.livePar] at hp; rw [T.srcOf] at hs
+      rw [T.weight, T.ht, T.P]; exact Ti.wA u hu hp hs
+    · rw [T.ghostN] at hu; rw [T.weight, T.ht, T.P]; exact Ti.wB u hu
+    · rw [T.ghostN] at hu; rw [T.weight, T.ew]; exact Ti.wF u hu
+    · rw [T.ghostN] at hu
+      rw [T.fundOf, T.weight, T.P]
+      have hold := Ti.wC u hu
+      by_cases huv : u = v
+      · subst huv
+        rw [S.ds_rng hg hne tag, if_pos rfl]
+        obtain ⟨e1, e2⟩ := T.slack_self j w up u k (k + 1) hwh hfun
+        rw [e1]; rw [e2] at hold
+        rw [List.length_erase_of_mem hy]
+        have := List.length_pos_of_mem hy
+        omega
+      · rw [S.ds_rng hg hne tag, if_neg huv, if_neg (fun e => by
+          rw [e] at hu; exact absurd hu.2 (by rw [hlive.2]; simp)),
+          T.slack_other j w up v k (k + 1) u huv]
+        exact hold
+    · rw [T.ghostN] at hu
+      rw [T.fundOf, T.weight, T.P]
+      have := Ti.wC' u hu
+      by_cases hf : funded (ts s) (some { j with pc := .fund w up v k }) u
+      · rw [if_pos ((T.funded _ u).mpr (by unfold funded at hf ⊢; exact hf))]
+        rw [if_pos hf] at this; exact this
+      · rw [if_neg (fun h => hf (by have := (T.funded _ u).mp h; unfold funded at this ⊢; exact this))]
+        rw [if_neg hf] at this; exact this
+    · rw [T.liveN] at hu; rw [T.P] at hu'; rw [T.tw, T.ht, T.P]; exact Ti.wD u hu hu'
+  · refine ⟨fun X hX => ?_, fun X hX h1 => ?_, fun X hX h2 => ?_⟩
+    · rw [T.isN] at hX; rw [T.labs, T.P]; exact Ro.gaps X hX
+    · rw [T.isN] at hX; rw [T.ht] at h1; rw [T.ew, T.P]; exact Ro.pot1 X hX h1
+    · rw [T.isN] at hX; rw [T.ht] at h2; rw [T.ew, T.growth, T.oldLive, T.ht, T.P]
+      exact Ro.pot2 X hX h2
+  · intro j' hj'
+    cases hj'
+    refine ⟨hpos, ?_⟩
+    simp only [JobAt]
+    rw [T.liveN, T.ht, T.anc, T.anc, T.ghostN, T.srcOf, T.P]
+    exact ⟨hwl, hwa, hua, hg, hsw, show k + 1 ≤ s.P.s by omega⟩
+
 end OM.Proof.Top
