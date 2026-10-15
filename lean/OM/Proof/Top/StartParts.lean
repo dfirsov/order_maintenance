@@ -319,6 +319,72 @@ theorem sw_nosep (h2 : 2 ≤ ht (ts s) v) {g : Nat} (hg : g ∈ order (ts s) v)
         rw [o1, o2]; simp [hn.1]
       rw [hsep] at this; exact absurd this (by simp)
 
+/-- **A ghost entry goes with its first target.** -/
+theorem sw_ghost (h2 : 2 ≤ ht (ts s) v) {g : Nat} (hg : g ∈ order (ts s) v)
+    (hgd : (nd (ts s) g).draining = true) : lookup side g = lookup side (nd (ts s) g).t1 := by
+  have S := hI.shape
+  obtain ⟨ht1, ht2, -, hinf3⟩ := sp_ghost hpc hv0 hI hlp hTP hof hW h2 hg hgd
+  obtain ⟨-, -, hkn⟩ := sp_k hpc hv0 hI hlp hTP hof hW
+  obtain ⟨hbk, P, Q, hsp⟩ := sp_b hpc hv0 hI hlp hTP hof hW
+  have hnd := sp_order_nodup hpc hv0 hI hlp hTP hof hW
+  have hsub := sp_kids_sub hpc hv0 hI hlp hTP hof hW
+  have hns := sw_nosep hpc hv0 hI hlp hTP hof hW hlook h2 hg hgd
+  have hk1 := sw_kid hpc hv0 hI hlp hTP hof hW hlook ht1
+  rw [hk1, hlook g]
+  have hsideT1 : lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0))
+      (nd (ts s) g).t1 = some (if (nd (ts s) g).t1 ∈ (nd (ts s) v).children.take (sK (wiC s v) v)
+        then .left else .right) := by
+    rw [← hk1, hlook, if_neg]
+    obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+    obtain ⟨-, -, hk⟩ := S.kids v hvl
+    intro h; have := (hk _ ht1).2 h2; rw [this.2] at h; exact absurd h.2.2 (by simp)
+  by_cases hge : 2 ≤ ht (ts s) v ∧ g ∈ sEntries (wiC s v) v ∧ (nd (ts s) g).draining = true
+  · rw [if_pos hge, hsideT1]
+  · rw [if_neg hge]
+    -- the position of `g` is that of its targets
+    have hiff1 := mem_take_iff_left hsub hnd hkn ht1 hsp
+    have hiff2 := mem_take_iff_left hsub hnd hkn ht2 hsp
+    have hbg : (nd (ts s) v).children.getD (sK (wiC s v) v) 0 ≠ g := by
+      intro e
+      obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+      obtain ⟨-, -, hk⟩ := S.kids v hvl
+      have := (hk _ hbk).2 h2; rw [e] at this; rw [this.2] at hgd; exact absurd hgd (by simp)
+    have hb1 := before_of_infix2 (infix3_left hinf3)
+    have hb2 := before_of_infix2 (infix3_right hinf3)
+    rw [hsp] at hb1 hb2 hnd
+    rw [hsp, sidesOf_spec hnd]
+    have hgm := hb1.mem_right
+    simp only [List.mem_append, List.mem_cons] at hgm
+    by_cases ht : (nd (ts s) g).t1 ∈ (nd (ts s) v).children.take (sK (wiC s v) v)
+    · have hP2 : (nd (ts s) g).t2 ∈ P := hiff2.mp (hns.mp ht)
+      have hgP : g ∈ P := (mem_left_iff_before hnd).mpr
+        (hb2.trans ((mem_left_iff_before hnd).mp hP2) hnd)
+      rw [if_pos hgP, if_pos ht]
+    · have hP1 : (nd (ts s) g).t1 ∉ P := fun h => ht (hiff1.mpr h)
+      have hgP : g ∉ P := fun h => hP1 ((mem_left_iff_before hnd).mpr
+        (hb1.trans ((mem_left_iff_before hnd).mp h) hnd))
+      have hgQ : g = (nd (ts s) v).children.getD (sK (wiC s v) v) 0 ∨ g ∈ Q := by
+        rcases hgm with h | h | h
+        · exact absurd h hgP
+        · exact absurd h.symm hbg
+        · exact Or.inr h
+      rw [if_neg hgP, if_pos hgQ, if_neg ht]
+
+/-- **The children of the two new nodes.** -/
+theorem sw_ch : sCh1 (wiC s v) v side = (nd (ts s) v).children.take (sK (wiC s v) v) ∧
+    sCh2 (wiC s v) v side = (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+  have S := hI.shape
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  obtain ⟨hnd, -, -⟩ := S.kids v hvl
+  obtain ⟨f1, f2⟩ := filter_mem_take hnd (sK (wiC s v) v)
+  unfold sCh1 sCh2
+  rw [sd_kids_eq]
+  constructor
+  · rw [← f1]; apply List.filter_congr; intro e he
+    rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook he]; split <;> simp_all
+  · rw [← f2]; apply List.filter_congr; intro e he
+    rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook he]; split <;> simp_all
+
 end side
 
 end parts
