@@ -482,4 +482,59 @@ theorem moveS_agree (κ : Caps) (σ : Core) (L : Loc) (first : Bool) {g d e lab 
   simp only [Exp.cost, Exp.gF, Exp.eF] at hn4 hn5 ⊢
   omega
 
+/-! ### Label primitives -/
+
+theorem guard_run_ne {α : Type} {msg : String} {s s' : Core} {v : α} : (OM.Model.guard msg : CM α).run s ≠ .ok v s' := by
+  simp [OM.Model.guard]
+
+/-- `lab := between a b` (locals `a b`). -/
+def betweenS : Stm := .ite ("b" ≤ₑ "a" + 1) .fail ("lab" ::= ("a" + "b") / 2)
+/-- `lab := after a D B` (locals `a D B`). -/
+def afterS : Stm :=
+  "v" ::= "a" + "D" ;; .ite ((.bin .shl 1 "B" ≤ₑ "v") ||ₑ ("v" ≤ₑ "a")) .fail ("lab" ::= "v")
+/-- `lab := before b D` (locals `b D`). -/
+def beforeS : Stm := .ite (("b" <ₑ "D") ||ₑ ("D" =ₑ 0)) .fail ("lab" ::= "b" - "D")
+
+theorem between_inv {a b : Nat} {why : String} {s s' : Core} {v : Nat} (h : (between a b why).run s = .ok v s') :
+    s' = s ∧ a + 1 < b ∧ v = (a + b) / 2 := by
+  unfold between at h
+  by_cases hc : a + 1 ≥ b
+  · simp [hc, OM.Model.guard] at h
+  · simp [hc] at h; exact ⟨h.2.symm, by omega, h.1.symm⟩
+
+theorem after_inv {a D B : Nat} {why : String} {s s' : Core} {v : Nat} (h : (after a D B why).run s = .ok v s') :
+    s' = s ∧ a + D < 1 <<< B ∧ a < a + D ∧ v = a + D := by
+  unfold after at h
+  by_cases hc : 1 <<< B ≤ a + D ∨ D = 0
+  · simp [hc, OM.Model.guard] at h
+  · simp [hc] at h; exact ⟨h.2.symm, by omega, by omega, h.1.symm⟩
+
+theorem before_inv {b D : Nat} {why : String} {s s' : Core} {v : Nat} (h : (before b D why).run s = .ok v s') :
+    s' = s ∧ D ≤ b ∧ D ≠ 0 ∧ v = b - D := by
+  unfold before at h
+  by_cases hc : b < D ∨ D = 0
+  · simp [hc, OM.Model.guard] at h
+  · simp [hc] at h; exact ⟨h.2.symm, by omega, by omega, h.1.symm⟩
+
+theorem betweenS_ok {κ : Caps} {s : Core} {L : Loc} {a b : Nat} (ha : L "a" = a) (hb : L "b" = b) (h : a + 1 < b) :
+    ∃ c, evalF κ betweenS s L = .ok s (upd L "lab" ((a + b) / 2)) c ∧ c ≤ 15 := by
+  have : ¬ b ≤ a + 1 := by omega
+  refine ⟨12, ?_, by omega⟩
+  simp [betweenS, evalF, Exp.ev, OM.Machine.BinOp.eval, ha, hb, this, Exp.cost, Res.addCost]
+
+theorem afterS_ok {κ : Caps} {s : Core} {L : Loc} {a D B : Nat} (ha : L "a" = a) (hD : L "D" = D) (hB : L "B" = B)
+    (h1 : a + D < 1 <<< B) (h2 : a < a + D) :
+    ∃ c, evalF κ afterS s L = .ok s (upd (upd L "v" (a + D)) "lab" (a + D)) c ∧ c ≤ 20 := by
+  have h1' : ¬ 1 * 2 ^ B ≤ a + D := by rw [Nat.shiftLeft_eq] at h1; omega
+  have h2' : D ≠ 0 := by omega
+  have h3 : a + D < 2 ^ B := by omega
+  refine ⟨16, ?_, by omega⟩
+  simp [afterS, evalF, Exp.ev, OM.Machine.BinOp.eval, ha, hD, hB, h1', h2', Exp.cost, Res.addCost, Res.bind]
+  rw [if_pos h3]; simp [OM.Machine.State.upd]
+
+theorem beforeS_ok {κ : Caps} {s : Core} {L : Loc} {b D : Nat} (hb : L "b" = b) (hD : L "D" = D)
+    (h1 : D ≤ b) (h2 : D ≠ 0) : evalF κ beforeS s L = .ok s (upd L "lab" (b - D)) 12 := by
+  have : ¬ b < D := by omega
+  simp [beforeS, evalF, Exp.ev, OM.Machine.BinOp.eval, hb, hD, this, h1, h2, Exp.cost, Res.addCost]
+
 end OM.Impl
