@@ -157,10 +157,100 @@ def PF.get (P : Params) : PF → Nat
 
 end fields
 
-/-- The capacities of the machine arrays: records of each table, and plain arrays. -/
+/-! ### Lists, paths and the optional records -/
+
+def sideN : Side → Nat
+  | .left => 0 | .right => 1
+def sideOfN : Nat → Side
+  | 0 => .left | _ => .right
+
+/-- The lists of the core: per node (children, table, in-tables, sides), per chunk (`cin`), and
+the free-group stack. Each is seen as a list of pairs (`view`); the stack is stored reversed, so
+that its head is the last element. -/
+inductive LK | children | table | inTab | side | cin | freeG
+  deriving DecidableEq, Repr
+
+def LK.view (s : Core) (i : Nat) : LK → List (Nat × Nat)
+  | .children => (s.nodes.getX i).children.map fun e => (e, 0)
+  | .table => (s.nodes.getX i).table
+  | .inTab => (s.nodes.getX i).inTables.map fun e => (e, 0)
+  | .side => (s.nodes.getX i).side.map fun q => (q.1, sideN q.2)
+  | .cin => (s.cin.getX i).map fun e => (e, 0)
+  | .freeG => if i = 0 then s.freeG.reverse.map fun e => (e, 0) else []
+
+/-- `l` is the view of some list of kind `k`. -/
+def LK.valid (l : List (Nat × Nat)) : LK → Bool
+  | .table => true
+  | .side => l.all fun q => decide (q.2 ≤ 1)
+  | _ => l.all fun q => q.2 == 0
+
+def LK.put (s : Core) (i : Nat) (l : List (Nat × Nat)) : LK → Core
+  | .children => { s with nodes := s.nodes.modify i fun n => { n with children := l.map (·.1) } }
+  | .table => { s with nodes := s.nodes.modify i fun n => { n with table := l } }
+  | .inTab => { s with nodes := s.nodes.modify i fun n => { n with inTables := l.map (·.1) } }
+  | .side => { s with nodes := s.nodes.modify i fun n => { n with side := l.map fun q => (q.1, sideOfN q.2) } }
+  | .cin => { s with cin := s.cin.setX i (l.map (·.1)) }
+  | .freeG => { s with freeG := (l.map (·.1)).reverse }
+
+/-- The record holding the list exists. -/
+def LK.recOk (s : Core) (i : Nat) : LK → Bool
+  | .children | .table | .inTab | .side => decide (i < s.nodes.size)
+  | .cin => true
+  | .freeG => decide (i = 0)
+
+/-- The path row of chunk `c`. While the chunk list is being built, the row of the chunk being
+prepared holds `prep.path` (so that committing it costs nothing). -/
+def rowOf (s : Core) (c : Nat) : Array Nat :=
+  match s.prep with
+  | some pr => if c = pr.chunk then pr.path else s.path.getX c
+  | none => s.path.getX c
+
+/-- The program counter as five numbers. -/
+def pcEnc : JobPc → Nat × Nat × Nat × Nat × Nat
+  | .copy j => (0, j, 0, 0, 0)
+  | .walk none => (1, 0, 0, 0, 0)
+  | .walk (some v) => (2, v, 0, 0, 0)
+  | .afterDrain v up => (3, v, up, 0, 0)
+  | .fund v up src k => (4, v, up, src, k)
+
+def pcDec (t a b c d : Nat) : Option JobPc :=
+  match t with
+  | 0 => if b = 0 ∧ c = 0 ∧ d = 0 then some (.copy a) else none
+  | 1 => if a = 0 ∧ b = 0 ∧ c = 0 ∧ d = 0 then some (.walk none) else none
+  | 2 => if b = 0 ∧ c = 0 ∧ d = 0 then some (.walk (some a)) else none
+  | 3 => if c = 0 ∧ d = 0 then some (.afterDrain a b) else none
+  | 4 => some (.fund a b c d)
+  | _ => none
+
+/-- The optional records, read field by field (0 when absent). -/
+inductive OF | prepOn | prepChunk | prepH | prepBelow | prepTag
+  | jobOn | jobX | jobY | jobZ | jobT | jobA | jobB | jobC | jobD
+  deriving DecidableEq, Repr
+
+def OF.get (s : Core) : OF → Nat
+  | .prepOn => b2n s.prep.isSome
+  | .prepChunk => match s.prep with | some pr => pr.chunk | none => 0
+  | .prepH => match s.prep with | some pr => pr.h | none => 0
+  | .prepBelow => match s.prep with | some pr => pr.below | none => 0
+  | .prepTag => match s.prep with | some pr => pr.tag | none => 0
+  | .jobOn => b2n s.resJob.isSome
+  | .jobX => match s.resJob with | some j => j.x | none => 0
+  | .jobY => match s.resJob with | some j => j.y | none => 0
+  | .jobZ => match s.resJob with | some j => j.z | none => 0
+  | .jobT => match s.resJob with | some j => (pcEnc j.pc).1 | none => 0
+  | .jobA => match s.resJob with | some j => (pcEnc j.pc).2.1 | none => 0
+  | .jobB => match s.resJob with | some j => (pcEnc j.pc).2.2.1 | none => 0
+  | .jobC => match s.resJob with | some j => (pcEnc j.pc).2.2.2.1 | none => 0
+  | .jobD => match s.resJob with | some j => (pcEnc j.pc).2.2.2.2 | none => 0
+
+/-- The capacities of the machine arrays: records of each table, plain arrays, lists (records
+and elements per record), and the width of a path row. -/
 structure Caps where
   tbl : Tbl → Nat
   arr : AF → Nat
+  lrec : LK → Nat
+  lcap : LK → Nat
+  pw : Nat
 
 def Fld.tbl? : Fld → Option Tbl
   | .e _ => some .E | .g _ => some .G | .c _ => some .C | .n _ => some .N | _ => none
@@ -185,6 +275,25 @@ def Fld.set (κ : Caps) (s : Core) (i v : Nat) : Fld → Option Core
   | .a k => if i < κ.arr k then some (k.set s ((k.get s).setX i v)) else none
   | .s k => if i < 1 ∧ k.ok v = true then some (k.set s v) else none
 
+/-- Replace list `k` of record `i` by `l`; `none` if not representable. -/
+def LK.set (κ : Caps) (s : Core) (i : Nat) (l : List (Nat × Nat)) (k : LK) : Option Core :=
+  if k.recOk s i = true ∧ k.valid l = true ∧ l.length ≤ κ.lcap k ∧ i < κ.lrec k then some (k.put s i l)
+  else none
+
+/-- The path row of `c` reads 0 everywhere. -/
+def rowZero (κ : Caps) (s : Core) (c : Nat) : Prop := ∀ j < κ.pw, (rowOf s c).getX j = 0
+
+instance (κ : Caps) (s : Core) (c : Nat) : Decidable (rowZero κ s c) := by
+  unfold rowZero; infer_instance
+
+/-- `c` is not the chunk being prepared. -/
+def notPrep (s : Core) (c : Nat) : Prop :=
+  match s.prep with
+  | some pr => c ≠ pr.chunk
+  | none => True
+
+instance (s : Core) (c : Nat) : Decidable (notPrep s c) := by unfold notPrep; split <;> infer_instance
+
 /-! ### Syntax -/
 
 inductive Exp where
@@ -197,6 +306,13 @@ inductive Exp where
   | prm (k : PF)
   | bin (op : BinOp) (a b : Exp)
   | un (op : UnOp) (a : Exp)
+  /-- Component `snd` of element `j` of list `k` of record `i`. -/
+  | lrd (k : LK) (snd : Bool) (i j : Exp)
+  /-- The length of list `k` of record `i`. -/
+  | llen (k : LK) (i : Exp)
+  /-- Level `j` of the path of chunk `c`. -/
+  | prd (c j : Exp)
+  | opt (f : OF)
   deriving Repr, Inhabited
 
 inductive Stm where
@@ -215,6 +331,27 @@ inductive Stm where
   /-- A state the source program never reaches (an assertion of Level F). -/
   | bug
   | catch (s h : Stm)
+  /-- Set component `snd` of element `j` of list `k` of record `i`. -/
+  | lwr (k : LK) (snd : Bool) (i j e : Exp)
+  /-- Append the element `(a, b)` to list `k` of record `i`. -/
+  | lgrow (k : LK) (i a b : Exp)
+  /-- Drop the last element of list `k` of record `i`. -/
+  | lshrink (k : LK) (i : Exp)
+  | lclear (k : LK) (i : Exp)
+  /-- Set level `j` of the path of chunk `c`. -/
+  | pwr (c j e : Exp)
+  /-- Give the fresh chunk `c` the path `[NIL, …, NIL]` (its row already reads 0). -/
+  | rowReset (c : Exp)
+  /-- Start building the chain above chunk `c` (with `below = b`). -/
+  | prepInit (c b : Exp)
+  | prepSet (h b t : Exp)
+  /-- Set level `j` of the path being built. -/
+  | prepPath (j e : Exp)
+  /-- The chain is built: its path becomes the chunk's path. -/
+  | prepCommit
+  | jobSet (x y z t a b c d : Exp)
+  | jobClear
+  | pcSet (t a b c d : Exp)
   deriving Repr, Inhabited
 
 /-! ### Semantics on Level F -/
@@ -229,6 +366,14 @@ def Exp.ev (κ : Caps) (s : Core) (L : Loc) : Exp → Option Nat
   | .prm k => some (k.get s.P)
   | .bin op a b => (a.ev κ s L).bind fun x => (b.ev κ s L).bind fun y => op.eval x y
   | .un op a => (a.ev κ s L).map op.eval
+  | .lrd k snd i j => (i.ev κ s L).bind fun x => (j.ev κ s L).bind fun y =>
+      if x < κ.lrec k ∧ y < (k.view s x).length then
+        some (if snd then ((k.view s x).getD y (0, 0)).2 else ((k.view s x).getD y (0, 0)).1)
+      else none
+  | .llen k i => (i.ev κ s L).bind fun x => if x < κ.lrec k then some (k.view s x).length else none
+  | .prd c j => (c.ev κ s L).bind fun x => (j.ev κ s L).bind fun y =>
+      if x < κ.tbl .C ∧ y < κ.pw then some ((rowOf s x).getX y) else none
+  | .opt f => some (f.get s)
 
 def evList (κ : Caps) (s : Core) (L : Loc) (es : List Exp) : Option (List Nat) := es.mapM (·.ev κ s L)
 
@@ -239,6 +384,10 @@ def Exp.cost : Exp → Nat
   | .size _ | .prm _ => 2
   | .bin _ a b => 1 + a.cost + b.cost
   | .un _ a => 1 + a.cost
+  | .lrd _ _ i j => 1 + (1 + (1 + i.cost + 1) + j.cost)
+  | .llen _ i => 1 + i.cost
+  | .prd c j => 1 + (1 + (1 + c.cost + 1) + j.cost)
+  | .opt _ => 2
 
 def costList (es : List Exp) : Nat := (es.map Exp.cost).sum
 
@@ -305,5 +454,92 @@ def evalF (κ : Caps) : Stm → Core → Loc → Res
     | .fail s' L' n => (evalF κ h s' L').addCost (1 + n)
     | .ok s' L' n => .ok s' L' (1 + n)
     | .bug => .bug
+  | .lwr k snd i j e, s, L =>
+    match i.ev κ s L, j.ev κ s L, e.ev κ s L with
+    | some x, some y, some v =>
+      if y < (k.view s x).length then
+        match k.set κ s x ((k.view s x).set y
+            (if snd then (((k.view s x).getD y (0, 0)).1, v) else (v, ((k.view s x).getD y (0, 0)).2))) with
+        | some s' => .ok s' L (4 + i.cost + j.cost + e.cost)
+        | none => .bug
+      else .bug
+    | _, _, _ => .bug
+  | .lgrow k i a b, s, L =>
+    match i.ev κ s L, a.ev κ s L, b.ev κ s L with
+    | some x, some va, some vb =>
+      match k.set κ s x (k.view s x ++ [(va, vb)]) with
+      | some s' => .ok s' L (14 + 6 * i.cost + a.cost + b.cost)
+      | none => .bug
+    | _, _, _ => .bug
+  | .lshrink k i, s, L =>
+    match i.ev κ s L with
+    | some x =>
+      if (k.view s x).length ≠ 0 then
+        match k.set κ s x (k.view s x).dropLast with
+        | some s' => .ok s' L (4 + 2 * i.cost)
+        | none => .bug
+      else .bug
+    | none => .bug
+  | .lclear k i, s, L =>
+    match i.ev κ s L with
+    | some x =>
+      match k.set κ s x [] with
+      | some s' => .ok s' L (2 + i.cost)
+      | none => .bug
+    | none => .bug
+  | .pwr c j e, s, L =>
+    match c.ev κ s L, j.ev κ s L, e.ev κ s L with
+    | some x, some y, some v =>
+      if x < κ.tbl .C ∧ y < κ.pw ∧ notPrep s x then
+        .ok { s with path := s.path.setX x ((s.path.getX x).setX y v) } L (4 + c.cost + j.cost + e.cost)
+      else .bug
+    | _, _, _ => .bug
+  | .rowReset c, s, L =>
+    match c.ev κ s L with
+    | some x =>
+      if x < κ.tbl .C ∧ rowZero κ s x ∧ notPrep s x ∧ s.P.H + 1 ≤ κ.pw then
+        .ok { s with path := s.path.setX x (Array.replicate (s.P.H + 1) NIL) } L 1
+      else .bug
+    | none => .bug
+  | .prepInit c b, s, L =>
+    match c.ev κ s L, b.ev κ s L with
+    | some x, some y =>
+      if s.prep.isNone = true ∧ x < κ.tbl .C ∧ rowZero κ s x ∧ s.P.H + 1 ≤ κ.pw then
+        .ok { s with prep := some { chunk := x, below := y, path := Array.replicate (s.P.H + 1) NIL } } L
+          (16 + c.cost + b.cost)
+      else .bug
+    | _, _ => .bug
+  | .prepSet h b t, s, L =>
+    match s.prep, h.ev κ s L, b.ev κ s L, t.ev κ s L with
+    | some pr, some vh, some vb, some vt =>
+      .ok { s with prep := some { pr with h := vh, below := vb, tag := vt } } L (10 + h.cost + b.cost + t.cost)
+    | _, _, _, _ => .bug
+  | .prepPath j e, s, L =>
+    match s.prep, j.ev κ s L, e.ev κ s L with
+    | some pr, some y, some v =>
+      if y < κ.pw then
+        .ok { s with prep := some { pr with path := pr.path.setX y v } } L (6 + j.cost + e.cost)
+      else .bug
+    | _, _, _ => .bug
+  | .prepCommit, s, L =>
+    match s.prep with
+    | some pr => .ok { s with path := s.path.setX pr.chunk pr.path, prep := none } L 15
+    | none => .bug
+  | .jobSet x y z t a b c d, s, L =>
+    match evList κ s L [x, y, z, t, a, b, c, d] with
+    | some [vx, vy, vz, vt, va, vb, vc, vd] =>
+      match pcDec vt va vb vc vd with
+      | some pc => .ok { s with resJob := some { x := vx, y := vy, z := vz, pc := pc } } L
+          (28 + costList [x, y, z, t, a, b, c, d])
+      | none => .bug
+    | _ => .bug
+  | .jobClear, s, L => .ok { s with resJob := none } L 27
+  | .pcSet t a b c d, s, L =>
+    match s.resJob, evList κ s L [t, a, b, c, d] with
+    | some jb, some [vt, va, vb, vc, vd] =>
+      match pcDec vt va vb vc vd with
+      | some pc => .ok { s with resJob := some { jb with pc := pc } } L (16 + costList [t, a, b, c, d])
+      | none => .bug
+    | _, _ => .bug
 
 end OM.Impl

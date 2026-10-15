@@ -178,3 +178,109 @@ theorem Tbl.push_size (s : Core) (t t' : Tbl) :
 theorem Tbl.push_P (s : Core) (t : Tbl) : (t.push s).P = s.P := by cases t <;> rfl
 
 end OM.Impl
+
+namespace OM.Impl
+
+open OM.Model
+open OM.Proof.Top (getX_modify' getX_setX' getX_push')
+
+/-! ### Lists, paths and optional records under field writes and pushes -/
+
+theorem NF.set_lists (x : Node) (v : Nat) (k : NF) :
+    (NF.set x v k).children = x.children ∧ (NF.set x v k).table = x.table ∧
+      (NF.set x v k).inTables = x.inTables ∧ (NF.set x v k).side = x.side := by
+  cases k <;> exact ⟨rfl, rfl, rfl, rfl⟩
+
+/-- A field write keeps every list, path row and optional record. -/
+theorem Fld.set_rest {κ : Caps} {s s' : Core} {i v : Nat} {f : Fld} (h : f.set κ s i v = some s') :
+    (∀ (k : LK) j, k.view s' j = k.view s j) ∧ (∀ c, rowOf s' c = rowOf s c) ∧ (∀ o : OF, o.get s' = o.get s) := by
+  cases f with
+  | e k | g k | c k =>
+    simp only [Fld.set] at h; split at h <;> [skip; simp at h]
+    cases h
+    exact ⟨fun k' j => by cases k' <;> rfl, fun c => rfl, fun o => by cases o <;> rfl⟩
+  | n k =>
+    simp only [Fld.set] at h; split at h <;> [skip; simp at h]
+    cases h
+    refine ⟨fun k' j => ?_, fun c => rfl, fun o => by cases o <;> rfl⟩
+    cases k' <;> simp only [LK.view, getX_modify'] <;> (try split) <;> simp [NF.set_lists]
+  | a k =>
+    simp only [Fld.set] at h; split at h <;> [skip; simp at h]
+    cases h
+    cases k <;> exact ⟨fun k' j => by cases k' <;> rfl, fun c => rfl, fun o => by cases o <;> rfl⟩
+  | s k =>
+    simp only [Fld.set] at h; split at h <;> [skip; simp at h]
+    cases h
+    cases k <;> exact ⟨fun k' j => by cases k' <;> rfl, fun c => rfl, fun o => by cases o <;> rfl⟩
+
+theorem Tbl.push_rest (s : Core) (t : Tbl) :
+    (∀ (k : LK) j, k.view (t.push s) j = k.view s j) ∧ (∀ c, rowOf (t.push s) c = rowOf s c) ∧
+      (∀ o : OF, o.get (t.push s) = o.get s) := by
+  refine ⟨fun k j => ?_, fun c => by cases t <;> rfl, fun o => by cases t <;> cases o <;> rfl⟩
+  cases t <;> cases k <;> simp only [Tbl.push, LK.view, getX_push_default]
+
+/-! ### Lists under list writes -/
+
+@[simp] theorem NF.get_lists (x : Node) (k : NF) (a : List Nat) (b : List (Nat × Nat)) (c : List Nat)
+    (d : List (Nat × Side)) :
+    NF.get { x with children := a } k = NF.get x k ∧ NF.get { x with table := b } k = NF.get x k ∧
+      NF.get { x with inTables := c } k = NF.get x k ∧ NF.get { x with side := d } k = NF.get x k := by
+  cases k <;> exact ⟨rfl, rfl, rfl, rfl⟩
+
+/-- What a list replacement keeps. -/
+theorem LK.put_keep (s : Core) (i : Nat) (l : List (Nat × Nat)) (k : LK) :
+    (∀ (f : Fld) j, f.get (k.put s i l) j = f.get s j) ∧ (∀ t : Tbl, t.size (k.put s i l) = t.size s) ∧
+      (k.put s i l).P = s.P ∧ (∀ c, rowOf (k.put s i l) c = rowOf s c) ∧
+      (∀ o : OF, o.get (k.put s i l) = o.get s) := by
+  refine ⟨fun f j => ?_, fun t => ?_, by cases k <;> rfl, fun c => by cases k <;> rfl,
+    fun o => by cases k <;> cases o <;> rfl⟩
+  · cases k <;> cases f <;> simp only [LK.put, Fld.get, getX_modify'] <;> (try split) <;>
+      first | rfl | simp [NF.get_lists]
+  · cases k <;> cases t <;> simp [LK.put, Tbl.size]
+
+theorem sideN_ofN {v : Nat} (h : v ≤ 1) : sideN (sideOfN v) = v := by
+  rcases v with _ | _ | v <;> first | rfl | omega
+
+theorem map_pair0 {l : List (Nat × Nat)} (h : (l.all fun q => q.2 == 0) = true) :
+    (l.map (·.1)).map (fun e => (e, 0)) = l := by
+  induction l with
+  | nil => rfl
+  | cons a t ih =>
+    simp only [List.all_cons, Bool.and_eq_true, beq_iff_eq] at h
+    simp only [List.map_cons, ih h.2]
+    rw [← h.1]
+
+theorem map_side {l : List (Nat × Nat)} (h : (l.all fun q => decide (q.2 ≤ 1)) = true) :
+    (l.map fun q => (q.1, sideOfN q.2)).map (fun q => (q.1, sideN q.2)) = l := by
+  induction l with
+  | nil => rfl
+  | cons a t ih =>
+    simp only [List.all_cons, Bool.and_eq_true, decide_eq_true_eq] at h
+    simp only [List.map_cons, ih h.2, sideN_ofN h.1]
+
+theorem map_pair0' {l : List (Nat × Nat)} (h : (l.all fun q => q.2 == 0) = true) :
+    l.map (fun q => (q.1, 0)) = l := by
+  have := map_pair0 h; simpa [List.map_map, Function.comp_def] using this
+
+theorem map_side' {l : List (Nat × Nat)} (h : (l.all fun q => decide (q.2 ≤ 1)) = true) :
+    l.map (fun q => (q.1, sideN (sideOfN q.2))) = l := by
+  have := map_side h; simpa [List.map_map, Function.comp_def] using this
+
+theorem map_pair0_mem {l : List (Nat × Nat)} (h : ∀ q ∈ l, q.2 = 0) : l.map (fun q => (q.1, 0)) = l := by
+  apply map_pair0'; simpa using h
+
+theorem map_side_mem {l : List (Nat × Nat)} (h : ∀ q ∈ l, q.2 ≤ 1) :
+    l.map (fun q => (q.1, sideN (sideOfN q.2))) = l := by
+  apply map_side'; simpa using h
+
+/-- **A list replacement reads back**, and touches no other list. -/
+theorem LK.view_put {s : Core} {i : Nat} {l : List (Nat × Nat)} {k : LK} (hr : k.recOk s i = true)
+    (hv : k.valid l = true) (k' : LK) (j : Nat) :
+    k'.view (k.put s i l) j = if k' = k ∧ j = i then l else k'.view s j := by
+  cases k <;> simp only [LK.recOk, decide_eq_true_eq, LK.valid] at hr hv
+  all_goals (try have hl := map_pair0' hv)
+  all_goals (try have hl := map_side' hv)
+  all_goals (cases k' <;> simp only [LK.view, LK.put, getX_modify', getX_setX'] <;>
+    by_cases e : j = i <;> (try subst hr) <;> simp [*, Function.comp_def])
+
+end OM.Impl
