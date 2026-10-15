@@ -643,4 +643,112 @@ theorem labAfterS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" 
       (evalF_seq_ok2 a1 (evalF_seq_ok2 a2 b3))), by simp [OM.Machine.State.upd]; rfl,
       by simp [OM.Machine.State.upd, h1g], by simp [Exp.cost, Exp.gF, Exp.cF] at hc3 ⊢; omega⟩
 
+/-! ### `newGroup` -/
+
+def rgA : Stm :=
+  .wr (.g .next) (.var "gn") 0 ;; .wr (.g .prev) (.var "gn") 0 ;; .wr (.g .first) (.var "gn") 0 ;;
+  .wr (.g .last) (.var "gn") 0 ;; .wr (.g .chk) (.var "gn") "c"
+def rgB : Stm :=
+  .wr (.g .lab) (.var "gn") 0 ;; .wr (.g .size) (.var "gn") 0 ;; .wr (.g .st) (.var "gn") 0 ;;
+  .wr (.g .src) (.var "gn") 0 ;; .wr (.g .l) (.var "gn") 0
+def rgC : Stm := .wr (.g .r) (.var "gn") 0 ;; .wr (.g .dead) (.var "gn") 0
+/-- Reset group `gn` to `{ chk := c }` (every field written). -/
+def resetGS : Stm := rgA ;; rgB ;; rgC
+
+/-- `gn := newGroup c`: reuse the last freed group, or push a new one (local `c`). -/
+def newGroupS : Stm :=
+  "nf" ::= .llen .freeG 0 ;;
+  .ite ("nf" =ₑ 0) (.push .G "gn" ;; .wgF .chk "gn" "c")
+    ("gn" ::= .lrd .freeG false 0 ("nf" - 1) ;; .lshrink .freeG 0 ;; resetGS)
+
+def rgF1 (c : Nat) (X : Group) : Group :=
+  GF.set (GF.set (GF.set (GF.set (GF.set X 0 .next) 0 .prev) 0 .first) 0 .last) c .chk
+def rgF2 (X : Group) : Group := GF.set (GF.set (GF.set (GF.set (GF.set X 0 .lab) 0 .size) 0 .st) 0 .src) 0 .l
+
+theorem resetGS_ok {κ : Caps} {s : Core} {L : Loc} {j c : Nat} (hj : L "gn" = j) (hc : L "c" = c)
+    (hjs : j < s.Gs.size) (hjT : j < κ.tbl .G) :
+    ∃ n, evalF κ resetGS s L = .ok { s with Gs := s.Gs.modify j fun _ => { chk := c } } L n ∧ n ≤ 40 := by
+  have hv : ∀ s' : Core, (Exp.var "gn").ev κ s' L = some j := fun _ => by simp [Exp.ev, hj]
+  have b1 := five_wrG (κ := κ) (s := s) (L := L) (x := "gn") (j := j) (k1 := .next) (k2 := .prev) (k3 := .first)
+    (k4 := .last) (k5 := .chk) (e1 := 0) (e2 := 0) (e3 := 0) (e4 := 0) (e5 := .var "c") (w1 := 0) (w2 := 0) (w3 := 0)
+    (w4 := 0) (w5 := c) hj hjs hjT (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)
+    (fun _ => by simp [Exp.ev, hc]) rfl rfl rfl rfl rfl
+  have b2 := five_wrG (κ := κ) (L := L) (x := "gn") (j := j) (k1 := .lab) (k2 := .size) (k3 := .st)
+    (k4 := .src) (k5 := .l) (e1 := 0) (e2 := 0) (e3 := 0) (e4 := 0) (e5 := 0) (w1 := 0) (w2 := 0) (w3 := 0)
+    (w4 := 0) (w5 := 0) (s := { s with Gs := s.Gs.modify j (rgF1 c) })
+    hj (by simp [hjs]) hjT (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)
+    rfl rfl rfl rfl rfl
+  set A := (s.Gs.modify j (rgF1 c)).modify j rgF2
+  have w1 := evalF_wrG_ok (κ := κ) (s := { s with Gs := A }) (L := L) (k := .r) (e := (0 : Exp)) (w := 0) (hv _) rfl
+    (by simp [A, hjs]) hjT rfl
+  have w2 := evalF_wrG_ok (κ := κ) (s := { s with Gs := A.modify j (GF.set · 0 .r) }) (L := L) (k := .dead)
+    (e := (0 : Exp)) (w := 0) (hv _) rfl (by simp [A, hjs]) hjT rfl
+  have hfin : (A.modify j (GF.set · 0 .r)).modify j (GF.set · 0 .dead) = s.Gs.modify j fun _ => { chk := c } := by
+    simp only [A, Array.modify_modify_same]
+    congr 1
+  rw [hfin] at w2
+  exact ⟨_, evalF_seq_ok2 b1 (evalF_seq_ok2 b2 (evalF_seq_ok2 w1 w2)), by simp [Exp.cost]⟩
+
+theorem newGroup_run (c : Nat) (σ : Core) : (newGroup c).run σ = (match σ.freeG with
+    | i :: rest => .ok i { σ with freeG := rest, Gs := σ.Gs.set! i { chk := c } }
+    | [] => .ok σ.Gs.size { σ with Gs := σ.Gs.push { chk := c } }) := by
+  unfold newGroup
+  cases h : σ.freeG <;>
+    simp [h, EStateM.run, modifyGet, MonadStateOf.modifyGet, EStateM.modifyGet, monadLift, MonadLift.monadLift]
+
+theorem newGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {c : Nat} (hc : L "c" = c) {i : Nat} {σ' : Core}
+    (h : (newGroup c).run σ = .ok i σ') (hG : σ.Gs.size < κ.tbl .G) (hfree : ∀ x ∈ σ.freeG, x < σ.Gs.size)
+    (hF0 : 0 < κ.lrec .freeG) (hF : σ.freeG.length ≤ κ.lcap .freeG) :
+    ∃ L' n, evalF κ newGroupS σ L = .ok σ' L' n ∧ L' "gn" = i ∧ L' "c" = c ∧ n ≤ 80 := by
+  rw [newGroup_run] at h
+  split at h
+  case h_2 hf =>
+    injection h with h1 h2
+    subst h1 h2
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "nf") (e := .llen .freeG 0) (v := 0)
+      (by simp [Exp.ev, hF0, LK.view, hf])
+    set L1 := upd L "nf" 0
+    have p1 := evalF_pushN_ok (κ := κ) (s := σ) (L := L1) (x := "gn")
+    have hp : evalF κ (.push .G "gn") σ L1 = .ok { σ with Gs := σ.Gs.push default } (upd L1 "gn" σ.Gs.size) pushCost := by
+      simp [evalF, Tbl.size, Tbl.push, hG]
+    have w := evalF_wrG_ok (κ := κ) (s := { σ with Gs := σ.Gs.push default }) (L := upd L1 "gn" σ.Gs.size)
+      (k := .chk) (i := .var "gn") (e := .var "c") (j := σ.Gs.size) (w := c) (by simp [Exp.ev, OM.Machine.State.upd])
+      (by simp [Exp.ev, OM.Machine.State.upd, L1, hc]) (by simp) (by omega) rfl
+    have hm : (σ.Gs.push default).modify σ.Gs.size (GF.set · c .chk) = σ.Gs.push { chk := c } := by
+      rw [Array.modify_push_size]; rfl
+    rw [hm] at w
+    have t1 := evalF_seq_ok2 hp w
+    have t2 : evalF κ (.push .G "gn" ;; .wgF .chk "gn" "c") σ L1 =
+        .ok { σ with Gs := σ.Gs.push { chk := c } } (upd L1 "gn" σ.Gs.size) (pushCost + 3) := t1
+    refine ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, L1,
+      OM.Machine.State.upd]) one_ne_zero t2), by simp [OM.Machine.State.upd],
+      by simp [OM.Machine.State.upd, L1, hc], by simp [Exp.cost, pushCost]⟩
+  case h_1 j rest hf =>
+    injection h with h1 h2
+    subst h1 h2
+    have hjs : j < σ.Gs.size := hfree j (by simp [hf])
+    have hv : LK.view σ 0 .freeG = (rest.reverse.map fun e => (e, 0)) ++ [(j, 0)] := by simp [LK.view, hf]
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "nf") (e := .llen .freeG 0) (v := rest.length + 1)
+      (by simp [Exp.ev, hF0, hv])
+    set L1 := upd L "nf" (rest.length + 1)
+    have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "gn") (e := .lrd .freeG false 0 ("nf" - 1)) (v := j)
+      (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd, hF0, hv])
+    set L2 := upd L1 "gn" j
+    have hso : LK.set κ σ 0 (LK.view σ 0 .freeG).dropLast .freeG = some { σ with freeG := rest } := by
+      rw [LK.set_ok (by simp [LK.recOk]) (by simp [LK.valid, hv]) (by simp [hv]; rw [hf] at hF; simp at hF; omega) hF0]
+      simp [LK.put, hv, Function.comp_def]
+    have hso' : LK.set κ σ 0 (List.map (fun e => (e, 0)) rest).reverse .freeG = some { σ with freeG := rest } := by
+      rw [← hso, hv]; simp
+    have e3 : evalF κ (.lshrink .freeG 0) σ L2 = .ok { σ with freeG := rest } L2 6 := by
+      simp only [evalF, Exp.ev, Exp.ofNat_def, hv, Exp.cost]; simp [hso']
+    obtain ⟨n4, e4, hn4⟩ := resetGS_ok (κ := κ) (s := { σ with freeG := rest }) (L := L2) (j := j) (c := c)
+      (by simp [L2, OM.Machine.State.upd]) (by simp [L2, L1, OM.Machine.State.upd, hc]) hjs (by omega)
+    have hfin : ({ { σ with freeG := rest } with Gs := σ.Gs.modify j fun _ => { chk := c } } : Core) =
+        { σ with freeG := rest, Gs := σ.Gs.set! j { chk := c } } := by
+      rw [Array.set!_eq_modify]
+    rw [hfin] at e4
+    refine ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd])
+      (evalF_seq_ok2 a2 (evalF_seq_ok2 e3 e4))), by simp [L2, OM.Machine.State.upd],
+      by simp [L2, L1, OM.Machine.State.upd, hc], by simp [Exp.cost] at hn4 ⊢; omega⟩
+
 end OM.Impl
