@@ -871,4 +871,88 @@ theorem chunkSplitStepS_left (κ : Caps) (s : Core) (L : Loc) {x : Nat} {labs : 
     rw [hF7 "x" (by decide), h6 "x" (by decide), h5x]
   · simp only [Exp.cost, cssDirE, Exp.cF] at hc3 hc5 hc6 hc7 ⊢; omega
 
+open OM.Proof in
+theorem chunkSplitStepS_right (κ : Caps) (s : Core) (L : Loc) {x : Nat} {labs : List Nat} (hx : L "x" = x)
+    (hne : cF s x ≠ NIL) (hdir : cSz s (cRr s x) < cSz s (cLl s x))
+    (hlabs : (pushLabsR s x (unitCand s x false).length).run s = .ok labs s)
+    (hxs : x < s.C.size) (hlS : cLl s x < s.C.size) (hrS : cRr s x < s.C.size) (hxl : x ≠ cRr s x)
+    (hC : s.C.size ≤ κ.tbl .C) (hG : s.Gs.size ≤ κ.tbl .G)
+    (hu : ∀ g ∈ unitCand s x false, g < s.Gs.size) (hg0 : cLs s x < κ.tbl .G)
+    (hsr : (s.Gs.getX (cLs s x)).src < κ.tbl .G) (hyl : cF s (cRr s x) < κ.tbl .G) :
+    ∃ L' n, evalF κ chunkSplitStepS s L = .ok (cmoveRState s x (unitCand s x false) labs) L' n ∧ L' "ok" = 1 ∧
+      L' "x" = x ∧ n ≤ 700 := by
+  have hxT : x < κ.tbl .C := by omega
+  set l := cLl s x
+  set r := cRr s x
+  set u := unitCand s x false
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "xf") (e := .cF .first "x") (v := cF s x)
+    (by simp [Exp.cF, Exp.ev, hx, hxT, Fld.cap, Fld.get, CF.get, cF])
+  set L1 := upd L "xf" (cF s x)
+  have hc1 : ("xf" =ₑ 0 : Exp).ev κ s L1 = some 0 := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd]; simpa [NIL] using hne
+  have h1x : L1 "x" = x := by simp [L1, OM.Machine.State.upd, hx]
+  have hlT : (s.C.getX x).l < κ.tbl .C := (show l < κ.tbl .C by omega)
+  have hrT : (s.C.getX x).r < κ.tbl .C := (show r < κ.tbl .C by omega)
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := L1) (x := "lf") (e := cssDirE) (v := b2n false)
+    (by have hdir' : (s.C.getX (s.C.getX x).r).size < (s.C.getX (s.C.getX x).l).size := hdir
+        have : ¬ (s.C.getX (s.C.getX x).l).size ≤ (s.C.getX (s.C.getX x).r).size := by omega
+        simp [cssDirE, Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1x, hxT, Fld.cap, Fld.get, CF.get, hlT, hrT, this, b2n])
+  set L2 := upd L1 "lf" (b2n false)
+  obtain ⟨L3, c3, e3, hU3, hk3, hc3, hF3⟩ := unitS_ok (κ := κ) (s := s) (L := L2) (x := x) (left := false)
+    (by simp [L2, OM.Machine.State.upd, h1x]) (by simp [L2, OM.Machine.State.upd]) hxT (by simpa using hg0)
+    (by simpa using hsr)
+  have h3x : L3 "x" = x := by
+    rw [hF3 "x" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; simp [L2, OM.Machine.State.upd, h1x]
+  have h3lf : L3 "lf" = 0 := by
+    rw [hF3 "lf" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]
+    simp [L2, OM.Machine.State.upd, b2n]
+  have a4 := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "y") (e := .cF .r "x") (v := r)
+    (by simp [Exp.cF, Exp.ev, h3x, hxT, Fld.cap, Fld.get, CF.get, r, cRr])
+  set L4 := upd L3 "y" r
+  have h4uk : L4 "uk" = 1 ∨ L4 "uk" = 3 := by simpa [L4, OM.Machine.State.upd] using hk3
+  have hlen : (L4 "uk" = 1 ∧ u.length = 1) ∨ (L4 "uk" = 3 ∧ u.length = 3) := by
+    have : unitOf L4 = u := by
+      rw [show u = unitOf L3 from hU3.symm]; simp [unitOf, L4, OM.Machine.State.upd]
+    rcases h4uk with h | h
+    · left; refine ⟨h, ?_⟩; rw [← this]; simp [unitOf, h]
+    · right; refine ⟨h, ?_⟩; rw [← this]; simp [unitOf, h]
+  obtain ⟨L5, c5, e5, hlab5, huk5, hc5, hF5⟩ := labRS_ok (κ := κ) (s := s) (L := L4) (y := r) (k := u.length)
+    (labs := labs) (by simp [L4, OM.Machine.State.upd]) hlen (by omega) hyl hlabs
+  have h5 : ∀ r, r = "x" ∨ r = "y" ∨ r = "uk" ∨ r = "u0" ∨ r = "u1" ∨ r = "u2" → L5 r = L4 r := by
+    intro rr hr
+    exact hF5 _ (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+  have hU4 : unitOf L4 = u := by
+    rw [show u = unitOf L3 from hU3.symm]; simp [unitOf, L4, OM.Machine.State.upd]
+  have hU5 : unitOf L5 = u := by
+    rw [← hU4]; simp [unitOf, h5 "uk" (by simp), h5 "u0" (by simp), h5 "u1" (by simp), h5 "u2" (by simp)]
+  have h5x : L5 "x" = x := by rw [h5 "x" (by simp)]; simp [L4, OM.Machine.State.upd, h3x]
+  have h5y : L5 "y" = r := by rw [h5 "y" (by simp)]; simp [L4, OM.Machine.State.upd]
+  have h5k : L5 "uk" = 1 ∨ L5 "uk" = 3 := by rw [h5 "uk" (by simp)]; exact h4uk
+  obtain ⟨L6, c6, e6, hc6, hF6⟩ := mgRS_ok (κ := κ) (s := s) (L := L5) (x := x) (y := r) h5x h5y h5k hxl hxs hrS hC
+    (by rw [hU5]; intro g hg; exact ⟨hu g hg, by have := hu g hg; omega⟩)
+  rw [hU5, hlab5] at e6
+  set S1 := moveGroupsRight s x r u labs
+  have h6 : ∀ r, r ≠ "ul" → L6 r = L5 r := hF6
+  have hU6 : unitOf L6 = u := by
+    rw [← hU5]; simp [unitOf, h6 "uk" (by decide), h6 "u0" (by decide), h6 "u1" (by decide), h6 "u2" (by decide)]
+  obtain ⟨L7, c7, e7, hc7, hF7⟩ := msS_ok (κ := κ) (s := S1) (L := L6) (x := x) (y := r)
+    (by rw [h6 "x" (by decide), h5x]) (by rw [h6 "y" (by decide), h5y]) (by rw [h6 "uk" (by decide)]; exact h5k)
+    (by simp [S1, moveGroupsRight_C_size, hxs]) (by simp [S1, moveGroupsRight_C_size, hrS])
+    (by simp [S1, moveGroupsRight_C_size, hC]) (by rw [hU6]; intro g hg; have := hu g hg; omega)
+  rw [hU6] at e7
+  have e8 := evalF_assign_ok (κ := κ) (s := cmoveSizes S1 x r u) (L := L7) (x := "ok") (e := (1 : Exp)) (v := 1) rfl
+  have hc3' : (Exp.var "lf").ev κ s L3 = some 0 := by simp [Exp.ev, h3lf]
+  refine ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f hc1 (evalF_seq_ok2 (evalF_seq_ok2 a2 (evalF_seq_ok2 e3
+    (evalF_seq_ok2 (evalF_ite_f hc3' (evalF_seq_ok2 a4 (evalF_seq_ok2 e5 e6))) e7))) e8)),
+    by simp [OM.Machine.State.upd], ?_, ?_⟩
+  · simp only [OM.Machine.State.upd]; simp
+    rw [hF7 "x" (by decide), h6 "x" (by decide), h5x]
+  · simp only [Exp.cost, cssDirE, Exp.cF] at hc3 hc5 hc6 hc7 ⊢; omega
+
 end OM.Impl
