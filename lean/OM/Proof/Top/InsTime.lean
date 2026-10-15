@@ -167,6 +167,119 @@ theorem ins_ew_ghost {u : Nat} (hu : ghostN (ts s) u) :
     · rw [if_neg h1, if_pos h2, if_pos (Or.inr h2)]; omega
     · rw [if_neg h1, if_neg h2, if_neg (by tauto)]; omega
 
+theorem ins_upChain : ∀ f v, upChain t f v = upChain (ts s) f v
+  | 0, _ => rfl
+  | f + 1, v => by simp only [upChain, F.livePar, ins_upChain f]
+
+/-- The split's pending nodes are `x`'s live ancestors. -/
+theorem ins_pend {v : Nat} (hv : liveN (ts s) v) :
+    v ∈ pend t (some (insJob s x)) ↔ anc (ts s) x (ht (ts s) v) = v := by
+  unfold pend wStart
+  simp only [insJob]
+  rw [F.P, ins_upChain hI hcs hx F, F.lpar, if_pos (Or.inl rfl)]
+  exact hI.shape.upChain_lpr hx hv
+
+theorem ins_anc_y (h : Nat) (hh : 1 ≤ h) : anc t (insJob s x).y h = anc (ts s) x h :=
+  F.anc_new _ (Or.inl rfl) h hh
+
+theorem ins_funded {v : Nat} (hv : ghostN (ts s) v) :
+    funded t (some (insJob s x)) v ↔ (anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t1 ∨
+      anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t2) := by
+  have h1 := (hI.shape.htN v hv.1).1
+  show anc t (insJob s x).y (ht t v) = (nd t v).t1 ∨ anc t (insJob s x).y (ht t v) = (nd t v).t2 ↔ _
+  rw [F.ht, F.t1, F.t2, ins_anc_y hI hcs hx F _ h1]
+
+theorem ins_slack (hTP : TopParams s.P) {v : Nat} (hv : ghostN (ts s) v) :
+    slack t (some (insJob s x)) v = if anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t1 ∨
+      anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t2 then s.P.s else 0 := by
+  have h1 := (hI.shape.htN v hv.1).1
+  have hfu := ins_funded hI hcs hx F hv
+  have hcur : curH t (insJob s x) = 1 := rfl
+  show (if anc t (insJob s x).y (ht t v) = (nd t v).t1 ∨ anc t (insJob s x).y (ht t v) = (nd t v).t2 then
+    (if curH t (insJob s x) ≤ ht t v then t.P.s else _) else 0) = _
+  by_cases hC : anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t1 ∨
+      anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t2
+  · rw [if_pos (show anc t (insJob s x).y (ht t v) = (nd t v).t1 ∨
+      anc t (insJob s x).y (ht t v) = (nd t v).t2 from hfu.mpr hC), if_pos hC, hcur, F.ht, if_pos h1, F.P]
+  · rw [if_neg (show ¬(anc t (insJob s x).y (ht t v) = (nd t v).t1 ∨
+      anc t (insJob s x).y (ht t v) = (nd t v).t2) from fun h => hC (hfu.mp h)), if_neg hC]
+
+/-- **The drain timing after the split**, the job at its start. -/
+theorem ins_time (hTP : TopParams s.P) :
+    Timing t (clIns cl x s.C.size (s.C.size + 1)) (some (insJob s x)) := by
+  have S := hI.shape
+  have Ti := hI.time
+  have hs3 := hTP.s3
+  have eP : (ts s).P = s.P := rfl
+  refine ⟨fun v hv => ?_, fun v hv hp hs => ?_, fun v hv => ?_, fun v hv => ?_, fun v hv => ?_,
+    fun v hv => ?_, fun v hv hH => ?_, fun u hu hs => ?_⟩
+  · rw [F.liveN] at hv
+    have h1 := (S.htN v hv.1).1
+    have hw := Ti.wts v hv
+    simp only [pend, List.not_mem_nil, if_false, Nat.add_zero] at hw
+    rw [F.weight, ins_tw hI hcs hx F h1, ← hw]
+    by_cases hp : anc (ts s) x (ht (ts s) v) = v
+    · rw [if_pos ((ins_pend hI hcs hx F hv).mpr hp), if_pos hp]
+    · rw [if_neg (fun h => hp ((ins_pend hI hcs hx F hv).mp h)), if_neg hp]
+  · rw [F.liveN] at hv; rw [F.livePar] at hp; rw [F.srcOf] at hs
+    rw [F.weight, F.ht, F.P]; exact Ti.wA v hv hp hs
+  · rw [F.ghostN] at hv; rw [F.weight, F.ht, F.P]; exact Ti.wB v hv
+  · rw [F.ghostN] at hv
+    rw [F.weight, ins_ew_ghost hI hcs hx F hv]
+    obtain ⟨a1, a2⟩ := Ti.wF v hv
+    split
+    · refine ⟨by omega, ?_⟩
+      rw [show ew (ts s) cl v + 2 - (nd (ts s) v).weight = ew (ts s) cl v - (nd (ts s) v).weight + 2 by omega]
+      omega
+    · exact ⟨by omega, by simpa using a2⟩
+  · rw [F.ghostN] at hv
+    obtain ⟨h1, hH⟩ := S.htN v hv.1
+    have hw := Ti.wC v hv
+    simp only [slack, Nat.add_zero] at hw
+    rw [eP] at hw
+    unfold fundOf at hw ⊢
+    have hF := Ti.wF v hv
+    rw [ins_rng_len hI hcs hx F h1 hH, F.weight, ins_ew_ghost hI hcs hx F hv,
+      ins_slack hI hcs hx F hTP hv, F.P]
+    by_cases hfd : anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t1 ∨
+        anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t2
+    · rw [if_pos hfd, if_pos hfd]
+      have e : (ew (ts s) cl v + 2 - (nd (ts s) v).weight) / 2 =
+          (ew (ts s) cl v - (nd (ts s) v).weight) / 2 + 1 := by omega
+      rw [e, Nat.mul_succ]
+      split <;> omega
+    · rw [if_neg hfd, if_neg hfd, if_neg]
+      · simpa using hw
+      · intro hp
+        rcases S.P x hx _ h1 hH with e | ⟨-, e⟩
+        · rw [hp] at e
+          have := (S.anc_live hx _ h1 hH).1
+          rw [← e] at this; exact absurd hv.2 (by rw [this.2]; simp)
+        · rw [hp] at e; exact hfd e
+  · rw [F.ghostN] at hv
+    have h1 := (S.htN v hv.1).1
+    have hw := Ti.wC' v hv
+    simp only [funded, if_false, Nat.sub_zero] at hw
+    rw [eP] at hw
+    unfold fundOf at hw ⊢
+    have hF := Ti.wF v hv
+    have hfu := ins_funded hI hcs hx F hv
+    rw [F.weight, ins_ew_ghost hI hcs hx F hv, F.P]
+    by_cases hfd : anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t1 ∨
+        anc (ts s) x (ht (ts s) v) = (nd (ts s) v).t2
+    · rw [if_pos hfd, if_pos (hfu.mpr hfd)]
+      have e : (ew (ts s) cl v + 2 - (nd (ts s) v).weight) / 2 =
+          (ew (ts s) cl v - (nd (ts s) v).weight) / 2 + 1 := by omega
+      rw [e, Nat.add_sub_cancel]; exact hw
+    · rw [if_neg hfd, if_neg (fun h => hfd (hfu.mp h))]; simpa using hw
+  · rw [F.liveN] at hv; rw [F.P] at hH
+    have h1 := (S.htN v hv.1).1
+    rw [F.ht, F.P, ins_tw hI hcs hx F h1]
+    have := Ti.wD v hv hH
+    rw [eP] at this
+    omega
+  · rw [F.liveN] at hu; rw [F.srcOf] at hs; rw [F.P]; exact Ti.big u hu hs
+
 end weights
 
 end OM.Proof.Top
