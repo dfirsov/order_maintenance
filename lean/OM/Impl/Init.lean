@@ -159,10 +159,8 @@ def isLink : Stm :=
 def isNode : Stm :=
   .push .N "v" ;; .wr (.n .height) "v" "h" ;; .lgrow .children "v" "bl" 0 ;; .lgrow .table "v" "bl" "ctr" ;;
   .wr (.n .weight) "v" 1 ;; .wr (.n .first) "v" "c" ;; .wr (.n .last) "v" "c"
-def isBuild : Stm :=
-  "ctr" ::= .bin .shl 1 (.prm .beta - 1) ;; isNode ;; isLink ;;
-  .prepSet ("h" + 1) "v" ("tg" + "ctr" * .bin .shl 1 (("h" - 1) * .prm .beta)) ;;
-  .prepPath "h" "v" ;; "done" ::= 0
+def isUp : Stm := .prepSet ("h" + 1) "v" ("tg" + "ctr" * .bin .shl 1 (("h" - 1) * .prm .beta)) ;; .prepPath "h" "v"
+def isBuild : Stm := "ctr" ::= .bin .shl 1 (.prm .beta - 1) ;; isNode ;; isLink ;; isUp ;; "done" ::= 0
 def isFinish : Stm := .wcF .tag "c" "tg" ;; .prepCommit ;; "done" ::= 1
 def isPre : Stm :=
   "c" ::= .opt .prepChunk ;; "h" ::= .opt .prepH ;; "bl" ::= .opt .prepBelow ;; "tg" ::= .opt .prepTag ;;
@@ -299,5 +297,159 @@ theorem isNode_ok {κ : Caps} {S : Core} {L : Loc} {pr : Prep} (hN : S.nodes.siz
   rw [hfin] at w7
   exact ⟨_, evalF_seq_ok2 p1 (evalF_seq_ok2 w2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4 (evalF_seq_ok2 w5
     (evalF_seq_ok2 w6 w7))))), by simp [pushCost, Exp.cost]⟩
+
+theorem lor_add_shift {a c k : Nat} (ha : a < 2 ^ k) : a ||| (c <<< k) = a + c * 2 ^ k := by
+  rw [Nat.lor_comm, ← Nat.shiftLeft_add_eq_or_of_lt ha, Nat.shiftLeft_eq]; ring
+
+def prepTag (P : Params) (pr : Prep) : Nat := pr.tag + (1 <<< (P.beta - 1)) * 2 ^ ((pr.h - 1) * P.beta)
+def prepMid (P : Params) (pr : Prep) (v : Nat) : Prep := { pr with h := pr.h + 1, below := v, tag := prepTag P pr }
+
+/-- The prep record after building height `pr.h` as node `v` (Level M's form of `prepNext`). -/
+theorem prepNext_eq {P : Params} {pr : Prep} {v : Nat} (htag : pr.tag < 2 ^ ((pr.h - 1) * P.beta)) :
+    prepNext P pr v = { prepMid P pr v with path := pr.path.setX pr.h v } := by
+  simp only [prepNext, prepMid, prepTag, lor_add_shift htag]
+
+
+theorem isUp_ok {κ : Caps} {S : Core} {L : Loc} {pr : Prep} {v : Nat} (hp : S.prep = some pr)
+    (hh : L "h" = pr.h) (hv : L "v" = v) (htg : L "tg" = pr.tag) (hctr : L "ctr" = 1 <<< (S.P.beta - 1))
+    (h1 : 1 ≤ pr.h) (hw : pr.h < κ.pw) (htag : pr.tag < 2 ^ ((pr.h - 1) * S.P.beta)) :
+    ∃ c, evalF κ isUp S L = .ok { S with prep := some (prepNext S.P pr v) } L c ∧ c ≤ 60 := by
+  rw [prepNext_eq htag]
+  have e1 : evalF κ (.prepSet ("h" + 1) "v" ("tg" + "ctr" * .bin .shl 1 (("h" - 1) * .prm .beta))) S L =
+      .ok { S with prep := some (prepMid S.P pr v) } L 26 := by
+    simp [evalF, Exp.ev, hp, hh, hv, htg, hctr, OM.Machine.BinOp.eval, PF.get, h1, prepMid, prepTag,
+      Nat.shiftLeft_eq, Exp.cost]
+  have e2 : evalF κ (.prepPath "h" "v") { S with prep := some (prepMid S.P pr v) } L =
+      .ok { S with prep := some { prepMid S.P pr v with path := pr.path.setX pr.h v } } L 11 := by
+    simp [evalF, Exp.ev, hh, hv, hw, Exp.cost, prepMid]
+  exact ⟨_, evalF_seq_ok2 e1 e2, by omega⟩
+
+/-- `isLink` above height 1: `below` gets the new node as its table and live parent. -/
+theorem isLink_mid {κ : Caps} {S : Core} {L : Loc} {v bl : Nat} (hh : L "h" ≠ 1) (hv : L "v" = v) (hbl : L "bl" = bl)
+    (hbs : bl < S.nodes.size) (hbr : bl < κ.lrec .inTab) (hbN : bl < κ.tbl .N) (hci : 1 ≤ κ.lcap .inTab) :
+    ∃ c, evalF κ isLink S L = .ok { S with nodes := S.nodes.modify bl fun n =>
+      { n with inTables := [v], livePar := v } } L c ∧ c ≤ 60 := by
+  have e1 : evalF κ (.lclear .inTab "bl") S L = .ok (LK.put S bl [] .inTab) L 3 := by
+    simp [evalF, Exp.ev, hbl, LK.set, LK.recOk, LK.valid, hbs, hbr, Exp.cost]
+  set S1 := LK.put S bl [] .inTab
+  have hv1 : LK.view S1 bl .inTab = [] := by
+    rw [LK.view_put (by simp [LK.recOk, hbs]) (by rfl)]; simp
+  set S2 := LK.put S1 bl [(v, 0)] .inTab
+  have e2 := evalF_lgrow_ok (κ := κ) (s := S1) (s' := S2) (L := L) (k := .inTab) (i := .var "bl") (a := .var "v")
+    (b := (0 : Exp)) (x := bl) (va := v) (vb := 0) (by simp [Exp.ev, hbl]) (by simp [Exp.ev, hv]) rfl
+    (by rw [hv1]; simp [LK.set, LK.recOk, LK.valid, S1, hbs, hbr, hci, S2])
+  have w3 := evalF_wrN_ok (κ := κ) (s := S2) (L := L) (k := .livePar) (i := .var "bl") (e := .var "v") (j := bl) (w := v)
+    (by simp [Exp.ev, hbl]) (by simp [Exp.ev, hv]) (by simp [S2, S1, hbs]) hbN rfl
+  have hfin : ({ S2 with nodes := S2.nodes.modify bl (NF.set · v .livePar) } : Core) =
+      { S with nodes := S.nodes.modify bl fun n => { n with inTables := [v], livePar := v } } := by
+    simp only [S2, S1, LK.put, Array.modify_modify_same]; rfl
+  rw [hfin] at w3
+  have hc : ("h" =ₑ 1 : Exp).ev κ S L = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, hh]
+  exact ⟨_, evalF_ite_f hc (evalF_seq_ok2 e1 (evalF_seq_ok2 e2 w3)), by simp [Exp.cost]⟩
+
+def linkFirstS (S : Core) (c v : Nat) : Core := { S with cin := (S.cin.setX c []).setX c [v], lpar := S.lpar.setX c v }
+
+/-- `isLink` at height 1: chunk `c` gets the new node as its table and live parent. -/
+theorem isLink_first {κ : Caps} {S : Core} {L : Loc} {v c : Nat} (hh : L "h" = 1) (hv : L "v" = v) (hc : L "c" = c)
+    (hcr : c < κ.lrec .cin) (hcc : 1 ≤ κ.lcap .cin) (hca : c < κ.arr .lpar) :
+    ∃ n, evalF κ isLink S L = .ok (linkFirstS S c v) L n ∧ n ≤ 60 := by
+  have e1 : evalF κ (.lclear .cin "c") S L = .ok (LK.put S c [] .cin) L 3 := by
+    simp [evalF, Exp.ev, hc, LK.set, LK.recOk, LK.valid, hcr, Exp.cost]
+  set S1 := LK.put S c [] .cin
+  have hv1 : LK.view S1 c .cin = [] := by
+    rw [LK.view_put (by rfl) (by rfl)]; simp
+  set S2 := LK.put S1 c [(v, 0)] .cin
+  have e2 := evalF_lgrow_ok (κ := κ) (s := S1) (s' := S2) (L := L) (k := .cin) (i := .var "c") (a := .var "v")
+    (b := (0 : Exp)) (x := c) (va := v) (vb := 0) (by simp [Exp.ev, hc]) (by simp [Exp.ev, hv]) rfl
+    (by rw [hv1]; simp [LK.set, LK.recOk, LK.valid, hcr, hcc, S2])
+  have w3 : evalF κ (.wr (.a .lpar) "c" "v") S2 L = .ok (linkFirstS S c v) L 3 := by
+    simp [evalF, Exp.ev, hc, hv, Fld.set, hca, AF.set, AF.get, S2, S1, LK.put, Exp.cost, linkFirstS]
+  have hc1 : ("h" =ₑ 1 : Exp).ev κ S L = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, hh]
+  exact ⟨_, evalF_ite_t hc1 one_ne_zero (evalF_seq_ok2 e1 (evalF_seq_ok2 e2 w3)), by simp [Exp.cost]⟩
+
+theorem initStepP_mid {κ : Caps} {s : Core} {L : Loc} {pr : Prep} (hp : s.prep = some pr) (h1 : pr.h ≠ 1)
+    (hH : pr.h ≤ s.P.H) (hh0 : 1 ≤ pr.h) (htag : pr.tag < 2 ^ ((pr.h - 1) * s.P.beta)) (hb1 : 1 ≤ s.P.beta)
+    (hbs : pr.below < s.nodes.size) (hw : pr.h < κ.pw)
+    (hN : s.nodes.size < κ.tbl .N) (hrc : s.nodes.size < κ.lrec .children) (hrt : s.nodes.size < κ.lrec .table)
+    (hcc : 1 ≤ κ.lcap .children) (hct : 1 ≤ κ.lcap .table) (hbr : pr.below < κ.lrec .inTab) (hci : 1 ≤ κ.lcap .inTab) :
+    ∃ L' c, evalF κ initStepP.body s L = .ok { s with
+      nodes := ((s.nodes.push { height := pr.h }).modify s.nodes.size (chainNew s.P pr)).modify pr.below
+        (fun n => { n with inTables := [s.nodes.size], livePar := s.nodes.size }),
+      prep := some (prepNext s.P pr s.nodes.size) } L' c ∧ L' "done" = 0 ∧ c ≤ 400 := by
+  have e1 := isPre_ok (κ := κ) (L := L) hp (fun h => absurd h h1)
+  rw [if_neg h1, if_neg h1] at e1
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := isL L pr) (x := "ctr") (e := .bin .shl 1 (.prm .beta - 1))
+    (v := 1 <<< (s.P.beta - 1)) (by simp [Exp.ev, OM.Machine.BinOp.eval, PF.get, hb1, Nat.shiftLeft_eq])
+  obtain ⟨c3, e3, hc3⟩ := isNode_ok (κ := κ) (S := s) (L := L) (pr := pr) hN hrc hrt hcc hct
+  set v := s.nodes.size
+  set L3 := upd (isL2 L pr s.P.beta) "v" v
+  have h3 : L3 "h" = pr.h ∧ L3 "v" = v ∧ L3 "bl" = pr.below ∧ L3 "tg" = pr.tag ∧
+      L3 "ctr" = 1 <<< (s.P.beta - 1) := by simp [L3, isL2, isL, OM.Machine.State.upd]
+  obtain ⟨h3h, h3v, h3bl, h3tg, h3ctr⟩ := h3
+  have hbs' : pr.below < (nodeS s pr).nodes.size := by simp [nodeS]; omega
+  obtain ⟨c4, e4, hc4⟩ := isLink_mid (κ := κ) (S := nodeS s pr) (L := L3) (v := v) (bl := pr.below)
+    (by rw [h3h]; exact h1) h3v h3bl hbs' hbr (by omega) hci
+  set S4 : Core := { nodeS s pr with nodes := (nodeS s pr).nodes.modify pr.below fun n =>
+    { n with inTables := [v], livePar := v } }
+  have hp4 : S4.prep = some pr := hp
+  obtain ⟨c5, e5, hc5⟩ := isUp_ok (κ := κ) (S := S4) (L := L3) (pr := pr) (v := v) hp4 h3h h3v h3tg h3ctr hh0 hw htag
+  have e6 := evalF_assign_ok (κ := κ) (s := { S4 with prep := some (prepNext S4.P pr v) }) (L := L3) (x := "done")
+    (e := (0 : Exp)) (v := 0) rfl
+  have hc : ("h" ≤ₑ .prm .H : Exp).ev κ s (isL L pr) = some 1 := by
+    simp [Exp.ev, isL, OM.Machine.State.upd, OM.Machine.BinOp.eval, PF.get, hH]
+  have hfin : ({ S4 with prep := some (prepNext S4.P pr v) } : Core) = { s with
+      nodes := ((s.nodes.push { height := pr.h }).modify s.nodes.size (chainNew s.P pr)).modify pr.below
+        (fun n => { n with inTables := [s.nodes.size], livePar := s.nodes.size }),
+      prep := some (prepNext s.P pr s.nodes.size) } := rfl
+  rw [hfin] at e6
+  exact ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, OF.get, hp, b2n]) one_ne_zero
+    (evalF_seq_ok2 e1 (evalF_ite_t hc one_ne_zero (evalF_seq_ok2 a2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4
+      (evalF_seq_ok2 e5 e6)))))), by simp [OM.Machine.State.upd], by simp [Exp.cost] at hc3 hc4 hc5 ⊢; omega⟩
+
+theorem initStepP_first {κ : Caps} {s : Core} {L : Loc} {pr : Prep} (hp : s.prep = some pr) (h1 : pr.h = 1)
+    (hH : 1 ≤ s.P.H) (htag : pr.tag < 1) (hb1 : 1 ≤ s.P.beta)
+    (hn : s.nodes = #[default]) (hpa : s.path = #[]) (hci : s.cin = #[]) (hlp : s.lpar = #[])
+    (hw : 1 < κ.pw) (hN : 1 < κ.tbl .N) (hrc : 1 < κ.lrec .children) (hrt : 1 < κ.lrec .table)
+    (hcc : 1 ≤ κ.lcap .children) (hct : 1 ≤ κ.lcap .table) (hcr : pr.chunk < κ.lrec .cin) (hcl : 1 ≤ κ.lcap .cin)
+    (hca : pr.chunk < κ.arr .lpar) :
+    ∃ L' c, evalF κ initStepP.body s L = .ok { s with
+      nodes := (#[default].push { height := 1 }).modify 1 (chainNew s.P pr), path := #[],
+      cin := ((#[] : Array (List Nat)).setX pr.chunk []).setX pr.chunk [1],
+      lpar := (#[] : Array Nat).setX pr.chunk 1,
+      prep := some (prepNext s.P pr 1) } L' c ∧ L' "done" = 0 ∧ c ≤ 400 := by
+  have e1 := isPre_ok (κ := κ) (L := L) hp (fun _ => hcr)
+  rw [if_pos h1, if_pos h1] at e1
+  set S0 : Core := { s with cin := s.cin.setX pr.chunk [] }
+  have a2 := evalF_assign_ok (κ := κ) (s := S0) (L := isL L pr) (x := "ctr") (e := .bin .shl 1 (.prm .beta - 1))
+    (v := 1 <<< (s.P.beta - 1)) (by simp [Exp.ev, OM.Machine.BinOp.eval, PF.get, hb1, Nat.shiftLeft_eq, S0])
+  have hS0n : S0.nodes.size = 1 := by simp [S0, hn]
+  obtain ⟨c3, e3, hc3⟩ := isNode_ok (κ := κ) (S := S0) (L := L) (pr := pr) (by omega) (by omega) (by omega) hcc hct
+  rw [hS0n] at e3
+  set L3 := upd (isL2 L pr S0.P.beta) "v" 1
+  have h3 : L3 "h" = 1 ∧ L3 "v" = 1 ∧ L3 "c" = pr.chunk ∧ L3 "tg" = pr.tag ∧
+      L3 "ctr" = 1 <<< (s.P.beta - 1) := by simp [L3, isL2, isL, OM.Machine.State.upd, h1, S0]
+  obtain ⟨h3h, h3v, h3c, h3tg, h3ctr⟩ := h3
+  obtain ⟨c4, e4, hc4⟩ := isLink_first (κ := κ) (S := nodeS S0 pr) (L := L3) (v := 1) (c := pr.chunk) h3h h3v h3c
+    hcr hcl hca
+  set S4 := linkFirstS (nodeS S0 pr) pr.chunk 1
+  have hp4 : S4.prep = some pr := hp
+  obtain ⟨c5, e5, hc5⟩ := isUp_ok (κ := κ) (S := S4) (L := L3) (pr := pr) (v := 1) hp4 (by rw [h3h, h1]) h3v h3tg
+    h3ctr (by omega) (by rw [h1]; exact hw) (by rw [h1]; simpa using htag)
+  have e6 := evalF_assign_ok (κ := κ) (s := { S4 with prep := some (prepNext S4.P pr 1) }) (L := L3) (x := "done")
+    (e := (0 : Exp)) (v := 0) rfl
+  have hfin : ({ S4 with prep := some (prepNext S4.P pr 1) } : Core) = { s with
+      nodes := (#[default].push { height := 1 }).modify 1 (chainNew s.P pr), path := #[],
+      cin := ((#[] : Array (List Nat)).setX pr.chunk []).setX pr.chunk [1],
+      lpar := (#[] : Array Nat).setX pr.chunk 1,
+      prep := some (prepNext s.P pr 1) } := by
+    simp only [S4, linkFirstS, nodeS, S0, hn, hpa, hci, hlp, setX_setX, h1]
+    rfl
+  have hc : ("h" ≤ₑ .prm .H : Exp).ev κ S0 (isL L pr) = some 1 := by
+    simp [Exp.ev, isL, OM.Machine.State.upd, OM.Machine.BinOp.eval, PF.get, h1, S0, hH]
+  have e := evalF_ite_t (c := .opt .prepOn) (v := 1) (f := "done" ::= 1) (by simp [Exp.ev, OF.get, hp, b2n]) one_ne_zero
+    (evalF_seq_ok2 e1 (evalF_ite_t (f := isFinish) hc one_ne_zero (evalF_seq_ok2 a2 (evalF_seq_ok2 e3
+      (evalF_seq_ok2 e4 (evalF_seq_ok2 e5 e6))))))
+  rw [hfin] at e
+  exact ⟨_, _, e, by simp [OM.Machine.State.upd], by simp [Exp.cost] at hc3 hc4 hc5 ⊢; omega⟩
 
 end OM.Impl
