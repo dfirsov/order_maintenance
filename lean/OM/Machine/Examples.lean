@@ -39,25 +39,25 @@ example (s : State) :
   rintro s' n ⟨hm, rfl⟩
   simp [hm]
 
-/-- A loop: `acc := A[0] + … + A[n-1]`. Cost `4 + 6n`. -/
+/-- A loop: `acc := A[0] + … + A[n-1]`, for the array `A` named 0. Cost `4 + 6n`. -/
 def sumProg : Stmt :=
   "acc" ::= 0 ;;
-  .loop "i" "n" ("acc" ::= "acc" + "A"[["i"]])
+  .loop "i" "n" ("acc" ::= "acc" + (0 : Arr)[["i"]])
 
 def prefixSum (f : Nat → Nat) : Nat → Nat
   | 0 => 0
   | k + 1 => prefixSum f k + f k
 
-theorem sumProg_spec (s : State) (h : s.loc "n" ≤ s.cap "A") :
-    wp sumProg (fun s' c => s'.loc "acc" = prefixSum (s.mem "A") (s.loc "n") ∧
+theorem sumProg_spec (s : State) (h : s.loc "n" ≤ s.cap 0) :
+    wp sumProg (fun s' c => s'.loc "acc" = prefixSum (s.mem 0) (s.loc "n") ∧
       c ≤ 4 + 6 * s.loc "n") s := by
   simp only [sumProg, wp_seq, wp_assign]
   refine ⟨0, rfl, ?_⟩
   refine wp_loop (s.loc "n")
-    (fun k s' => s'.mem = s.mem ∧ s'.cap = s.cap ∧ s'.loc "acc" = prefixSum (s.mem "A") k)
+    (fun k s' => s'.mem = s.mem ∧ s'.cap = s.cap ∧ s'.loc "acc" = prefixSum (s.mem 0) k)
     5 (by simp) (by simp [prefixSum]) ?_ ?_
   · rintro k hk s' ⟨hm, hc, hacc⟩
-    have hk' : k < s.cap "A" := by omega
+    have hk' : k < s.cap 0 := by omega
     simp [wp_assign, hk', hm, hc, hacc, prefixSum]
   · rintro s' c ⟨-, -, hacc⟩ hc
     simp at hc ⊢
@@ -75,11 +75,11 @@ example (s : State) (h : s.loc "x" = 0) : wp guarded (fun s' _ => s'.loc "y" = 2
 `exec` is an ordinary Lean function, so programs can be run; this is how traces from the
 Python prototype will be replayed (`docs/LEAN.md` §8). -/
 
-/-- `A = [5, 7, 11]`, `n = 3`. -/
+/-- `A = [5, 7, 11]` (array 0), `n = 3`. -/
 def s₀ : State :=
   { State.init with
-    mem := fun a i => if a = "A" then [5, 7, 11].getD i 0 else 0
-    cap := fun a => if a = "A" then 3 else 0
+    mem := fun a i => if a = 0 then [5, 7, 11].getD i 0 else 0
+    cap := fun a => if a = 0 then 3 else 0
     loc := fun x => if x = "n" then 3 else 0 }
 
 example : (exec sumProg s₀).st.loc "acc" = 23 := by decide

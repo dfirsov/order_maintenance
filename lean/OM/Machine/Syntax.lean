@@ -3,7 +3,7 @@ The machine language (`docs/LEAN.md` §3): a small imperative language over a wo
 
 * Words are `Nat`. The interpreter does not truncate; it records the largest value ever
   computed (`State.peak`), and the word-size theorem bounds that value separately.
-* Memory is a finite set of named arrays, each with a capacity set by `alloc`.
+* Memory is a finite set of named arrays (named by numbers), each with a capacity set by `alloc`.
 * Locals are per procedure call.
 * There is no `while` and no recursion. A call carries the callee's body as a subterm, so a
   procedure cannot call itself: the syntax tree would be infinite. Every program terminates by
@@ -15,8 +15,8 @@ namespace OM.Machine
 /-- Local variable names. -/
 abbrev Reg := String
 
-/-- Array names. -/
-abbrev Arr := String
+/-- Array names: numbers, so that distinct arrays are told apart by arithmetic. -/
+abbrev Arr := Nat
 
 inductive BinOp where
   | add | sub | mul | div | mod | shl | shr | lt | le | eq | and | or
