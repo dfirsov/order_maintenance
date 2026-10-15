@@ -213,6 +213,14 @@ theorem tab_le_160 {t : TS} {dr n0 : Nat → Nat} (h : TabLen t dr n0) (X : Nat)
   have : (Top.order t X).length = (nd t X).table.length := by simp [Top.order, Node.order]
   omega
 
+/-- The cost bound of `startDrain`, from tables of at most 160 entries and entries in at most two
+tables. -/
+def sdBound : Nat := sdCost 160 160 2 160 160 160
+
+theorem sdCost_le {K T I S B P : Nat} (hK : K ≤ 160) (hT : T ≤ 160) (hI : I ≤ 2) (hS : S ≤ 160) (hB : B ≤ 160)
+    (hP : P ≤ 160) : sdCost K T I S B P ≤ sdBound := by
+  unfold sdBound sdCost; gcongr
+
 /-- **`startDrain` agrees at a drain start** (the context of `sr_run`). -/
 theorem sdAgree_walk {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
     {j : Job} {v : Nat} (hpc : j.pc = .walk (some v)) (hv0 : v ≠ NIL) (hI : InvJ (ts s) cl ord dr n0 (some j))
@@ -224,7 +232,7 @@ theorem sdAgree_walk {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List 
         lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) (nd (ts s) x).t1
       else lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) x)
     (hcl : CLok s cl) (K : TopCaps κ s) :
-    ∃ D, SDAgree κ (wiC s v) v D := by
+    ∃ D, D ≤ sdBound ∧ SDAgree κ (wiC s v) v D := by
   have S := hI.shape
   obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
   obtain ⟨hl, hlh, hvL⟩ := sd_up hpc hv0 hI hlp
@@ -293,7 +301,12 @@ theorem sdAgree_walk {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List 
     · rw [if_pos h0] at hL ⊢; exact hL
     · rw [if_neg h0] at hL ⊢; rw [H.w_inTables]; exact hL
   have hTt : ((wiC s v).nodes.getX v).table.length ≤ 160 := by rw [H.w_table]; exact (hTL v).1
-  refine ⟨_, sdAgree_ok (B := 160) (side := side) (by rw [sd_kids_eq]; exact hk2) (fun h => by omega) hside
+  have hsl : side.length ≤ 160 := by
+    have := sp_side_len hpc hv0 hI hlp hTP hof hW hside
+    have := (hTL v).1
+    simp only [Top.order, Node.order, List.length_map] at *; omega
+  refine ⟨_, sdCost_le (by rw [H.w_children]; exact hkl) hTt (by rw [H.w_inTables]; exact hinv) hsl le_rfl
+    (by rw [H.w_livePar, H.w_children]; exact hpl), sdAgree_ok (B := 160) (side := side) (by rw [sd_kids_eq]; exact hk2) (fun h => by omega) hside
     (fun T hT => ?_) H.t_nd
     (fun e he => by
       rw [sd_kids_eq] at he
@@ -339,10 +352,15 @@ theorem CLok.links {s : Core} {cl : List Nat} (h : CLok s cl) {c : Nat} (hc : c 
     · exact ((h.2 _).mp e).2
     · rw [e]; simp [NIL]; omega
 
+/-- The cost bound of one sweep step (`drainStep`), from tables of at most 160 entries and entries
+in at most two tables: the end of a drain dominates. -/
+def dsBound : Nat := 300 + 160 * (171 + 100 * 160) + 2 * (301 + 200 * 160)
+
 /-- **A sweep step that moves a chunk agrees** (outside a preparation). -/
 theorem dsAgree_moveI {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} (S : Shape (ts s) cl ord)
+    {dr n0 : Nat → Nat} (hTL : TabLen (ts s) dr n0)
     {v : Nat} (hg : ghostN (ts s) v) (hne : rng (ts s) cl v ≠ []) (hcl : CLok s cl) (hprep : s.prep = none)
-    (K : TopCaps κ s) : ∃ D, DSAgree κ s v D := by
+    (K : TopCaps κ s) : ∃ D, D ≤ dsBound ∧ DSAgree κ s v D := by
   obtain ⟨hal, hf, hside, hsz, hpt, htb, hpv, hvb, hold, hok, h1, hpsz, htbB, hvbB, htv, hvs, hts, hycl, hhH, hpr⟩ :=
     S.drain_move_hyps hg hne hcl.1
   have hfl : (s.nodes.getX v).first ∈ cl ∧ (s.nodes.getX v).last ∈ cl := by
@@ -356,20 +374,30 @@ theorem dsAgree_moveI {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List
   have hlC := ((hcl.2 _).mp hfl.2).2
   obtain ⟨hyN, hyP⟩ := CLok.links hcl hycl
   have hnp : ∀ c, notPrep s c := fun c => by simp [notPrep, hprep]
-  exact ⟨_, dsAgree_move hal hf hside hsz hpt htb hpv hvb hold hok h1 hpsz htbB hvbB htv hvs hts
+  have hB : ∀ X, (s.nodes.getX X).table.length ≤ 160 ∧ (s.nodes.getX X).side.length ≤ 160 :=
+    fun X => tab_le_160 hTL X
+  refine ⟨_, ?_, dsAgree_move hal hf hside hsz hpt htb hpv hvb hold hok h1 hpsz htbB hvbB htv hvs hts
     (by have := ((hcl.2 _).mp hycl).2; exact this) (hnp _) (hnp _)
     (by have := K.N; omega) (by have := K.N; omega) (by have := K.rs; omega) (by have := K.rt; omega)
     (by have := K.rt; omega) (by have := K.rt; omega)
     (by have := K.C; omega) (by have := K.C; omega) (by have := K.C; omega) (by have := K.C; omega)
     (by rw [K.pw]; omega)⟩
+  have := hB v; have := hB (dsT s v); have := hB ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))
+  unfold dsBound; omega
 
 /-- **A sweep step that ends the drain agrees.** -/
 theorem dsAgree_finishI {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
     (S : Shape (ts s) cl ord) (hTL : TabLen (ts s) dr n0)
     {v : Nat} (hg : ghostN (ts s) v) (hemp : rng (ts s) cl v = []) (hcl : CLok s cl)
-    (K : TopCaps κ s) : ∃ D, DSAgree κ s v D := by
+    (K : TopCaps κ s) : ∃ D, D ≤ dsBound ∧ DSAgree κ s v D := by
   obtain ⟨hal, hf, hnd, hT, hv0, hvs, hvo, hTs, ht1, ht2, hE1, hE0⟩ := S.drain_finish_hyps hg hemp
-  exact ⟨_, dsAgree_finish (B := 160) hal hf hnd hT hv0 hvs hvo
+  have hvent : Ent ord (ht (ts s) v) v :=
+    (S.ordMem _ (S.htN v hg.1).1 (S.htN v hg.1).2 v).mpr ⟨hg.1, rfl⟩
+  have hin : (s.nodes.getX v).inTables.length ≤ 2 := by
+    have := S.tabs_len hvent
+    unfold tabs at this; rw [if_neg (by have := (S.htN v hg.1).1; omega)] at this; exact this
+  have htv : (s.nodes.getX v).table.length ≤ 160 := (tab_le_160 hTL v).1
+  refine ⟨_, ?_, dsAgree_finish (B := 160) hal hf hnd hT hv0 hvs hvo
     (by have := K.N; omega) (by have := K.rt; omega) (by have := K.ri; omega)
     (by have := K.N; omega) (by have := K.N; omega)
     (fun e he => ⟨fun h0 => by
@@ -386,5 +414,23 @@ theorem dsAgree_finishI {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → Li
       have b' : (s.nodes.getX T).side.length ≤ 160 := b
       have := K.lt; have := K.ls
       exact ⟨by have := K.rt; omega, by have := K.rs; omega, by omega, by omega, a', b'⟩)⟩
+  unfold dsBound
+  have e1 := Nat.mul_le_mul_right (171 + 100 * 160) htv
+  have e2 := Nat.mul_le_mul_right (301 + 200 * 160) hin
+  omega
+
+/-- **The funding loop's sweep step agrees**: its source is a ghost, so the step moves a chunk or
+ends the drain. -/
+theorem dsAgree_fund {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    {j : Job} {v up src k : Nat} (hcl : CLok s cl) (hprep : s.prep = none)
+    (hI : InvJ (ts s) cl ord dr n0 (some { j with pc := .fund v up src k })) (K : TopCaps κ s) :
+    ∃ D, D ≤ dsBound ∧ DSAgree κ s src D := by
+  have S := hI.shape
+  obtain ⟨-, hat⟩ := hI.job _ rfl
+  simp only [JobAt] at hat
+  obtain ⟨-, -, -, hg, -, -⟩ := hat
+  by_cases hne : rng (ts s) cl src = []
+  · exact dsAgree_finishI S hI.len hg hne hcl K
+  · exact dsAgree_moveI S hI.len hg hne hcl hprep K
 
 end OM.Impl
