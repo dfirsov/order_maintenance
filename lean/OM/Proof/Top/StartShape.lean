@@ -895,6 +895,94 @@ theorem sh_W1 : ∀ g, Top.ghostN S' g → ∀ X ∈ tabs S' (Top.ht S' g) g,
     rw [replace1_split _ hP]
     exact ⟨P, Q, by simp⟩
 
+theorem v_notTab : v ∉ (nd (ts s) v).inTables := fun h => by have := (C.inTab v h).2.1; omega
+
+theorem sh_side : ∀ g, Top.ghostN S' g → ∀ e ∈ Top.order S' g,
+    lookup (nd S' g).side e = some (if par S' (Top.ht S' g - 1) e = (nd S' g).t1 then .left else .right) := by
+  intro g hg e he
+  have hvlt := C.H.hv
+  have hvn := C.nN v C.vl.1
+  have hvnn : ¬(v = s.nodes.size ∨ v = s.nodes.size + 1) := fun h => h.elim hvn.1 hvn.2
+  rw [C.ghostN] at hg
+  rcases hg with hg | hgv
+  · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+    have hgn := C.nN g hg.1
+    have hgnn : ¬(g = s.nodes.size ∨ g = s.nodes.size + 1) := fun h => h.elim hgn.1 hgn.2
+    rw [C.H.sides, if_neg hgv, if_neg hgnn, C.H.t1, if_neg hgv, if_neg hgnn, C.ht g, if_neg hgnn]
+    rw [C.order, if_neg hgn.1, if_neg hgn.2] at he
+    obtain ⟨h1, hH⟩ := C.S.htN g hg.1
+    by_cases hT : g ∈ (nd (ts s) v).inTables
+    · rw [if_pos hT]; rw [if_pos hT] at he
+      obtain ⟨-, hgh, hvg⟩ := C.inTab g hT
+      have hsv := C.S.side g hg v hvg
+      have h1v := C.h1
+      have hHs : Top.ht (ts s) g ≤ s.P.H := hH
+      unfold sideAround; rw [if_pos hg.2]
+      have hent : Ent ord (Top.ht (ts s) v) v := (C.S.ordMem _ C.h1 (C.S.htN v C.vl.1).2 v).mpr ⟨C.vl.1, rfl⟩
+      have hpv : par S' (Top.ht (ts s) v) v = par (ts s) (Top.ht (ts s) v) v :=
+        C.par_keep hent (by have := C.hH; omega) (fun h => by have := h.1; omega)
+      have hpvL : par (ts s) (Top.ht (ts s) v) v = (nd (ts s) v).livePar := by
+        rw [par_live (Or.inr C.vl), if_neg (by omega)]
+      have hpN : ∀ w, (w = s.nodes.size ∨ w = s.nodes.size + 1) →
+          par S' (Top.ht (ts s) v) w = (nd (ts s) v).livePar := by
+        intro w hw
+        rw [C.par_live' (by omega) ((C.liveN w).mpr (Or.inr hw)), C.livePar, if_neg (by omega), if_pos hw]
+      rw [hgh, Nat.add_sub_cancel] at hsv ⊢
+      rcases mem_replace1 he with he | he
+      · by_cases hev : e = v
+        · rw [hev, lookup_assocSet_ne _ _ _ _ (by omega), lookup_assocSet_ne _ _ _ _ (by omega), hsv, hpv]
+        · have hen := C.nN e (((C.S.ordMem _ (by omega) (by omega) e).mp (C.S.tabEnt g hg.1 e he)).1)
+          rw [lookup_assocSet_ne _ _ _ _ hen.2, lookup_assocSet_ne _ _ _ _ hen.1, C.S.side g hg e he]
+          have hent' := C.S.tabEnt g hg.1 e he
+          rw [hgh, Nat.add_sub_cancel] at hent'
+          rw [hgh, Nat.add_sub_cancel, C.par_keep hent' (by have := C.hH; omega) (fun h => by have := h.1; omega)]
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at he
+        rcases he with he | he | he
+        · rw [he, lookup_assocSet_ne _ _ _ _ (by omega), lookup_assocSet_eq, hsv, hpN _ (Or.inl rfl), ← hpvL]
+          rfl
+        · rw [he, lookup_assocSet_ne _ _ _ _ (by omega), lookup_assocSet_ne _ _ _ _ (by omega), hsv, hpv]
+        · rw [he, lookup_assocSet_eq, hsv, hpN _ (Or.inr rfl), ← hpvL]
+          rfl
+    · rw [if_neg hT]; rw [if_neg hT] at he
+      rw [C.S.side g hg e he]
+      have hent' := C.S.tabEnt g hg.1 e he
+      rw [C.par_keep hent' (by have : Top.ht (ts s) g ≤ s.P.H := hH; omega) (fun h => by
+        have hT' : g ∈ tabs (ts s) (Top.ht (ts s) g - 1) e := (C.S.tabsIff _ e g hent').mpr ⟨hg.1, by omega, he⟩
+        rcases C.S.Q _ e g hent' hT' with h' | h'
+        · exact hgv (h'.trans h.2)
+        · rw [h.2, show Top.srcOf (ts s) v = NIL from C.of] at h'; exact hg.1.1 h')]
+  · -- the new ghost `v`
+    rw [hgv] at he ⊢
+    have hvT := C.v_notTab
+    rw [C.H.sides, if_pos rfl, C.H.t1, if_pos rfl, C.ht v, if_neg hvnn]
+    rw [C.order, if_neg hvn.1, if_neg hvn.2, if_neg hvT] at he
+    obtain ⟨hrk, hp⟩ := C.par_v (C.order_ent he) (sp_par C.pc C.v0 C.I C.lp C.TP C.of C.W he)
+    rw [hp]
+    have hiff : ((if (if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true then (nd (ts s) e).t1 else e) ∈
+        (nd (ts s) v).children.take (sK (wiC s v) v) then s.nodes.size else s.nodes.size + 1) = s.nodes.size) ↔
+        (if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true then (nd (ts s) e).t1 else e) ∈
+          (nd (ts s) v).children.take (sK (wiC s v) v) := by
+      split
+      · simp_all
+      · simp_all
+    by_cases hc : 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true
+    · rw [sw_ghost C.pc C.v0 C.I C.lp C.TP C.of C.W C.look hc.1 he hc.2]
+      have ht1 := (sp_ghost C.pc C.v0 C.I C.lp C.TP C.of C.W hc.1 he hc.2).1
+      rw [sw_kid C.pc C.v0 C.I C.lp C.TP C.of C.W C.look ht1]
+      rw [if_pos hc] at hiff ⊢
+      by_cases ht : (nd (ts s) e).t1 ∈ (nd (ts s) v).children.take (sK (wiC s v) v)
+      · rw [if_pos ht, if_pos (hiff.mpr ht)]
+      · rw [if_neg ht, if_neg (fun h => ht (hiff.mp h))]
+    · have hek : e ∈ (nd (ts s) v).children := by
+        by_cases h2 : 2 ≤ Top.ht (ts s) v
+        · exact ((sp_entry C.pc C.v0 C.I C.lp C.TP C.of C.W he).2 h2).2.2 (by simpa using fun h => hc ⟨h2, h⟩)
+        · exact (sp_entry C.pc C.v0 C.I C.lp C.TP C.of C.W he).1 (by have := C.h1; omega)
+      rw [sw_kid C.pc C.v0 C.I C.lp C.TP C.of C.W C.look hek]
+      rw [if_neg hc] at hiff ⊢
+      by_cases ht : e ∈ (nd (ts s) v).children.take (sK (wiC s v) v)
+      · rw [if_pos ht, if_pos (hiff.mpr ht)]
+      · rw [if_neg ht, if_neg (fun h => ht (hiff.mp h))]
+
 end SDCtx
 
 end OM.Proof.Top
