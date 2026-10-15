@@ -7,6 +7,7 @@ Procedures on list `k` of record `i`, each with its agreement lemma:
 * `findP k`: the position of the first element with key `x` (`List.findIdx`), or the length.
 * `assocSetP k`: `assocSet` with key `x` and value `y`.
 * `lookupP k`: `lookup` of key `x` (found flag `f`, value `v`).
+* `insertIdxP k`: insert `(a, b)` at position `p` (`List.insertIdx`).
 -/
 
 namespace OM.Impl
@@ -459,5 +460,279 @@ theorem lookupP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i x : Nat} (hi 
     · simp only [OM.Machine.State.upd]; simp; exact (hL4 "x" (by decide) (by decide) (by decide)).trans hx
     · have : (k.view s i).length = l.length := rfl
       simp [Exp.cost, costList] at hc1 ⊢; omega
+
+/-! ### `insertIdx` -/
+
+/-- The list after `t` swaps of `insertIdxP`: the new element sits at position `n - t`. -/
+def bubble (l : List (Nat × Nat)) (x : Nat × Nat) (m : Nat) : List (Nat × Nat) := l.take m ++ x :: l.drop m
+
+theorem length_bubble (l : List (Nat × Nat)) (x : Nat × Nat) (m : Nat) (hm : m ≤ l.length) :
+    (bubble l x m).length = l.length + 1 := by simp [bubble]; omega
+
+theorem bubble_get_lo {l : List (Nat × Nat)} {x : Nat × Nat} {m q : Nat} (hq : q < m) (hm : m ≤ l.length) :
+    (bubble l x m).getD q (0, 0) = l[q] := by
+  rw [List.getD_eq_getElem _ _ (by rw [length_bubble l x m hm]; omega)]
+  simp only [bubble]; rw [List.getElem_append_left (by simp <;> omega)]; simp
+
+theorem bubble_get_mid {l : List (Nat × Nat)} {x : Nat × Nat} {m : Nat} (hm : m ≤ l.length) :
+    (bubble l x m).getD m (0, 0) = x := by
+  rw [List.getD_eq_getElem _ _ (by rw [length_bubble l x m hm]; omega)]
+  simp only [bubble]; rw [List.getElem_append_right (by simp <;> omega)]
+  simp [show m - min m l.length = 0 by omega]
+
+theorem bubble_swap {l : List (Nat × Nat)} {x : Nat × Nat} {m : Nat} (h1 : 1 ≤ m) (hm : m ≤ l.length) :
+    ((bubble l x m).set (m - 1) x).set m l[m - 1] = bubble l x (m - 1) := by
+  apply List.ext_getElem
+  · simp [bubble]; omega
+  · intro q hq1 hq2
+    simp only [List.getElem_set]
+    simp only [List.length_set, length_bubble l x m hm] at hq1
+    simp only [bubble] at hq2 ⊢
+    by_cases e1 : m = q
+    · subst e1
+      rw [if_pos rfl, List.getElem_append_right (by simp <;> omega)]
+      simp [show m - min (m - 1) l.length = 1 by omega]
+    · rw [if_neg e1]
+      by_cases e2 : m - 1 = q
+      · subst e2; rw [if_pos rfl, List.getElem_append_right (by simp <;> omega)]
+        simp [show m - 1 - min (m - 1) l.length = 0 by omega]
+      · rw [if_neg e2]
+        by_cases hq : q < m - 1
+        · rw [List.getElem_append_left (by simp <;> omega), List.getElem_append_left (by simp <;> omega)]; simp
+        · rw [List.getElem_append_right (by simp <;> omega), List.getElem_append_right (by simp <;> omega)]
+          simp only [List.length_take, List.getElem_cons, List.getElem_drop]
+          have hq' : m < q := by omega
+          rw [dif_neg (by omega), dif_neg (by omega)]
+          congr 1; omega
+
+theorem insertIdx_take_drop {α : Type} (x : α) : ∀ (p : Nat) (l : List α), p ≤ l.length →
+    l.insertIdx p x = l.take p ++ x :: l.drop p
+  | 0, l, _ => by simp
+  | p + 1, [], h => by simp at h
+  | p + 1, a :: l, h => by
+    rw [List.insertIdx_succ_cons, insertIdx_take_drop x p l (by simp at h; omega)]; simp
+
+theorem bubble_insertIdx (l : List (Nat × Nat)) (x : Nat × Nat) {p : Nat} (hp : p ≤ l.length) :
+    bubble l x p = l.insertIdx p x := by
+  rw [insertIdx_take_drop x p l hp]; rfl
+
+theorem bubble_len (l : List (Nat × Nat)) (x : Nat × Nat) : bubble l x l.length = l ++ [x] := by
+  simp [bubble]
+
+def swapS (k : LK) : Stm :=
+  "q" ::= ("n" - 1) - "t" ;;
+  "x1" ::= .lrd k false "i" "q" ;; "y1" ::= .lrd k true "i" "q" ;;
+  "x2" ::= .lrd k false "i" ("q" + 1) ;; "y2" ::= .lrd k true "i" ("q" + 1) ;;
+  .lwr k false "i" "q" "x2" ;; .lwr k true "i" "q" "y2" ;;
+  .lwr k false "i" ("q" + 1) "x1" ;; .lwr k true "i" ("q" + 1) "y1"
+
+def insertIdxP (k : LK) : Proc where
+  name := "insertIdx"
+  params := ["i", "p", "a", "b"]
+  rets := []
+  body :=
+    "n" ::= .llen k "i" ;; .lgrow k "i" "a" "b" ;; "c" ::= .monus "n" "p" ;;
+    .loop "t" "c" (swapS k)
+
+theorem LK.valid_pair_snd {k : LK} {u u' w : Nat} (h : k.valid [(u, w)] = true) : k.valid [(u', w)] = true := by
+  cases k <;> simp_all [LK.valid]
+
+theorem LK.valid_set {k : LK} {l : List (Nat × Nat)} {q : Nat} {y : Nat × Nat} (hl : k.valid l = true)
+    (hy : k.valid [y] = true) : k.valid (l.set q y) = true := by
+  rw [LK.valid_iff] at hl ⊢
+  intro z hz
+  rcases List.mem_or_eq_of_mem_set hz with h | h
+  · exact hl z h
+  · rw [h]; exact hy
+
+/-- A component write to a list that has been put. -/
+theorem lwr_put_ok {κ : Caps} {k : LK} {s : Core} {Lc : Loc} {i y w : Nat} {L0 : List (Nat × Nat)} (snd : Bool)
+    {jx ex : Exp} (hLi : Lc "i" = i) (hj : jx.ev κ (k.put s i L0) Lc = some y)
+    (he : ex.ev κ (k.put s i L0) Lc = some w) (hy : y < L0.length) (hr : k.recOk s i = true) (hir : i < κ.lrec k)
+    (hv0 : k.valid L0 = true)
+    (hvn : k.valid [if snd then ((L0.getD y (0, 0)).1, w) else (w, (L0.getD y (0, 0)).2)] = true)
+    (hlen : L0.length ≤ κ.lcap k) :
+    evalF κ (.lwr k snd (.var "i") jx ex) (k.put s i L0) Lc =
+      .ok (k.put s i (L0.set y (if snd then ((L0.getD y (0, 0)).1, w) else (w, (L0.getD y (0, 0)).2))))
+        Lc (4 + 1 + jx.cost + ex.cost) := by
+  have hview : k.view (k.put s i L0) i = L0 := by rw [LK.view_put hr hv0]; simp
+  have hso := LK.set_ok (κ := κ) (s := k.put s i L0) (i := i)
+    (l := L0.set y (if snd then ((L0.getD y (0, 0)).1, w) else (w, (L0.getD y (0, 0)).2))) (k := k)
+    (by rw [LK.recOk_put]; exact hr) (LK.valid_set hv0 hvn) (by rw [List.length_set]; exact hlen) hir
+  rw [LK.put_put] at hso
+  simp only [evalF, Exp.ev, hLi, hj, he, hview, if_pos hy, Exp.cost]
+  cases snd <;> simp only [Bool.false_eq_true, if_true, if_false] at hso ⊢ <;> rw [hso]
+
+theorem getD_set' (l : List (Nat × Nat)) (i j : Nat) (a : Nat × Nat) :
+    (l.set i a).getD j (0, 0) = if i = j ∧ i < l.length then a else l.getD j (0, 0) := by
+  simp only [List.getD_eq_getElem?_getD, List.getElem?_set]
+  by_cases h1 : i = j
+  · subst h1; by_cases h2 : i < l.length <;> simp [h2]
+  · simp [h1]
+
+theorem valid_bubble {k : LK} {l : List (Nat × Nat)} {x : Nat × Nat} {m : Nat} (hl : k.valid l = true)
+    (hx : k.valid [x] = true) : k.valid (bubble l x m) = true := by
+  rw [LK.valid_iff] at hl ⊢
+  intro z hz
+  simp only [bubble, List.mem_append, List.mem_cons] at hz
+  rcases hz with h | rfl | h
+  · exact hl z (List.mem_of_mem_take h)
+  · exact hx
+  · exact hl z (List.mem_of_mem_drop h)
+
+theorem swapS_ok {κ : Caps} {k : LK} {s : Core} {L : Loc} {i : Nat} {l : List (Nat × Nat)} {x : Nat × Nat}
+    {m t : Nat} (hLi : L "i" = i) (hLn : L "n" = l.length) (hLt : L "t" = t) (hm : m + t = l.length)
+    (h1 : 1 ≤ m) (hr : k.recOk s i = true) (hir : i < κ.lrec k) (hvl : k.valid l = true)
+    (hvx : k.valid [x] = true) (hcap : l.length + 1 ≤ κ.lcap k) :
+    ∃ L' c, evalF κ (swapS k) (k.put s i (bubble l x m)) L = .ok (k.put s i (bubble l x (m - 1))) L' c ∧
+      c ≤ 90 ∧ ∀ r, r ≠ "q" → r ≠ "x1" → r ≠ "y1" → r ≠ "x2" → r ≠ "y2" → L' r = L r := by
+  have hml : m ≤ l.length := by omega
+  set B := bubble l x m
+  have hB : B.length = l.length + 1 := length_bubble l x m hml
+  have hvB : k.valid B = true := valid_bubble hvl hvx
+  have hview : k.view (k.put s i B) i = B := by rw [LK.view_put hr hvB]; simp
+  have hlm : m - 1 < l.length := by omega
+  have g1 : B.getD (m - 1) (0, 0) = l[m - 1] := bubble_get_lo (by omega) hml
+  have g2 : B.getD m (0, 0) = x := bubble_get_mid hml
+  have hvl1 : k.valid [l[m - 1] ] = true := (LK.valid_iff l k).mp hvl _ (List.getElem_mem hlm)
+  -- the reads
+  have a0 := evalF_assign_ok (κ := κ) (s := k.put s i B) (L := L) (x := "q") (e := ("n" - 1) - "t") (v := m - 1)
+    (by simp [Exp.ev, OM.Machine.BinOp.eval, hLn, hLt, show 1 ≤ l.length by omega, show t ≤ l.length - 1 by omega]
+        omega)
+  set La := OM.Machine.State.upd L "q" (m - 1)
+  have rd : ∀ (Lx : Loc) (snd : Bool) (jx : Exp) (y : Nat), Lx "i" = i → jx.ev κ (k.put s i B) Lx = some y →
+      y < B.length → (Exp.lrd k snd "i" jx).ev κ (k.put s i B) Lx =
+        some (if snd then (B.getD y (0, 0)).2 else (B.getD y (0, 0)).1) := by
+    intro Lx snd jx y h1 h2 h3; simp [Exp.ev, h1, h2, hir, hview, h3]
+  have hBl1 : m - 1 < B.length := by omega
+  have hBl2 : m < B.length := by omega
+  have hLai : La "i" = i := by simp [La, OM.Machine.State.upd, hLi]
+  have hLaq : La "q" = m - 1 := by simp [La, OM.Machine.State.upd]
+  have e1 := evalF_assign_ok (κ := κ) (s := k.put s i B) (L := La) (x := "x1") (e := .lrd k false "i" "q")
+    (v := l[m - 1].1) (by rw [rd La false (.var "q") (m - 1) hLai (by simp [Exp.ev, hLaq]) hBl1, g1]; rfl)
+  set Lb := OM.Machine.State.upd La "x1" l[m - 1].1
+  have e2 := evalF_assign_ok (κ := κ) (s := k.put s i B) (L := Lb) (x := "y1") (e := .lrd k true "i" "q")
+    (v := l[m - 1].2) (by
+      rw [rd Lb true (.var "q") (m - 1) (by simp [Lb, OM.Machine.State.upd, hLai])
+        (by simp [Exp.ev, Lb, OM.Machine.State.upd, hLaq]) hBl1, g1]; rfl)
+  set Lc := OM.Machine.State.upd Lb "y1" l[m - 1].2
+  have e3 := evalF_assign_ok (κ := κ) (s := k.put s i B) (L := Lc) (x := "x2") (e := .lrd k false "i" ("q" + 1))
+    (v := x.1) (by
+      rw [rd Lc false ("q" + 1) m (by simp [Lc, Lb, OM.Machine.State.upd, hLai])
+        (by simp [Exp.ev, Lc, Lb, OM.Machine.State.upd, hLaq, OM.Machine.BinOp.eval]; omega) hBl2, g2]; rfl)
+  set Ld := OM.Machine.State.upd Lc "x2" x.1
+  have e4 := evalF_assign_ok (κ := κ) (s := k.put s i B) (L := Ld) (x := "y2") (e := .lrd k true "i" ("q" + 1))
+    (v := x.2) (by
+      rw [rd Ld true ("q" + 1) m (by simp [Ld, Lc, Lb, OM.Machine.State.upd, hLai])
+        (by simp [Exp.ev, Ld, Lc, Lb, OM.Machine.State.upd, hLaq, OM.Machine.BinOp.eval]; omega) hBl2, g2]; rfl)
+  set Le := OM.Machine.State.upd Ld "y2" x.2
+  have hLe : ∀ r, r ≠ "q" → r ≠ "x1" → r ≠ "y1" → r ≠ "x2" → r ≠ "y2" → Le r = L r := by
+    intro r h1 h2 h3 h4 h5; simp [Le, Ld, Lc, Lb, La, OM.Machine.State.upd, h1, h2, h3, h4, h5]
+  have hLei : Le "i" = i := by rw [hLe "i" (by decide) (by decide) (by decide) (by decide) (by decide), hLi]
+  have hLeq : Le "q" = m - 1 := by simp [Le, Ld, Lc, Lb, OM.Machine.State.upd, hLaq]
+  have hLex1 : Le "x1" = l[m - 1].1 := by simp [Le, Ld, Lc, Lb, OM.Machine.State.upd]
+  have hLey1 : Le "y1" = l[m - 1].2 := by simp [Le, Ld, Lc, OM.Machine.State.upd]
+  have hLex2 : Le "x2" = x.1 := by simp [Le, Ld, OM.Machine.State.upd]
+  have hLey2 : Le "y2" = x.2 := by simp [Le, OM.Machine.State.upd]
+  -- the writes
+  set B1 := B.set (m - 1) (x.1, (B.getD (m - 1) (0, 0)).2)
+  have hv1 : k.valid [(x.1, (B.getD (m - 1) (0, 0)).2)] = true := by
+    rw [g1]; exact LK.valid_pair_snd hvl1
+  have w1 := lwr_put_ok (κ := κ) (k := k) (s := s) (Lc := Le) (i := i) (y := m - 1) (w := x.1) (L0 := B) false
+    (jx := .var "q") (ex := .var "x2") hLei (by simp [Exp.ev, hLeq]) (by simp [Exp.ev, hLex2]) hBl1 hr hir hvB
+    hv1 (by omega)
+  have hvB1 : k.valid B1 = true := LK.valid_set hvB hv1
+  have hB1l : B1.length = l.length + 1 := by simp [B1, hB]
+  set B2 := B1.set (m - 1) ((B1.getD (m - 1) (0, 0)).1, x.2)
+  have hv2 : k.valid [((B1.getD (m - 1) (0, 0)).1, x.2)] = true := LK.valid_pair_snd hvx
+  have w2 := lwr_put_ok (κ := κ) (k := k) (s := s) (Lc := Le) (i := i) (y := m - 1) (w := x.2) (L0 := B1) true
+    (jx := .var "q") (ex := .var "y2") hLei (by simp [Exp.ev, hLeq]) (by simp [Exp.ev, hLey2]) (by omega) hr hir
+    hvB1 hv2 (by omega)
+  have hvB2 : k.valid B2 = true := LK.valid_set hvB1 hv2
+  have hB2l : B2.length = l.length + 1 := by simp [B2, hB1l]
+  set B3 := B2.set m (l[m - 1].1, (B2.getD m (0, 0)).2)
+  have hg3 : B2.getD m (0, 0) = x := by
+    simp only [B2, B1, getD_set', List.length_set]; rw [if_neg (by omega), if_neg (by omega), g2]
+  have hv3 : k.valid [(l[m - 1].1, (B2.getD m (0, 0)).2)] = true := by rw [hg3]; exact LK.valid_pair_snd hvx
+  have w3 := lwr_put_ok (κ := κ) (k := k) (s := s) (Lc := Le) (i := i) (y := m) (w := l[m - 1].1) (L0 := B2) false
+    (jx := "q" + 1) (ex := .var "x1") hLei (by simp [Exp.ev, hLeq, OM.Machine.BinOp.eval]; omega)
+    (by simp [Exp.ev, hLex1]) (by omega) hr hir hvB2 hv3 (by omega)
+  have hvB3 : k.valid B3 = true := LK.valid_set hvB2 hv3
+  have hB3l : B3.length = l.length + 1 := by simp [B3, hB2l]
+  set B4 := B3.set m ((B3.getD m (0, 0)).1, l[m - 1].2)
+  have hv4 : k.valid [((B3.getD m (0, 0)).1, l[m - 1].2)] = true := LK.valid_pair_snd hvl1
+  have w4 := lwr_put_ok (κ := κ) (k := k) (s := s) (Lc := Le) (i := i) (y := m) (w := l[m - 1].2) (L0 := B3) true
+    (jx := "q" + 1) (ex := .var "y1") hLei (by simp [Exp.ev, hLeq, OM.Machine.BinOp.eval]; omega)
+    (by simp [Exp.ev, hLey1]) (by omega) hr hir hvB3 hv4 (by omega)
+  have g31 : B3.getD m (0, 0) = (l[m - 1].1, x.2) := by
+    show (B2.set m _).getD m (0, 0) = _
+    rw [getD_set', if_pos ⟨rfl, by rw [hB2l]; omega⟩, hg3]
+  have g11 : B1.getD (m - 1) (0, 0) = (x.1, l[m - 1].2) := by
+    show (B.set (m - 1) _).getD (m - 1) (0, 0) = _
+    rw [getD_set', if_pos ⟨rfl, by rw [hB]; omega⟩, g1]
+  have hB4 : B3.set m ((B3.getD m (0, 0)).1, l[m - 1].2) = bubble l x (m - 1) := by
+    rw [← bubble_swap (x := x) h1 hml, g31]
+    show (B2.set m (l[m - 1].1, (B2.getD m (0, 0)).2)).set m (l[m - 1].1, l[m - 1].2) = _
+    rw [hg3, List.set_set]
+    show (B1.set (m - 1) ((B1.getD (m - 1) (0, 0)).1, x.2)).set m (l[m - 1].1, l[m - 1].2) = _
+    rw [g11]
+    show ((B.set (m - 1) (x.1, (B.getD (m - 1) (0, 0)).2)).set (m - 1) (x.1, x.2)).set m
+      (l[m - 1].1, l[m - 1].2) = _
+    rw [List.set_set]
+  simp only [Bool.false_eq_true, if_false, if_true] at w4
+  rw [hB4] at w4
+  simp only [Bool.false_eq_true, if_false, if_true] at w1 w2 w3
+  refine ⟨Le, _, evalF_seq_ok2 a0 (evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4
+    (evalF_seq_ok2 w1 (evalF_seq_ok2 w2 (evalF_seq_ok2 w3 w4))))))), ?_, hLe⟩
+  simp [Exp.cost]
+
+/-- **`insertIdxP` computes `insertIdx`.** -/
+theorem insertIdxP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i p a b : Nat} (hi : L "i" = i) (hp : L "p" = p)
+    (ha : L "a" = a) (hb : L "b" = b) (hr : k.recOk s i = true) (hir : i < κ.lrec k)
+    (hab : k.valid [(a, b)] = true) (hpl : p ≤ (k.view s i).length)
+    (hcap : (k.view s i).length + 1 ≤ κ.lcap k) :
+    ∃ L' c, evalF κ (insertIdxP k).body s L = .ok (k.put s i ((k.view s i).insertIdx p (a, b))) L' c ∧
+      c ≤ 50 + 91 * (k.view s i).length := by
+  set l := k.view s i
+  have hvl : k.valid l = true := LK.valid_view s i k
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "n") (e := .llen k "i") (v := l.length)
+    (by simp [Exp.ev, hi, hir, l])
+  set L1 := OM.Machine.State.upd L "n" l.length
+  have hval : k.valid (l ++ [(a, b)]) = true := by
+    rw [LK.valid_iff] at hvl ⊢
+    intro q hq; simp only [List.mem_append, List.mem_singleton] at hq
+    rcases hq with hq | rfl
+    · exact hvl q hq
+    · exact hab
+  have eg : evalF κ (.lgrow k "i" "a" "b") s L1 = .ok (k.put s i (bubble l (a, b) l.length)) L1 22 := by
+    rw [bubble_len]
+    have hso : k.set κ s i (k.view s i ++ [(a, b)]) = some (k.put s i (l ++ [(a, b)])) :=
+      LK.set_ok hr hval (by simp only [List.length_append, List.length_singleton]; exact hcap) hir
+    simp [evalF, Exp.ev, L1, OM.Machine.State.upd, hi, ha, hb, hso, Exp.cost]
+  have a3 := evalF_assign_ok (κ := κ) (s := k.put s i (bubble l (a, b) l.length)) (L := L1) (x := "c")
+    (e := .monus "n" "p") (v := l.length - p)
+    (Exp.ev_monus κ _ L1 (by simp [Exp.ev, L1, OM.Machine.State.upd]) (by simp [Exp.ev, L1, OM.Machine.State.upd, hp]))
+  set L3 := OM.Machine.State.upd L1 "c" (l.length - p)
+  let I : Nat → Core → Loc → Prop := fun t s' L' => s' = k.put s i (bubble l (a, b) (l.length - t)) ∧
+    L' "i" = i ∧ L' "n" = l.length
+  obtain ⟨s', L', c, he, hc, hs', -, -⟩ := evalF_loop (κ := κ) (x := "t") (n := .var "c") (b := swapS k)
+    (s := k.put s i (bubble l (a, b) l.length)) (L := L3) (N := l.length - p)
+    (by simp [Exp.ev, L3, OM.Machine.State.upd]) I 90
+    ⟨by simp, by simp [L3, L1, OM.Machine.State.upd, hi], by simp [L3, L1, OM.Machine.State.upd]⟩
+    (by
+      intro t ht s1 L1' ⟨hs1, hi1, hn1⟩
+      subst hs1
+      obtain ⟨L2, c2, e2, hc2, hF2⟩ := swapS_ok (κ := κ) (k := k) (s := s) (L := OM.Machine.State.upd L1' "t" t)
+        (i := i) (l := l) (x := (a, b)) (m := l.length - t) (t := t)
+        (by simp [OM.Machine.State.upd, hi1]) (by simp [OM.Machine.State.upd, hn1])
+        (by simp [OM.Machine.State.upd]) (by omega) (by omega) hr hir hvl hab (by omega)
+      refine ⟨_, L2, c2, e2, hc2, by rw [show l.length - (t + 1) = l.length - t - 1 by omega], ?_, ?_⟩
+      · rw [hF2 "i" (by decide) (by decide) (by decide) (by decide) (by decide)]; simp [OM.Machine.State.upd, hi1]
+      · rw [hF2 "n" (by decide) (by decide) (by decide) (by decide) (by decide)]; simp [OM.Machine.State.upd, hn1])
+  rw [hs', show l.length - (l.length - p) = p by omega, bubble_insertIdx l (a, b) hpl] at he
+  refine ⟨L', _, evalF_seq_ok2 a1 (evalF_seq_ok2 eg (evalF_seq_ok2 a3 he)), ?_⟩
+  have : (l.length - p) * (1 + 90) ≤ 91 * l.length := by
+    have := Nat.mul_le_mul_right (1 + 90) (Nat.sub_le l.length p); omega
+  simp [Exp.cost] at hc ⊢; omega
 
 end OM.Impl
