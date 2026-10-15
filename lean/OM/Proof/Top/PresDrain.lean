@@ -76,8 +76,7 @@ include hvt hv ht
 
 theorem dsS_sameTree : SameTree (ts s) (ts (dsS s v tag)) := by
   refine ⟨dsS_P s v tag, dsS_size s v tag, dsS_cin s v tag, dsS_lpar s v tag, fun u => ?_⟩
-  show (dsS s v tag).nodes.getX u = { s.nodes.getX u with
-    first := ((dsS s v tag).nodes.getX u).first, last := ((dsS s v tag).nodes.getX u).last }
+  show (dsS s v tag).nodes.getX u = { s.nodes.getX u with first := ((dsS s v tag).nodes.getX u).first, last := ((dsS s v tag).nodes.getX u).last, weight := ((dsS s v tag).nodes.getX u).weight }
   rw [dsS_node s v tag hvt hv ht u]
   split_ifs <;> rfl
 
@@ -90,6 +89,11 @@ theorem dsS_first (u : Nat) : (nd (ts (dsS s v tag)) u).first =
 theorem dsS_last (u : Nat) : (nd (ts (dsS s v tag)) u).last =
     if u = v then dsLastV s v else if u = dsT s v then dsLastT s v else (nd (ts s) u).last := by
   show ((dsS s v tag).nodes.getX u).last = _
+  rw [dsS_node s v tag hvt hv ht u]
+  split_ifs <;> rfl
+
+theorem dsS_weight (u : Nat) : (nd (ts (dsS s v tag)) u).weight = (nd (ts s) u).weight := by
+  show ((dsS s v tag).nodes.getX u).weight = _
   rw [dsS_node s v tag hvt hv ht u]
   split_ifs <;> rfl
 
@@ -807,6 +811,8 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
   obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
   set tag := dsTag s v _ _ _ _
   have T := dsS_sameTree (tag := tag) hvt hv htz
+  have hW : ∀ u, (nd (ts (dsS s v tag)) u).weight = (nd (ts s) u).weight :=
+    dsS_weight (tag := tag) hvt hv htz
   have SH := S.drain_shape hg hne hL hcs tag htag
   obtain ⟨hy, -, -, -, -⟩ := S.pick hg hne
   -- the walk node is a target of the ghost
@@ -823,13 +829,13 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
   refine ⟨SH, ?_, ?_, ?_⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
       fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
-    · rw [T.liveN] at hu; rw [T.weight, T.pend_fund j w up v k (k + 1), T.tw]; exact Ti.wts u hu
+    · rw [T.liveN] at hu; rw [hW, T.pend_fund j w up v k (k + 1), T.tw]; exact Ti.wts u hu
     · rw [T.liveN] at hu; rw [T.livePar] at hp; rw [T.srcOf] at hs
-      rw [T.weight, T.ht, T.P]; exact Ti.wA u hu hp hs
-    · rw [T.ghostN] at hu; rw [T.weight, T.ht, T.P]; exact Ti.wB u hu
-    · rw [T.ghostN] at hu; rw [T.weight, T.ew]; exact Ti.wF u hu
+      rw [hW, T.ht, T.P]; exact Ti.wA u hu hp hs
+    · rw [T.ghostN] at hu; rw [hW, T.ht, T.P]; exact Ti.wB u hu
+    · rw [T.ghostN] at hu; rw [hW, T.ew]; exact Ti.wF u hu
     · rw [T.ghostN] at hu
-      rw [T.fundOf, T.weight, T.P]
+      rw [T.fundOf cl u (hW u), hW, T.P]
       have hold := Ti.wC u hu
       by_cases huv : u = v
       · subst huv
@@ -844,7 +850,7 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
           T.slack_other j w up v k (k + 1) u huv]
         exact hold
     · rw [T.ghostN] at hu
-      rw [T.fundOf, T.weight, T.P]
+      rw [T.fundOf cl u (hW u), hW, T.P]
       have := Ti.wC' u hu
       by_cases hf : funded (ts s) (some { j with pc := .fund w up v k }) u
       · rw [if_pos ((T.funded _ u).mpr (by unfold funded at hf ⊢; exact hf))]
