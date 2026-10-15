@@ -548,6 +548,59 @@ theorem growth_tab {X : Nat} (hT : X ∈ (nd (ts s) v).inTables) :
     · simp only [decide_eq_true hvX, if_true, List.length_append, List.length_cons]; rw [if_pos hvX]; omega
     · simp only [decide_eq_false hvX, Bool.false_eq_true, if_false, List.length_append]; rw [if_neg hvX]; omega
 
+theorem growth_same {X : Nat} (hX : Top.isN (ts s) X) (h2 : 2 ≤ Top.ht (ts s) X)
+    (hT : X ∉ (nd (ts s) v).inTables) :
+    growth S' cl X = growth (ts s) cl X ∧ oldLive S' X = oldLive (ts s) X := by
+  have hvlt := C.H.hv
+  have hXn := C.nN X hX
+  have hXnn : ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) := fun h => h.elim hXn.1 hXn.2
+  obtain ⟨h1X, hHX⟩ := C.S.htN X hX
+  have hord : Top.order S' X = Top.order (ts s) X := by rw [C.order, if_neg hXn.1, if_neg hXn.2, if_neg hT]
+  have hent : ∀ e ∈ Top.order (ts s) X, Top.isN (ts s) e ∧ Top.ht (ts s) e = Top.ht (ts s) X - 1 :=
+    fun e he => (C.S.ordMem _ (by omega) (by omega) e).mp (C.S.tabEnt X hX e he)
+  have hvX : v ∉ Top.order (ts s) X := by
+    intro h
+    have hentv : Ent ord (Top.ht (ts s) v) v := (C.S.ordMem _ C.h1 (C.S.htN v C.vl.1).2 v).mpr ⟨C.vl.1, rfl⟩
+    have hh : Top.ht (ts s) X = Top.ht (ts s) v + 1 := by have := (hent v h).2; omega
+    apply hT
+    have : X ∈ tabs (ts s) (Top.ht (ts s) v) v := (C.S.tabsIff _ v X hentv).mpr ⟨hX, hh, h⟩
+    unfold tabs at this; rwa [if_neg (by have := C.h1; omega)] at this
+  have hl : ∀ e ∈ Top.order (ts s) X, (Top.liveN S' e ↔ Top.liveN (ts s) e) ∧ tw S' cl e = tw (ts s) cl e := by
+    intro e he
+    have hev : e ≠ v := fun h => hvX (h ▸ he)
+    have hn := (hent e he).1
+    have hen := C.nN e hn
+    refine ⟨?_, C.tw_old hn hev⟩
+    rw [C.liveN]
+    constructor
+    · rintro (⟨h, -⟩ | h | h)
+      · exact h
+      · exact absurd h hen.1
+      · exact absurd h hen.2
+    · intro h; exact Or.inl ⟨h, hev⟩
+  have hht : Top.ht S' X = Top.ht (ts s) X := by rw [C.ht X, if_neg hXnn]
+  constructor
+  · unfold growth
+    rw [hord, hht, C.H.P, show (ts s).P = s.P from rfl, foldr_sum, foldr_sum]
+    have ef : ((Top.order (ts s) X).filter fun e => decide (Top.liveN S' e) && decide (X < e)) =
+        (Top.order (ts s) X).filter fun e => decide (Top.liveN (ts s) e) && decide (X < e) :=
+      List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
+        decide_eq_decide.mpr (hl e he).1])
+    rw [ef]
+    have em : (((Top.order (ts s) X).filter fun e => decide (Top.liveN (ts s) e) && decide (X < e)).map
+        fun e => tw S' cl e - taud s.P (Top.ht (ts s) X - 1)) =
+        ((Top.order (ts s) X).filter fun e => decide (Top.liveN (ts s) e) && decide (X < e)).map
+        fun e => tw (ts s) cl e - taud s.P (Top.ht (ts s) X - 1) :=
+      List.map_congr_left (fun e he => by rw [(hl e (List.mem_of_mem_filter he)).2])
+    rw [em]
+  · unfold oldLive
+    rw [hord]
+    have ef : ((Top.order (ts s) X).filter fun e => decide (Top.liveN S' e) && decide (e < X)) =
+        (Top.order (ts s) X).filter fun e => decide (Top.liveN (ts s) e) && decide (e < X) :=
+      List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
+        decide_eq_decide.mpr (hl e he).1])
+    rw [ef]
+
 end SDCtx
 
 end OM.Proof.Top
