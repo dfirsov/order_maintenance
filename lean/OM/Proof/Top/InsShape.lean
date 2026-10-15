@@ -103,6 +103,24 @@ theorem ins_table (hTP : TopParams s.P) {T : Nat} (hT : T ∈ s.cin.getX x) :
     have htab' : (s.nodes.getX T).table = A ++ (x, le) :: Bs := htab
     rw [htab', e1, e2]
 
+theorem ins_order_old {X : Nat} (hX : X ∉ s.cin.getX x) : order t X = order (ts s) X := by
+  unfold order Node.order; rw [F.table, if_neg (fun h => hX h.1)]; rfl
+
+theorem ins_labs_old {X : Nat} (hX : X ∉ s.cin.getX x) : labs t X = labs (ts s) X := by
+  unfold labs; rw [F.table, if_neg (fun h => hX h.1)]; rfl
+
+/-- Entries only gain: every old entry of a table is still one. -/
+theorem ins_order_sup (hTP : TopParams s.P) (X e : Nat) (he : e ∈ order (ts s) X) : e ∈ order t X := by
+  by_cases hX : X ∈ s.cin.getX x
+  · obtain ⟨A, le, Bs, a, b, htab, -, htab', -⟩ := ins_table hI hcs hx F hTP hX
+    unfold order Node.order at he ⊢
+    rw [htab']
+    have he' : e ∈ (s.nodes.getX X).table.map (·.1) := he
+    rw [htab] at he'
+    simp only [List.map_append, List.map_cons, List.mem_append, List.mem_cons] at he' ⊢
+    tauto
+  · rw [ins_order_old hI hcs hx F hX]; exact he
+
 end shape
 
 end OM.Proof.Top
