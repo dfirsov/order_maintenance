@@ -1760,4 +1760,48 @@ theorem stage7S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
     omega
   · intro x h1 h2; simp only [OM.Machine.State.setLocs]; exact hfr2 x h1 h2
 
+/-! ### Stage 8: `v` becomes a ghost -/
+
+def stage8S : Stm :=
+  .wr (.n .draining) "v" 1 ;; .wr (.n .t1) "v" "v1" ;; .wr (.n .t2) "v" "v2" ;; .wr (.n .livePar) "v" 0 ;;
+  .lclear .children "v"
+
+/-- What `v` becomes. -/
+def ghostF (N : Nat) (side : List (Nat × Side)) (n : Node) : Node :=
+  { n with draining := true, t1 := N, t2 := N + 1, side := side, livePar := NIL, children := [] }
+
+theorem sdS_eq (t : Core) (v : Nat) (side : List (Nat × Side)) :
+    sdS t v side = { sd11 t v side with nodes := (sd11 t v side).nodes.modify v (ghostF t.nodes.size side) } := rfl
+
+theorem stage8S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
+    (hvs : v < (sd11 t v side).nodes.size) (hLv : L "v" = v) (hLv1 : L "v1" = t.nodes.size)
+    (hLv2 : L "v2" = t.nodes.size + 1) (hvN : v < κ.tbl .N) (hvc : v < κ.lrec .children) :
+    ∃ c, evalF κ stage8S (phiS v side (sd11 t v side)) L = .ok (sdS t v side) L c ∧ c ≤ 20 := by
+  rw [sdS_eq]
+  generalize sd11 t v side = X at hvs ⊢
+  set N := t.nodes.size
+  have hs : ∀ (Y : Core) (f : Node → Node), (Y.nodes.modify v f).size = Y.nodes.size := fun _ _ => by simp
+  have w1 := evalF_wrN_ok (κ := κ) (s := phiS v side X) (L := L) (k := .draining) (i := .var "v") (e := (1 : Exp))
+    (j := v) (w := 1) (by simp [Exp.ev, hLv]) rfl (by simp [phiS, hvs]) hvN rfl
+  set Y1 := { phiS v side X with nodes := (phiS v side X).nodes.modify v (NF.set · 1 .draining) }
+  have w2 := evalF_wrN_ok (κ := κ) (s := Y1) (L := L) (k := .t1) (i := .var "v") (e := .var "v1")
+    (j := v) (w := N) (by simp [Exp.ev, hLv]) (by simp [Exp.ev, hLv1]) (by simp [Y1, phiS, hvs]) hvN rfl
+  set Y2 := { Y1 with nodes := Y1.nodes.modify v (NF.set · N .t1) }
+  have w3 := evalF_wrN_ok (κ := κ) (s := Y2) (L := L) (k := .t2) (i := .var "v") (e := .var "v2")
+    (j := v) (w := N + 1) (by simp [Exp.ev, hLv]) (by simp [Exp.ev, hLv2]) (by simp [Y2, Y1, phiS, hvs]) hvN rfl
+  set Y3 := { Y2 with nodes := Y2.nodes.modify v (NF.set · (N + 1) .t2) }
+  have w4 := evalF_wrN_ok (κ := κ) (s := Y3) (L := L) (k := .livePar) (i := .var "v") (e := (0 : Exp))
+    (j := v) (w := 0) (by simp [Exp.ev, hLv]) rfl (by simp [Y3, Y2, Y1, phiS, hvs]) hvN rfl
+  set Y4 := { Y3 with nodes := Y3.nodes.modify v (NF.set · 0 .livePar) }
+  have w5 : evalF κ (.lclear .children "v") Y4 L = .ok (LK.put Y4 v [] .children) L 3 := by
+    have hso := LK.set_ok (κ := κ) (s := Y4) (i := v) (l := []) (k := .children)
+      (by simp [LK.recOk, Y4, Y3, Y2, Y1, phiS, hvs]) (by simp [LK.valid]) (by simp) hvc
+    simp [evalF, Exp.ev, hLv, hso, Exp.cost]
+  have hfin : LK.put Y4 v [] .children = { X with nodes := X.nodes.modify v (ghostF N side) } := by
+    simp only [LK.put, Y4, Y3, Y2, Y1, phiS, Array.modify_modify_same]
+    refine congrArg (fun a => ({ X with nodes := a } : Core)) ?_
+    congr 1
+  rw [hfin] at w5
+  exact ⟨_, evalF_seq_ok2 w1 (evalF_seq_ok2 w2 (evalF_seq_ok2 w3 (evalF_seq_ok2 w4 w5))), by simp [Exp.cost]⟩
+
 end OM.Impl
