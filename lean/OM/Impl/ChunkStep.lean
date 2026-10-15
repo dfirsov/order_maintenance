@@ -714,4 +714,61 @@ theorem mgRS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (h
   rw [hfin] at e4
   refine ⟨L1, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 e4)), by omega, h1⟩
 
+/-! ### Sizes after a move -/
+
+/-- `moveSizes x y unit` (locals `x y uk u0 u1 u2`). -/
+def msMv : Stm := "mv" ::= .gF .size "u0" ;; .ite ("uk" =ₑ 3) ("mv" ::= "mv" + .gF .size "u1" + .gF .size "u2") .skip
+def msS : Stm := msMv ;; .wcF .size "x" (Exp.monus (.cF .size "x") "mv") ;; .wcF .size "y" (.cF .size "y" + "mv")
+
+theorem msS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (hy : L "y" = y)
+    (hk : L "uk" = 1 ∨ L "uk" = 3) (hxs : x < s.C.size) (hys : y < s.C.size) (hC : s.C.size ≤ κ.tbl .C)
+    (hu : ∀ g ∈ unitOf L, g < κ.tbl .G) :
+    ∃ L' n, evalF κ msS s L = .ok (OM.Proof.cmoveSizes s x y (unitOf L)) L' n ∧ n ≤ 80 ∧
+      ∀ r, r ≠ "mv" → L' r = L r := by
+  set mv := ((unitOf L).map fun g => (s.Gs.getX g).size).sum
+  have hxT : x < κ.tbl .C := by omega
+  have hyT : y < κ.tbl .C := by omega
+  have b1 : ∃ L1 c1, evalF κ msMv s L = .ok s L1 c1 ∧ L1 "mv" = mv ∧
+      (∀ r, r ≠ "mv" → L1 r = L r) ∧ c1 ≤ 30 := by
+    rcases hk with hk | hk
+    · have hu0 := hu (L "u0") (by simp [unitOf, hk])
+      have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "mv") (e := .gF .size "u0") (v := mv)
+        (by simp [Exp.gF, Exp.ev, hu0, Fld.cap, Fld.get, GF.get, mv, unitOf, hk])
+      exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.State.upd, hk])
+        evalF_skip), by simp [OM.Machine.State.upd], fun r h => by simp [OM.Machine.State.upd, h],
+        by simp [Exp.cost, Exp.gF]⟩
+    · have hu0 := hu (L "u0") (by simp [unitOf, hk])
+      have hu1 := hu (L "u1") (by simp [unitOf, hk])
+      have hu2 := hu (L "u2") (by simp [unitOf, hk])
+      have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "mv") (e := .gF .size "u0")
+        (v := (s.Gs.getX (L "u0")).size) (by simp [Exp.gF, Exp.ev, hu0, Fld.cap, Fld.get, GF.get])
+      have a2 := evalF_assign_ok (κ := κ) (s := s) (L := upd L "mv" (s.Gs.getX (L "u0")).size) (x := "mv")
+        (e := "mv" + .gF .size "u1" + .gF .size "u2") (v := mv)
+        (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, OM.Machine.BinOp.eval, hu1, hu2, Fld.cap, Fld.get, GF.get, mv,
+          unitOf, hk]; omega)
+      exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval,
+        OM.Machine.State.upd, hk]) one_ne_zero a2), by simp [OM.Machine.State.upd],
+        fun r h => by simp [OM.Machine.State.upd, h], by simp [Exp.cost, Exp.gF]⟩
+  obtain ⟨L1, c1, e1, h1mv, h1F, hc1⟩ := b1
+  have h1x : L1 "x" = x := by rw [h1F "x" (by decide), hx]
+  have h1y : L1 "y" = y := by rw [h1F "y" (by decide), hy]
+  have hm := Exp.ev_monus κ s L1 (a := .cF .size "x") (b := .var "mv") (x := (s.C.getX x).size) (y := mv)
+    (by simp [Exp.cF, Exp.ev, h1x, hxT, Fld.cap, Fld.get, CF.get]) (by simp [Exp.ev, h1mv])
+  have w1 := evalF_wrC_ok (κ := κ) (s := s) (L := L1) (k := .size) (i := .var "x") (e := Exp.monus (.cF .size "x") "mv")
+    (j := x) (w := (s.C.getX x).size - mv) (by simp [Exp.ev, h1x]) hm hxs hxT rfl
+  set C1 := s.C.modify x (CF.set · ((s.C.getX x).size - mv) .size)
+  have w2 := evalF_wrC_ok (κ := κ) (s := { s with C := C1 }) (L := L1) (k := .size) (i := .var "y")
+    (e := .cF .size "y" + "mv") (j := y) (w := (C1.getX y).size + mv) (by simp [Exp.ev, h1y])
+    (by simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1y, h1mv, hyT, Fld.cap, Fld.get, CF.get]) (by simp [C1, hys]) hyT rfl
+  have hfin : ({ s with C := C1.modify y (CF.set · ((C1.getX y).size + mv) .size) } : Core) =
+      OM.Proof.cmoveSizes s x y (unitOf L) := by
+    simp only [OM.Proof.cmoveSizes]
+    congr 1
+    rw [show C1 = s.C.modify x fun X => { X with size := X.size - mv } from Array.modify_congr_getX _ _ _ _ rfl]
+    apply Array.modify_congr_getX; rfl
+  rw [hfin] at w2
+  refine ⟨L1, _, evalF_seq_ok2 e1 (evalF_seq_ok2 (by simp only [Stm.wcF]; exact w1) (by simp only [Stm.wcF]; exact w2)),
+    ?_, h1F⟩
+  simp [Exp.cost, Exp.cF] at hc1 ⊢; omega
+
 end OM.Impl
