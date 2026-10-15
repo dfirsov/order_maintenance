@@ -1,5 +1,6 @@
 import OM.Impl.Reserve
 import OM.Impl.Finish
+import OM.Impl.NoJob
 import OM.Proof.Top.Step
 
 /-!
@@ -1102,5 +1103,134 @@ theorem jobStepS_fund {κ : Caps} {s : Core} {L : Loc} {j : Job} {v up src k D :
     (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
     (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval]) e2)))), ?_⟩
   simp [Exp.cost]; omega
+
+/-! ### The agreements, from the cases -/
+
+theorem dsP_noJob : dsP.body.noJob = true := by decide
+theorem sdP_noJob : sdP.body.noJob = true := by decide
+
+theorem drainStep_dead_run {s : Core} {v : Nat} (hal : (s.nodes.getX v).alive = false) :
+    (drainStep v).run s = .ok false s := by
+  unfold drainStep; simp [OM.Proof.run_getP_bind, run_getN_bind, hal]
+
+theorem dsAgree_dead {κ : Caps} {S : Core} {v : Nat} (hvN : v < κ.tbl .N) (hal : (S.nodes.getX v).alive = false) :
+    DSAgree κ S v 10 := by
+  intro b S' h
+  rw [drainStep_dead_run hal] at h
+  injection h with hb hS; subst hb; subst hS
+  obtain ⟨L', c, e, hok, hc⟩ := dsP_dead (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["v"] [v])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hvN hal
+  exact ⟨L', c, e, by simp [hok, b2n], hc, rfl⟩
+
+theorem dsAgree_move {κ : Caps} {s : Core} {v pt tb pv vb : Nat}
+    (hal : (s.nodes.getX v).alive = true) (hf : (s.nodes.getX v).first ≠ NIL)
+    (hside : goesLeft s v ∨
+      lookup (s.nodes.getX v).side (belowY s v (s.nodes.getX v).first) = some .right ∧
+      lookup (s.nodes.getX v).side (belowY s v (s.nodes.getX v).last) = some .right)
+    (hsz : (s.nodes.getX v).height + 1 < (s.path.getX (dsY s v)).size)
+    (hpt : (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).lab? (dsT s v) = some pt)
+    (htb : (s.nodes.getX (dsT s v)).lab? (belowY s v (dsY s v)) = some tb)
+    (hpv : (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).lab? v = some pv)
+    (hvb : (s.nodes.getX v).lab? (belowY s v (dsY s v)) = some vb)
+    (hold : (pv <<< ((s.nodes.getX v).height * s.P.beta)) |||
+        (vb <<< (((s.nodes.getX v).height - 1) * s.P.beta)) ≤ (s.C.getX (dsY s v)).tag)
+    (hok : OM.Proof.TagOK s (dsY s v) (dsTag s v pt tb pv vb))
+    (h1 : 1 ≤ (s.nodes.getX v).height) (hpsz : (s.path.getX (dsY s v)).size = s.P.H + 1)
+    (htbB : tb < 2 ^ s.P.beta) (hvbB : vb < 2 ^ s.P.beta) (htv : dsT s v ≠ v)
+    (hvs : v < s.nodes.size) (hts : dsT s v < s.nodes.size) (hys : dsY s v < s.C.size)
+    (hnf : notPrep s (s.nodes.getX v).first) (hnl : notPrep s (s.nodes.getX v).last)
+    (hvN : v < κ.tbl .N) (htN : dsT s v < κ.tbl .N) (hvsd : v < κ.lrec .side) (hvr : v < κ.lrec .table)
+    (htr : dsT s v < κ.lrec .table)
+    (hprr : (s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1) < κ.lrec .table)
+    (hfC : (s.nodes.getX v).first < κ.tbl .C) (hlC : (s.nodes.getX v).last < κ.tbl .C)
+    (hyP : (s.C.getX (dsY s v)).prev < κ.tbl .C) (hyN : (s.C.getX (dsY s v)).next < κ.tbl .C)
+    (hw : (s.nodes.getX v).height + 1 < κ.pw) :
+    DSAgree κ s v (1100 + 80 * (s.nodes.getX v).side.length +
+        40 * (s.nodes.getX ((s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1))).table.length +
+        20 * (s.nodes.getX (dsT s v)).table.length + 20 * (s.nodes.getX v).table.length) := by
+  intro b S' h
+  rw [drainStep_move hal hf hside hsz hpt htb hpv hvb hold hok] at h
+  injection h with hb hS; subst hb; subst hS
+  obtain ⟨L', c, e, hok', hc⟩ := dsP_move (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["v"] [v])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hal hf hside hsz hpt htb hpv hvb hold hok h1 hpsz htbB
+    hvbB htv hvs hts hys hnf hnl hvN htN hvsd hvr htr hprr hfC hlC hyP hyN hw
+  exact ⟨L', c, e, by simp [hok', b2n], hc, evalF_resJob dsP_noJob e⟩
+
+theorem dsAgree_finish {κ : Caps} {s : Core} {v B : Nat}
+    (hal : (s.nodes.getX v).alive = true) (hf : (s.nodes.getX v).first = NIL)
+    (hnd : (s.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (s.nodes.getX v).inTables, v ∈ (s.nodes.getX T).order)
+    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : v ∉ (s.nodes.getX v).order)
+    (hvN : v < κ.tbl .N) (hvr : v < κ.lrec .table) (hvi : v < κ.lrec .inTab)
+    (ht1 : (s.nodes.getX v).t1 < κ.tbl .N) (ht2 : (s.nodes.getX v).t2 < κ.tbl .N)
+    (hcE : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
+      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B)
+    (hcT : ∀ T ∈ (s.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
+      (s.nodes.getX T).table.length ≤ κ.lcap .table ∧ (s.nodes.getX T).side.length ≤ κ.lcap .side ∧
+      (s.nodes.getX T).table.length ≤ B ∧ (s.nodes.getX T).side.length ≤ B) :
+    DSAgree κ s v (300 + (s.nodes.getX v).table.length * (171 + 100 * B) +
+        (s.nodes.getX v).inTables.length * (301 + 200 * B)) := by
+  intro b S' h
+  rw [drainStep_finish hal hf hnd hT] at h
+  injection h with hb hS; subst hb; subst hS
+  obtain ⟨L', c, e, hok', hc⟩ := dsP_finish (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["v"] [v]) (B := B)
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hal hf hnd hT hv0 hvs hvo hvN hvr hvi ht1 ht2 hcE hcT
+  exact ⟨L', c, e, by simp [hok', b2n], hc, evalF_resJob dsP_noJob e⟩
+
+theorem startDrain_noop_run {t : Core} {v : Nat} (hno : (sKids t v).length < 2 ∨ (sH t v > 1 ∧ sK t v = 0)) :
+    (startDrain v).run t = .ok () t := by
+  unfold startDrain
+  simp only [OM.Proof.run_getP_bind, run_getN_bind]
+  by_cases h2 : (t.nodes.getX v).children.length < 2
+  · rw [if_pos h2]; rfl
+  · rw [if_neg h2]
+    simp only [OM.Proof.run_get_bind]
+    have hk : (sH t v > 1 ∧ sK t v = 0) := hno.resolve_left h2
+    rw [if_pos (by simpa using hk)]; rfl
+
+theorem sdAgree_noop {κ : Caps} {t : Core} {v : Nat} (hno : (sKids t v).length < 2 ∨ (sH t v > 1 ∧ sK t v = 0))
+    (hv : v < t.nodes.size) (hcN : t.nodes.size ≤ κ.tbl .N) (hcrc : t.nodes.size ≤ κ.lrec .children)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, e < κ.tbl .N) :
+    SDAgree κ t v (230 + 300 * (t.nodes.getX v).children.length) := by
+  intro S' h
+  rw [startDrain_noop_run hno] at h
+  injection h with _ hS; subst hS
+  obtain ⟨L', c, e, hc⟩ := startDrainS_noop (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["v"] [v]) hno hv
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hcN hcrc hks
+  exact ⟨L', c, e, hc, rfl⟩
+
+theorem sdAgree_ok {κ : Caps} {t : Core} {v B : Nat} {side : List (Nat × Side)}
+    (hk2 : 2 ≤ (sKids t v).length) (hk0 : ¬(sH t v > 1 ∧ sK t v = 0)) (hside : sSideO t v = some side)
+    (hroom : ∀ T ∈ (t.nodes.getX v).inTables, RoomOK t v T) (hnd : (t.nodes.getX v).inTables.Nodup)
+    (hall : ∀ e ∈ sKids t v, (lookup side e).isSome)
+    (hpar : v ∈ (t.nodes.getX (t.nodes.getX v).livePar).children) (hv : v < t.nodes.size)
+    (hvT : v ∉ (t.nodes.getX v).inTables) (hvk : v ∉ (t.nodes.getX v).children)
+    (hK : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size)
+    (hp : (t.nodes.getX v).livePar < t.nodes.size) (hpv : (t.nodes.getX v).livePar ≠ v)
+    (hB : ∀ T ∈ (t.nodes.getX v).inTables, (t.nodes.getX T).table.length ≤ B ∧ (t.nodes.getX T).side.length ≤ B)
+    (hcN : t.nodes.size + 2 ≤ κ.tbl .N)
+    (hcrc : t.nodes.size + 2 ≤ κ.lrec .children) (hcrs : t.nodes.size + 2 ≤ κ.lrec .side)
+    (hcrt : t.nodes.size + 2 ≤ κ.lrec .table) (hcri : t.nodes.size + 2 ≤ κ.lrec .inTab)
+    (hcrcin : t.nodes.size ≤ κ.lrec .cin) (hcl : t.nodes.size ≤ κ.arr .lpar)
+    (hcT : ∀ T ∈ (t.nodes.getX v).inTables,
+      (t.nodes.getX T).table.length + 2 ≤ κ.lcap .table ∧ (t.nodes.getX T).side.length + 2 ≤ κ.lcap .side)
+    (hcS : 2 * (t.nodes.getX v).table.length + 1 ≤ κ.lcap .side)
+    (hcTv : (t.nodes.getX v).table.length ≤ κ.lcap .table)
+    (hcI : (t.nodes.getX v).inTables.length ≤ κ.lcap .inTab)
+    (hc4 : ∀ e ∈ (t.nodes.getX v).table.map (·.1), tabsLen t (sH t v - 1) e + 2 * (t.nodes.getX v).table.length ≤
+      (if sH t v ≤ 1 then κ.lcap .cin else κ.lcap .inTab))
+    (hcC : (t.nodes.getX v).children.length ≤ κ.lcap .children)
+    (hcP : (t.nodes.getX (t.nodes.getX v).livePar).children.length + 1 ≤ κ.lcap .children) :
+    SDAgree κ t v (sdCost (t.nodes.getX v).children.length (t.nodes.getX v).table.length
+        (t.nodes.getX v).inTables.length side.length B
+        (t.nodes.getX (t.nodes.getX v).livePar).children.length) := by
+  intro S' h
+  rw [startDrain_run hk2 hk0 hside hroom hnd hall hpar hv] at h
+  injection h with _ hS; subst hS
+  obtain ⟨L', c, e, hc⟩ := startDrainS_ok (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["v"] [v]) hk2 hk0
+    hside hroom hnd hpar hv hvT hvk hK hks hp hpv hB (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hcN
+    hcrc hcrs hcrt hcri hcrcin hcl hcT hcS hcTv hcI hc4 hcC hcP
+  exact ⟨L', c, e, hc, evalF_resJob sdP_noJob e⟩
 
 end OM.Impl
