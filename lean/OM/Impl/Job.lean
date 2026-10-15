@@ -704,12 +704,14 @@ theorem dsP_move {κ : Caps} {s : Core} {L : Loc} {v pt tb pv vb : Nat} (hv : L 
 theorem dsP_finish {κ : Caps} {s : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
     (hal : (s.nodes.getX v).alive = true) (hf : (s.nodes.getX v).first = NIL)
     (hnd : (s.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (s.nodes.getX v).inTables, v ∈ (s.nodes.getX T).order)
-    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : v ∉ (s.nodes.getX v).order)
+    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : (s.nodes.getX v).height - 1 ≠ 0 → v ∉ (s.nodes.getX v).order)
     (hvN : v < κ.tbl .N) (hvr : v < κ.lrec .table) (hvi : v < κ.lrec .inTab)
     (ht1 : (s.nodes.getX v).t1 < κ.tbl .N) (ht2 : (s.nodes.getX v).t2 < κ.tbl .N)
-    (hcE : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
-      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
-      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B)
+    (hcE : ∀ e ∈ (s.nodes.getX v).order,
+      ((s.nodes.getX v).height - 1 = 0 → e < κ.lrec .cin ∧ (s.cin.getX e).length ≤ κ.lcap .cin ∧
+        (s.cin.getX e).length ≤ B) ∧
+      ((s.nodes.getX v).height - 1 ≠ 0 → e < κ.lrec .inTab ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+        (s.nodes.getX e).inTables.length ≤ B))
     (hcT : ∀ T ∈ (s.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
       (s.nodes.getX T).table.length ≤ κ.lcap .table ∧ (s.nodes.getX T).side.length ≤ κ.lcap .side ∧
       (s.nodes.getX T).table.length ≤ B ∧ (s.nodes.getX T).side.length ≤ B) :
@@ -1146,12 +1148,14 @@ theorem dsAgree_move {κ : Caps} {s : Core} {v pt tb pv vb : Nat}
 theorem dsAgree_finish {κ : Caps} {s : Core} {v B : Nat}
     (hal : (s.nodes.getX v).alive = true) (hf : (s.nodes.getX v).first = NIL)
     (hnd : (s.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (s.nodes.getX v).inTables, v ∈ (s.nodes.getX T).order)
-    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : v ∉ (s.nodes.getX v).order)
+    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : (s.nodes.getX v).height - 1 ≠ 0 → v ∉ (s.nodes.getX v).order)
     (hvN : v < κ.tbl .N) (hvr : v < κ.lrec .table) (hvi : v < κ.lrec .inTab)
     (ht1 : (s.nodes.getX v).t1 < κ.tbl .N) (ht2 : (s.nodes.getX v).t2 < κ.tbl .N)
-    (hcE : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
-      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
-      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B)
+    (hcE : ∀ e ∈ (s.nodes.getX v).order,
+      ((s.nodes.getX v).height - 1 = 0 → e < κ.lrec .cin ∧ (s.cin.getX e).length ≤ κ.lcap .cin ∧
+        (s.cin.getX e).length ≤ B) ∧
+      ((s.nodes.getX v).height - 1 ≠ 0 → e < κ.lrec .inTab ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+        (s.nodes.getX e).inTables.length ≤ B))
     (hcT : ∀ T ∈ (s.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
       (s.nodes.getX T).table.length ≤ κ.lcap .table ∧ (s.nodes.getX T).side.length ≤ κ.lcap .side ∧
       (s.nodes.getX T).table.length ≤ B ∧ (s.nodes.getX T).side.length ≤ B) :

@@ -136,9 +136,10 @@ theorem foldl_dropTableS_len (v hh : Nat) (e : Nat) : ∀ (l : List Nat) (s : Co
 
 theorem dtBody_ok {κ : Caps} {X : Core} {L : Loc} {v hh e j B : Nat} (hv : L "v" = v) (hhh : L "hh" = hh)
     (hj : j < (X.nodes.getX v).table.length) (he : ((X.nodes.getX v).table.getD j (0, 0)).1 = e)
-    (hvr : v < κ.lrec .table) (hec : e < κ.lrec .cin) (hei : e < κ.lrec .inTab)
-    (hcc : (X.cin.getX e).length ≤ κ.lcap .cin) (hci : (X.nodes.getX e).inTables.length ≤ κ.lcap .inTab)
-    (hBc : (X.cin.getX e).length ≤ B) (hBi : (X.nodes.getX e).inTables.length ≤ B) :
+    (hvr : v < κ.lrec .table)
+    (hcin : hh = 0 → e < κ.lrec .cin ∧ (X.cin.getX e).length ≤ κ.lcap .cin ∧ (X.cin.getX e).length ≤ B)
+    (hin : hh ≠ 0 → e < κ.lrec .inTab ∧ (X.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+      (X.nodes.getX e).inTables.length ≤ B) :
     ∃ L' c, evalF κ dtBody X (upd L "j" j) = .ok (dropTableS v hh X e) L' c ∧ c ≤ 170 + 100 * B ∧
       ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "r" → r ≠ "n" → L' r = L r := by
   have a1 := evalF_assign_ok (κ := κ) (s := X) (L := upd L "j" j) (x := "e") (e := .lrd .table false "v" "j") (v := e)
@@ -148,7 +149,8 @@ theorem dtBody_ok {κ : Caps} {X : Core} {L : Loc} {v hh e j B : Nat} (hv : L "v
   have h1v : L1 "v" = v := by simp [L1, OM.Machine.State.upd, hv]
   have h1F : ∀ r, r ≠ "j" → r ≠ "e" → L1 r = L r := fun r a b => by simp [L1, OM.Machine.State.upd, a, b]
   by_cases hh0 : hh = 0
-  · obtain ⟨L2, c2, e2, hc2, hF2⟩ := dropS_ok (κ := κ) (k := .cin) (s := X) (L := L1) (e := e) (v := v) h1e h1v hec
+  · obtain ⟨hec, hcc, hBc⟩ := hcin hh0
+    obtain ⟨L2, c2, e2, hc2, hF2⟩ := dropS_ok (κ := κ) (k := .cin) (s := X) (L := L1) (e := e) (v := v) h1e h1v hec
       (by simpa [LK.view] using hcc)
       (fun hf => by
         refine ⟨?_, rfl⟩
@@ -161,7 +163,8 @@ theorem dtBody_ok {κ : Caps} {X : Core} {L : Loc} {v hh e j B : Nat} (hv : L "v
       (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd, hhh, hh0]) one_ne_zero e2), ?_,
       fun r a b c d => (hF2 r c d).trans (h1F r a b)⟩
     simp only [LK.view, List.length_map] at hc2; simp only [Exp.cost]; nlinarith
-  · obtain ⟨L2, c2, e2, hc2, hF2⟩ := dropS_ok (κ := κ) (k := .inTab) (s := X) (L := L1) (e := e) (v := v) h1e h1v hei
+  · obtain ⟨hei, hci, hBi⟩ := hin hh0
+    obtain ⟨L2, c2, e2, hc2, hF2⟩ := dropS_ok (κ := κ) (k := .inTab) (s := X) (L := L1) (e := e) (v := v) h1e h1v hei
       (by simpa [LK.view] using hci)
       (fun hf => by
         have hlt : e < X.nodes.size := by
@@ -180,9 +183,10 @@ def dtLoopS : Stm := "m" ::= .llen .table "v" ;; .loop "j" "m" dtBody
 
 theorem dtLoopS_ok {κ : Caps} {s : Core} {L : Loc} {v hh B : Nat} (hv : L "v" = v) (hhh : L "hh" = hh)
     (hvr : v < κ.lrec .table)
-    (hcap : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
-      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
-      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B) :
+    (hcap : ∀ e ∈ (s.nodes.getX v).order,
+      (hh = 0 → e < κ.lrec .cin ∧ (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.cin.getX e).length ≤ B) ∧
+      (hh ≠ 0 → e < κ.lrec .inTab ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+        (s.nodes.getX e).inTables.length ≤ B)) :
     ∃ L' c, evalF κ dtLoopS s L = .ok ((s.nodes.getX v).order.foldl (dropTableS v hh) s) L' c ∧
       c ≤ 5 + (s.nodes.getX v).table.length * (171 + 100 * B) ∧
       ∀ r, r ≠ "m" → r ≠ "j" → r ≠ "e" → r ≠ "r" → r ≠ "n" → L' r = L r := by
@@ -204,14 +208,16 @@ theorem dtLoopS_ok {κ : Caps} {s : Core} {L : Loc} {v hh B : Nat} (hv : L "v" =
       have hjo : j < ord.length := by simp [hord]; exact hj
       have hXt : (X.nodes.getX v).table = tab := foldl_dropTableS_table v hh _ s v
       have hem : ord[j] ∈ ord := List.getElem_mem hjo
-      obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hcap _ hem
+      obtain ⟨hc1, hc2⟩ := hcap _ hem
       obtain ⟨g1, g2, -⟩ := foldl_dropTableS_len v hh ord[j] (ord.take j) s
       replace g1 : (X.cin.getX ord[j]).length ≤ (s.cin.getX ord[j]).length := g1
       replace g2 : (X.nodes.getX ord[j]).inTables.length ≤ (s.nodes.getX ord[j]).inTables.length := g2
       obtain ⟨L3, c3, e3, hc3, hF3⟩ := dtBody_ok (κ := κ) (X := X) (L := L2) (v := v) (hh := hh) (e := ord[j]) (j := j)
         (B := B) (by rw [hF2 "v" (by decide) (by decide) (by decide) (by decide) (by decide), hv])
         (by rw [hF2 "hh" (by decide) (by decide) (by decide) (by decide) (by decide), hhh]) (by rw [hXt]; exact hj)
-        (by rw [hXt, List.getD_eq_getElem _ _ hj]; simp [hord]) hvr h1 h2 (by omega) (by omega) (by omega) (by omega)
+        (by rw [hXt, List.getD_eq_getElem _ _ hj]; simp [hord]) hvr
+        (fun h0 => by obtain ⟨a, b, c⟩ := hc1 h0; exact ⟨a, by omega, by omega⟩)
+        (fun h0 => by obtain ⟨a, b, c⟩ := hc2 h0; exact ⟨a, by omega, by omega⟩)
       refine ⟨_, L3, c3, e3, hc3, ?_, fun r a b c d e => (hF3 r b c d e).trans (hF2 r a b c d e)⟩
       simp only [X, List.take_succ_eq_append_getElem hjo, List.foldl_append, List.foldl_cons, List.foldl_nil])
   rw [hS', show tab.length = ord.length by simp [hord], List.take_length] at he
@@ -329,14 +335,14 @@ theorem foldl_dropTableS_node (v hh u : Nat) : ∀ (l : List Nat) (s : Core),
     obtain ⟨m', hm'⟩ := dropTableS_node v hh s e u
     exact ⟨m, by rw [hm, hm']⟩
 
-theorem foldl_dropTableS_v {v hh : Nat} {s : Core} {l : List Nat} (hv : v ∉ l) :
+theorem foldl_dropTableS_v {v hh : Nat} {s : Core} {l : List Nat} (hv : hh ≠ 0 → v ∉ l) :
     (l.foldl (dropTableS v hh) s).nodes.getX v = s.nodes.getX v := by
   induction l generalizing s with
   | nil => rfl
   | cons e t ih =>
     simp only [List.foldl_cons]
-    rw [ih (fun h => hv (List.mem_cons_of_mem _ h)), dropTableS_getX, if_neg]
-    intro h; exact hv (by rw [h.1]; exact List.mem_cons_self)
+    rw [ih (fun h0 h => hv h0 (List.mem_cons_of_mem _ h)), dropTableS_getX, if_neg]
+    intro h; exact hv h.2.1 (by rw [h.1]; exact List.mem_cons_self)
 
 /-- `dropEntryS` changes tables and side lists only. -/
 theorem foldl_dropEntryS_node (v u : Nat) : ∀ (l : List Nat) (s : Core),
@@ -454,13 +460,15 @@ theorem finishDrainS_ok {κ : Caps} {s : Core} {L : Loc} {v B : Nat} (hv : L "v"
     -- Level F (as in `finishDrain_run`)
     (hnd : (s.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (s.nodes.getX v).inTables, v ∈ (s.nodes.getX T).order)
     -- the shape
-    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : v ∉ (s.nodes.getX v).order)
+    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : (s.nodes.getX v).height - 1 ≠ 0 → v ∉ (s.nodes.getX v).order)
     -- capacities
     (hvN : v < κ.tbl .N) (hvr : v < κ.lrec .table) (hvi : v < κ.lrec .inTab)
     (ht1 : (s.nodes.getX v).t1 < κ.tbl .N) (ht2 : (s.nodes.getX v).t2 < κ.tbl .N)
-    (hcE : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
-      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
-      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B)
+    (hcE : ∀ e ∈ (s.nodes.getX v).order,
+      ((s.nodes.getX v).height - 1 = 0 → e < κ.lrec .cin ∧ (s.cin.getX e).length ≤ κ.lcap .cin ∧
+        (s.cin.getX e).length ≤ B) ∧
+      ((s.nodes.getX v).height - 1 ≠ 0 → e < κ.lrec .inTab ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+        (s.nodes.getX e).inTables.length ≤ B))
     (hcT : ∀ T ∈ (s.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
       (s.nodes.getX T).table.length ≤ κ.lcap .table ∧ (s.nodes.getX T).side.length ≤ κ.lcap .side ∧
       (s.nodes.getX T).table.length ≤ B ∧ (s.nodes.getX T).side.length ≤ B) :
