@@ -8,6 +8,7 @@ Procedures on list `k` of record `i`, each with its agreement lemma:
 * `assocSetP k`: `assocSet` with key `x` and value `y`.
 * `lookupP k`: `lookup` of key `x` (found flag `f`, value `v`).
 * `insertIdxP k`: insert `(a, b)` at position `p` (`List.insertIdx`).
+* `copyS k`: append list `k` of record `a` to list `k` of record `w`.
 -/
 
 namespace OM.Impl
@@ -734,5 +735,57 @@ theorem insertIdxP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i p a b : Na
   have : (l.length - p) * (1 + 90) ≤ 91 * l.length := by
     have := Nat.mul_le_mul_right (1 + 90) (Nat.sub_le l.length p); omega
   simp [Exp.cost] at hc ⊢; omega
+
+/-! ### Copying a list -/
+
+def copyBody (k : LK) : Stm := .lgrow k "w" (.lrd k false "a" "j") (.lrd k true "a" "j")
+def copyS (k : LK) : Stm := "n" ::= .llen k "a" ;; .loop "j" "n" (copyBody k)
+
+/-- **`copyS` appends list `k` of record `a` to that of record `w`** (`w ≠ a`). -/
+theorem copyS_ok {κ : Caps} {k : LK} {s : Core} {L : Loc} {a w : Nat} (ha : L "a" = a) (hw : L "w" = w)
+    (hne : w ≠ a) (hid : k.idOk s w) (hr : k.recOk s w = true) (hra : a < κ.lrec k) (hrw : w < κ.lrec k)
+    (hcap : (k.view s w).length + (k.view s a).length ≤ κ.lcap k) :
+    ∃ L' c, evalF κ (copyS k) s L = .ok (k.put s w (k.view s w ++ k.view s a)) L' c ∧
+      c ≤ 5 + 40 * (k.view s a).length ∧ ∀ r, r ≠ "n" → r ≠ "j" → L' r = L r := by
+  set la := k.view s a
+  set lw := k.view s w
+  have hvw := LK.valid_view s w k
+  have hva := LK.valid_view s a k
+  have hval : ∀ j, k.valid (lw ++ la.take j) = true := by
+    intro j; rw [LK.valid_iff] at hvw hva ⊢
+    intro q hq; simp only [List.mem_append] at hq
+    rcases hq with hq | hq
+    · exact hvw q hq
+    · exact hva q (List.mem_of_mem_take hq)
+  have hviewA : ∀ l, k.valid l = true → k.view (k.put s w l) a = la := by
+    intro l hl; rw [LK.view_put hr hl]; simp [Ne.symm hne]; rfl
+  have hviewW : ∀ l, k.valid l = true → k.view (k.put s w l) w = l := by
+    intro l hl; rw [LK.view_put hr hl]; simp
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "n") (e := .llen k "a") (v := la.length)
+    (by simp [Exp.ev, ha, hra, la])
+  obtain ⟨S', L', c, he, hc, hs', hF⟩ := evalF_loop (κ := κ) (x := "j") (n := .var "n") (b := copyBody k)
+    (s := s) (L := OM.Machine.State.upd L "n" la.length) (N := la.length)
+    (by simp [Exp.ev, OM.Machine.State.upd])
+    (fun j S L' => S = k.put s w (lw ++ la.take j) ∧ ∀ r, r ≠ "n" → r ≠ "j" → L' r = L r) 32
+    ⟨by simp [lw, LK.put_view hid], fun r h1 _ => by simp [OM.Machine.State.upd, h1]⟩
+    (by
+      intro j hj S1 L1 ⟨hS1, hF1⟩
+      subst hS1
+      set L2 := OM.Machine.State.upd L1 "j" j
+      have h2a : L2 "a" = a := by simp [L2, OM.Machine.State.upd]; rw [hF1 "a" (by decide) (by decide), ha]
+      have h2w : L2 "w" = w := by simp [L2, OM.Machine.State.upd]; rw [hF1 "w" (by decide) (by decide), hw]
+      have hso := LK.set_ok (κ := κ) (s := k.put s w (lw ++ la.take j)) (i := w)
+        (l := lw ++ la.take (j + 1)) (k := k) (by rw [LK.recOk_put]; exact hr) (hval (j + 1))
+        (by simp; omega) hrw
+      rw [LK.put_put] at hso
+      have hl : lw ++ la.take (j + 1) = (lw ++ la.take j) ++ [(la[j].1, la[j].2)] := by
+        rw [List.take_succ_eq_append_getElem hj]; simp
+      refine ⟨_, L2, _, ?_, le_refl _, rfl, fun r h1 h2 => by simp [L2, OM.Machine.State.upd, h2]; exact hF1 r h1 h2⟩
+      simp only [copyBody, evalF, Exp.ev, h2a, h2w, show L2 "j" = j by simp [L2, OM.Machine.State.upd],
+        Option.bind_some, hra, hviewA _ (hval j), hj, and_self, if_true, hviewW _ (hval j), Exp.cost]
+      simp only [List.getD_eq_getElem _ _ hj, Bool.false_eq_true, if_false, if_true, ← hl, hso])
+  rw [hs', List.take_of_length_le le_rfl] at he
+  refine ⟨L', _, evalF_seq_ok2 a1 he, ?_, hF⟩
+  simp only [Exp.cost] at hc ⊢; omega
 
 end OM.Impl
