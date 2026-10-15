@@ -178,6 +178,69 @@ theorem gaps_room_after {β B : Nat} {A Bs : List (Nat × Nat)} {e le new : Nat}
   simp only [List.map_map, Function.comp_def] at this ⊢
   rw [this]; exact hm
 
+/-! ### Two new entries around one -/
+
+theorem isChain_insert_around {X Y : List Nat} {p r q B : Nat} (hB : 2 ≤ B)
+    (h : (X ++ p :: r :: q :: Y).IsChain fun a b => a + B ≤ b) :
+    (X ++ p :: (p + r) / 2 :: r :: (r + q) / 2 :: q :: Y).IsChain fun a b => a + B / 2 ≤ b := by
+  have hmono : ∀ l : List Nat, l.IsChain (fun a b => a + B ≤ b) → l.IsChain (fun a b => a + B / 2 ≤ b) :=
+    fun l hl => hl.imp fun a b hab => by omega
+  rw [List.isChain_append] at h ⊢
+  obtain ⟨h1, h2, h3⟩ := h
+  refine ⟨hmono _ h1, ?_, ?_⟩
+  · have hpr := (List.isChain_cons_cons.mp h2).1
+    have h2' := (List.isChain_cons_cons.mp h2).2
+    have hrq := (List.isChain_cons_cons.mp h2').1
+    have hr := (List.isChain_cons_cons.mp h2').2
+    refine List.isChain_cons_cons.mpr ⟨by omega, List.isChain_cons_cons.mpr ⟨by omega,
+      List.isChain_cons_cons.mpr ⟨by omega, List.isChain_cons_cons.mpr ⟨by omega, hmono _ hr⟩⟩⟩⟩
+  · intro x hx y hy
+    have := h3 x hx y hy
+    simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hy
+    subst hy; omega
+
+/-- **Room around an entry**: with all gaps at least `B ≥ 2`, both new labels exist, and with both
+new entries all gaps stay at least `B / 2`. -/
+theorem gaps_room_around {β B : Nat} {A Bs : List (Nat × Nat)} {e le y z : Nat} (hB : 2 ≤ B)
+    (hg : GapsGe β B ((A ++ (e, le) :: Bs).map (·.2))) :
+    roomLo A le true < roomHi β Bs le true ∧ roomLo A le false < roomHi β Bs le false ∧
+      GapsGe β (B / 2) ((A ++ (y, (roomLo A le true + roomHi β Bs le true - 1) / 2) :: (e, le) ::
+        (z, (roomLo A le false + roomHi β Bs le false - 1) / 2) :: Bs).map (·.2)) := by
+  rw [gapsGe_split] at hg
+  obtain ⟨X, hX⟩ := last_zero_cons_map A
+  obtain ⟨p, hp⟩ : ∃ p, p = (if h : A = [] then 0 else (A.getLast h).2 + 1) := ⟨_, rfl⟩
+  rw [← hp] at hX
+  obtain ⟨q, hq⟩ : ∃ q, q = (if h : Bs = [] then 1 <<< β else (Bs.head h).2) := ⟨_, rfl⟩
+  have hlo1 : roomLo A le true = p := by simp [roomLo, hp]
+  have hhi1 : roomHi β Bs le true = le := by simp [roomHi]
+  have hlo2 : roomLo A le false = le + 1 := by simp [roomLo]
+  have hhi2 : roomHi β Bs le false = q := by simp [roomHi, hq]
+  obtain ⟨Y, hY⟩ : ∃ Y, Bs.map (fun p : Nat × Nat => p.2 + 1) ++ [2 ^ β + 1] = (q + 1) :: Y := by
+    cases Bs with
+    | nil => exact ⟨[], by simp [hq, Nat.shiftLeft_eq]⟩
+    | cons b t => exact ⟨t.map (fun p : Nat × Nat => p.2 + 1) ++ [2 ^ β + 1], by simp [hq]⟩
+  rw [hX, hY, List.append_assoc, List.singleton_append] at hg
+  have hc := List.isChain_append.mp hg |>.2.1
+  have hpq : p + B ≤ le + 1 := (List.isChain_cons_cons.mp hc).1
+  have hrq : le + 1 + B ≤ q + 1 := (List.isChain_cons_cons.mp (List.isChain_cons_cons.mp hc).2).1
+  rw [hlo1, hhi1, hlo2, hhi2]
+  refine ⟨by omega, by omega, ?_⟩
+  unfold GapsGe
+  have hm := isChain_insert_around hB hg
+  have : (0 :: (A ++ (y, (p + le - 1) / 2) :: (e, le) :: (z, (le + 1 + q - 1) / 2) :: Bs).map (·.2 + 1) ++
+      [2 ^ β + 1]) = X ++ p :: (p + (le + 1)) / 2 :: (le + 1) :: (le + 1 + (q + 1)) / 2 :: (q + 1) :: Y := by
+    simp only [List.map_append, List.map_cons, List.cons_append, List.append_assoc]
+    rw [show (Bs.map (·.2 + 1) ++ [2 ^ β + 1]) = (q + 1) :: Y from by simpa using hY]
+    rw [show (0 :: (A.map (fun q : Nat × Nat => q.2 + 1) ++ ((p + le - 1) / 2 + 1) :: (le + 1) ::
+        ((le + 1 + q - 1) / 2 + 1) :: (q + 1) :: Y)) =
+        (0 :: A.map (fun q : Nat × Nat => q.2 + 1)) ++ ((p + le - 1) / 2 + 1) :: (le + 1) ::
+        ((le + 1 + q - 1) / 2 + 1) :: (q + 1) :: Y by simp, hX]
+    simp only [List.append_assoc, List.singleton_append]
+    rw [show (p + le - 1) / 2 + 1 = (p + (le + 1)) / 2 by omega,
+      show (le + 1 + q - 1) / 2 + 1 = (le + 1 + (q + 1)) / 2 by omega]
+  simp only [List.map_map, Function.comp_def] at this ⊢
+  rw [this]; exact hm
+
 /-! ### Inserting the entry -/
 
 /-- The side list after an insertion next to `e` in table `T`. -/
