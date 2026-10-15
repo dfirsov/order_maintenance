@@ -405,4 +405,128 @@ theorem deLoopS_ok {κ : Caps} {X : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
   have e : tabs.length * (1 + (300 + 200 * B)) = tabs.length * (301 + 200 * B) := by ring
   simp only [Exp.cost] at hc ⊢; omega
 
+/-! ### `finishDrain` -/
+
+/-- `release v (field f of v)` (locals `v`). -/
+def relS (f : NF) : Stm :=
+  "tt" ::= .rd (.n f) "v" ;; .ite (.rd (.n .overflow) "tt" =ₑ "v") (.wr (.n .overflow) "tt" 0) .skip
+
+theorem relS_ok {κ : Caps} {S : Core} {L : Loc} {v t : Nat} {f : NF} (hv : L "v" = v) (hf : NF.get (S.nodes.getX v) f = t)
+    (hv0 : v ≠ 0) (hvN : v < κ.tbl .N) (htN : t < κ.tbl .N) :
+    ∃ c, evalF κ (relS f) S L = .ok (releaseS v S t) (upd L "tt" t) c ∧ c ≤ 20 := by
+  have a1 := evalF_assign_ok (κ := κ) (s := S) (L := L) (x := "tt") (e := .rd (.n f) "v") (v := t)
+    (by simp [Exp.ev, hv, hvN, Fld.cap, Fld.get, hf])
+  set L1 := upd L "tt" t
+  by_cases ho : (S.nodes.getX t).overflowOf = v
+  · have hts : t < S.nodes.size := by
+      by_contra hc
+      have : S.nodes.getX t = default := getX_size_le (by omega)
+      rw [this] at ho; exact hv0 (by rw [← ho]; rfl)
+    have w := evalF_wrN_ok (κ := κ) (s := S) (L := L1) (k := .overflow) (i := .var "tt") (e := (0 : Exp)) (j := t)
+      (w := 0) (by simp [Exp.ev, L1, OM.Machine.State.upd]) rfl hts htN rfl
+    have hr : releaseS v S t = { S with nodes := S.nodes.modify t (NF.set · 0 .overflow) } := by
+      simp only [releaseS, ho, beq_self_eq_true, if_true]; rfl
+    rw [← hr] at w
+    exact ⟨_, evalF_seq_ok2 a1 (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd,
+      hv, htN, Fld.cap, Fld.get, NF.get, ho]) one_ne_zero w), by simp [Exp.cost]⟩
+  · have hr : releaseS v S t = S := by simp only [releaseS]; rw [if_neg (by simpa using ho)]
+    rw [hr]
+    exact ⟨_, evalF_seq_ok2 a1 (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd,
+      hv, htN, Fld.cap, Fld.get, NF.get, ho]) evalF_skip), by simp [Exp.cost]⟩
+
+theorem releaseS_node (v : Nat) (S : Core) (t u : Nat) :
+    ∃ o, (releaseS v S t).nodes.getX u = { S.nodes.getX u with overflowOf := o } := by
+  unfold releaseS; split
+  · simp only [getX_modify']; split
+    · exact ⟨_, rfl⟩
+    · exact ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
+
+theorem releaseS_size (v : Nat) (S : Core) (t : Nat) : (releaseS v S t).nodes.size = S.nodes.size := by
+  unfold releaseS; split <;> simp
+
+def finishDrainS : Stm :=
+  "hh" ::= .monus "h" 1 ;; dtLoopS ;; deLoopS ;; relS .t1 ;; relS .t2 ;;
+  .wr (.n .dead) "v" 1 ;; .lclear .inTab "v"
+
+theorem finishDrainS_ok {κ : Caps} {s : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
+    (hLh : L "h" = (s.nodes.getX v).height)
+    -- Level F (as in `finishDrain_run`)
+    (hnd : (s.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (s.nodes.getX v).inTables, v ∈ (s.nodes.getX T).order)
+    -- the shape
+    (hv0 : v ≠ 0) (hvs : v < s.nodes.size) (hvo : v ∉ (s.nodes.getX v).order)
+    -- capacities
+    (hvN : v < κ.tbl .N) (hvr : v < κ.lrec .table) (hvi : v < κ.lrec .inTab)
+    (ht1 : (s.nodes.getX v).t1 < κ.tbl .N) (ht2 : (s.nodes.getX v).t2 < κ.tbl .N)
+    (hcE : ∀ e ∈ (s.nodes.getX v).order, e < κ.lrec .cin ∧ e < κ.lrec .inTab ∧
+      (s.cin.getX e).length ≤ κ.lcap .cin ∧ (s.nodes.getX e).inTables.length ≤ κ.lcap .inTab ∧
+      (s.cin.getX e).length ≤ B ∧ (s.nodes.getX e).inTables.length ≤ B)
+    (hcT : ∀ T ∈ (s.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
+      (s.nodes.getX T).table.length ≤ κ.lcap .table ∧ (s.nodes.getX T).side.length ≤ κ.lcap .side ∧
+      (s.nodes.getX T).table.length ≤ B ∧ (s.nodes.getX T).side.length ≤ B) :
+    ∃ L' c, evalF κ finishDrainS s L = .ok (fdS v s) L' c ∧
+      c ≤ 200 + (s.nodes.getX v).table.length * (171 + 100 * B) +
+        (s.nodes.getX v).inTables.length * (301 + 200 * B) ∧
+      L' "v" = v := by
+  set V := s.nodes.getX v
+  set hh := V.height - 1
+  have a0 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "hh") (e := .monus "h" 1) (v := hh)
+    (Exp.ev_monus κ s L (by simp [Exp.ev, hLh, V]) rfl)
+  set L0 := upd L "hh" hh
+  obtain ⟨L1, c1, e1, hc1, hF1⟩ := dtLoopS_ok (κ := κ) (s := s) (L := L0) (v := v) (hh := hh) (B := B)
+    (by simp [L0, OM.Machine.State.upd, hv]) (by simp [L0, OM.Machine.State.upd]) hvr hcE
+  set X0 := V.order.foldl (dropTableS v hh) s
+  have hX0v : X0.nodes.getX v = V := foldl_dropTableS_v hvo
+  have hX0T : ∀ T, (X0.nodes.getX T).table = (s.nodes.getX T).table ∧
+      (X0.nodes.getX T).side = (s.nodes.getX T).side := fun T => by
+    obtain ⟨m, hm⟩ := foldl_dropTableS_node v hh T V.order s
+    simp [X0, hm]
+  have h1v : L1 "v" = v := by
+    rw [hF1 "v" (by decide) (by decide) (by decide) (by decide) (by decide)]; simp [L0, OM.Machine.State.upd, hv]
+  obtain ⟨L2, c2, e2, hc2, hF2⟩ := deLoopS_ok (κ := κ) (X := X0) (L := L1) (v := v) (B := B) h1v hvi
+    (by rw [hX0v]; exact hnd)
+    (by rw [hX0v]; intro T hTm; simp only [Node.order, (hX0T T).1]; exact hT T hTm)
+    (by rw [hX0v]; intro T hTm; simp only [(hX0T T).1, (hX0T T).2]; exact hcT T hTm)
+  rw [hX0v] at e2 hc2
+  set X2 := V.inTables.foldl (dropEntryS v) X0
+  have hX2 : X2 = fd2 v s := rfl
+  have hX2v : ∃ t sd, X2.nodes.getX v = { V with table := t, side := sd } := by
+    obtain ⟨t, sd, h⟩ := foldl_dropEntryS_node v v V.inTables X0
+    exact ⟨t, sd, by simp only [X2, h, hX0v]⟩
+  obtain ⟨tX, sdX, hX2v⟩ := hX2v
+  have h2v : L2 "v" = v := by
+    rw [hF2 "v" (by decide) (by decide) (by decide) (by decide) (by decide), h1v]
+  -- the releases
+  obtain ⟨c3, e3, hc3⟩ := relS_ok (κ := κ) (S := X2) (L := L2) (v := v) (t := V.t1) (f := .t1) h2v
+    (by simp [NF.get, hX2v]) hv0 hvN ht1
+  set X3 := releaseS v X2 V.t1
+  have hX3v : (X3.nodes.getX v).t2 = V.t2 := by
+    obtain ⟨o, ho⟩ := releaseS_node v X2 V.t1 v
+    simp only [X3, ho, hX2v]
+  obtain ⟨c4, e4, hc4⟩ := relS_ok (κ := κ) (S := X3) (L := upd L2 "tt" V.t1) (v := v) (t := V.t2) (f := .t2)
+    (by simp [OM.Machine.State.upd, h2v]) (by simp [NF.get, hX3v]) hv0 hvN ht2
+  set X4 := releaseS v X3 V.t2
+  have hX4 : X4 = fd4 v s := rfl
+  have hX4n : X4.nodes.size = s.nodes.size := by
+    simp only [X4, X3, X2, releaseS_size, foldl_dropEntryS_size, X0]
+    exact (foldl_dropTableS_len v hh 0 V.order s).2.2
+  -- death
+  set L4 := upd (upd L2 "tt" V.t1) "tt" V.t2
+  have h4v : L4 "v" = v := by simp [L4, OM.Machine.State.upd, h2v]
+  have w5 := evalF_wrN_ok (κ := κ) (s := X4) (L := L4) (k := .dead) (i := .var "v") (e := (1 : Exp)) (j := v) (w := 1)
+    (by simp [Exp.ev, h4v]) rfl (by rw [hX4n]; exact hvs) hvN rfl
+  set X5 : Core := { X4 with nodes := X4.nodes.modify v (NF.set · 1 .dead) }
+  have e6 : evalF κ (.lclear .inTab "v") X5 L4 = .ok (fdS v s) L4 3 := by
+    have hso : LK.set κ X5 v [] .inTab = some (LK.put X5 v [] .inTab) := by
+      simp [LK.set, LK.recOk, X5, hX4n, hvs, LK.valid, hvi]
+    have hfin : LK.put X5 v [] .inTab = fdS v s := by
+      simp only [LK.put, X5, fdS, ← hX4, Array.modify_modify_same, List.map_nil]
+      congr 1
+    simp [evalF, Exp.ev, h4v, hso, hfin, Exp.cost]
+  refine ⟨L4, _, evalF_seq_ok2 a0 (evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4
+    (evalF_seq_ok2 w5 e6))))), ?_, h4v⟩
+  simp only [Exp.cost, Exp.monus, Exp.max, Exp.sub_def, Exp.add_def, Exp.mul_def, Exp.ofNat_def] at hc1 hc2 ⊢
+  replace hc1 : c1 ≤ 5 + V.table.length * (171 + 100 * B) := hc1
+  omega
+
 end OM.Impl
