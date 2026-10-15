@@ -176,19 +176,17 @@ theorem _root_.OM.Proof.INV.freeG_len {s : Core} {A : Abs} (hI : INV s A) : s.fr
   have := hI.gPos; omega
 
 theorem moveLState_sizes {t : Core} {p : Nat} :
-    (moveLState t p).Gs.size = t.Gs.size ∧ (moveLState t p).C.size = t.C.size := by
+    (moveLState t p).Gs.size = t.Gs.size ∧ (moveLState t p).C.size = t.C.size ∧ (moveLState t p).E.size = t.E.size := by
   simp [moveLState, sizeAdj, moveFirstLeft]
 
 theorem moveRState_sizes {t : Core} {p : Nat} :
-    (moveRState t p).Gs.size = t.Gs.size ∧ (moveRState t p).C.size = t.C.size := by
+    (moveRState t p).Gs.size = t.Gs.size ∧ (moveRState t p).C.size = t.C.size ∧ (moveRState t p).E.size = t.E.size := by
   simp [moveRState, sizeAdj, moveLastRight]
 
 theorem removeState_sizes {t : Core} {p : Nat} :
-    (removeState t p).Gs.size = t.Gs.size ∧ (removeState t p).C.size = t.C.size := by
-  simp only [removeState, unlinkGroup, Array.size_modify]
-  constructor
-  · split_ifs <;> simp
-  · split_ifs <;> simp
+    (removeState t p).Gs.size = t.Gs.size ∧ (removeState t p).C.size = t.C.size ∧
+      (removeState t p).E.size = t.E.size := by
+  refine ⟨?_, ?_, ?_⟩ <;> simp only [removeState, unlinkGroup, Array.size_modify] <;> split_ifs <;> simp
 
 /-- **A group split step of a drive agrees** (the cases of `DriveInv.step`). -/
 theorem _root_.OM.Proof.DriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L : List Nat} {δ : Nat → Nat}
@@ -199,7 +197,7 @@ theorem _root_.OM.Proof.DriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L :
     (hD : DriveInv X s L δ p l r a b c j t) {κ : Caps} (hcg : ∀ g, LiveG t g → gC t g < t.C.size)
     (K : GCaps κ t) :
     ∃ b t', (groupSplitStep p).run t = .ok b t' ∧ StepAgree κ p t t' b ∧ t'.Gs.size = t.Gs.size ∧
-      t'.C.size = t.C.size := by
+      t'.C.size = t.C.size ∧ t'.E.size = t.E.size := by
   obtain ⟨A', hI', hel⟩ := hD.inv
   obtain ⟨gh, hG⟩ := hD.ginv
   subst hel
@@ -243,7 +241,7 @@ theorem _root_.OM.Proof.DriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L :
       ⟨by rw [hD.ll]; exact Fp.lSt ▸ hD.ll ▸ rfl, by rw [hD.ll]; exact hD.ll ▸ Fp.lSrc⟩
       ⟨by rw [hD.rr]; exact hD.rr ▸ Fp.rSt, by rw [hD.rr]; exact hD.rr ▸ Fp.rSrc⟩
       (by rw [hD.ll]; exact hszl) (by rw [hD.rr]; exact hszr)
-    refine ⟨false, _, hrun, fun Lc hLc => ?_, removeState_sizes.1, removeState_sizes.2⟩
+    refine ⟨false, _, hrun, fun Lc hLc => ?_, removeState_sizes⟩
     obtain ⟨L', n, e, hok, hn⟩ := groupSplitStepS_remove κ t Lc hLc hp he (by rw [hD.ll, hD.rr]; exact hlr)
       ⟨by rw [hD.ll]; exact Fp.lSt ▸ hD.ll ▸ rfl, by rw [hD.ll]; exact hD.ll ▸ Fp.lSrc⟩
       ⟨by rw [hD.rr]; exact hD.rr ▸ Fp.rSt, by rw [hD.rr]; exact hD.rr ▸ Fp.rSrc⟩
@@ -278,7 +276,7 @@ theorem _root_.OM.Proof.DriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L :
       have hok : MoveLOK t p := ⟨hp, hne, by rw [hD.ll, hD.rr]; exact hdir,
         Fp.lAdj, by rw [hD.ll]; exact hroom, by omega, Fp.lC⟩
       have hrun2 := groupSplitStep_left hok
-      refine ⟨true, _, hrun2, fun Lc hLc => ?_, moveLState_sizes.1, moveLState_sizes.2⟩
+      refine ⟨true, _, hrun2, fun Lc hLc => ?_, moveLState_sizes⟩
       obtain ⟨L', n, e, hok', -, hn⟩ := groupSplitStepS_left κ t Lc hLc hok (by rw [hD.ll]; exact hlL.2.1)
         (by rw [hD.rr]; exact hrL.2.1) heS (by
           rcases hI'.gLs_lt (hD.ll ▸ hl') with h | h
@@ -302,7 +300,7 @@ theorem _root_.OM.Proof.DriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L :
       have hok : MoveROK t p := ⟨hp, hne, by rw [hD.ll, hD.rr]; omega, hadjR,
         by rw [hD.rr]; exact hroom, by omega, Fp.rC⟩
       have hrun2 := groupSplitStep_right hok
-      refine ⟨true, _, hrun2, fun Lc hLc => ?_, moveRState_sizes.1, moveRState_sizes.2⟩
+      refine ⟨true, _, hrun2, fun Lc hLc => ?_, moveRState_sizes⟩
       obtain ⟨L', n, e, hok', -, hn⟩ := groupSplitStepS_right κ t Lc hLc hok (by rw [hD.ll]; exact hlL.2.1)
         (by rw [hD.rr]; exact hrL.2.1) heLS (by
           rcases hI'.gF_lt (hD.rr ▸ hr') with h | h
@@ -318,7 +316,7 @@ theorem ginv_driveAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {�
     (hδs : δ (gLl s p) + δ p + δ (gRr s p) ≤ 1)
     (hδle : δ (gLl s p) ≤ gSz s (gLl s p) ∧ δ p ≤ gSz s p ∧ δ (gRr s p) ≤ gSz s (gRr s p))
     {κ : Caps} (hXc : ∀ t, X t → ∀ g, LiveG t g → gC t g < t.C.size) (K : GCaps κ s) :
-    ∃ s', DriveAgree κ p s s' := by
+    ∃ s', DriveAgree κ p s s' ∧ s'.Gs.size = s.Gs.size ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size := by
   generalize hl : gLl s p = l at *
   generalize hr : gRr s p = r at *
   generalize ha : gSz s l = a at *
@@ -340,20 +338,34 @@ theorem ginv_driveAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {�
   have hTlo : s.P.G ≤ a + b + c := by omega
   have hThi : a + b + c ≤ s.P.G + s.P.G / (s.P.K_G - 1) + 1 := by rw [hm, hq]; omega
   have hbal0 : a ≤ c + 2 ∧ c ≤ a + 2 := by omega
-  refine driveGroupFromS_agree' κ s (fun j t => DriveInv X s A.elist δ p l r a b c j t ∧
-    t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size)
-    ⟨⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hp, hs, hl, hr, by omega, by omega,
-      Or.inl ⟨rfl, ha, hc⟩, rfl⟩, rfl, rfl⟩ ?_
-  intro j t ⟨hD, hGs, hCs⟩ _
-  have K' : GCaps κ t := ⟨by rw [hGs]; exact K.G, by rw [hD.ef.size]; exact K.E, by rw [hCs]; exact K.C, K.fl, K.f0⟩
-  obtain ⟨bb, t', hrun, hA, hG', hC'⟩ := hD.stepAgree hXs hP (by intro z h1 h2 h3; exact hδ z h1 h2 h3) hTlo hThi hbal0
-    (hXc t hD.x) K'
-  refine ⟨bb, t', hrun, fun hb => ?_, hA⟩
-  subst hb
-  obtain ⟨t1, h1 | h1⟩ := hD.step hXs hP (by intro z h1 h2 h3; exact hδ z h1 h2 h3) hTlo hThi hbal0
-  · rw [h1.1] at hrun; injection hrun with _ e; subst e
-    exact ⟨h1.2, hG'.trans hGs, hC'.trans hCs⟩
-  · rw [h1.1] at hrun; injection hrun with e; cases e
+  let I' := fun j t => DriveInv X s A.elist δ p l r a b c j t ∧ t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size
+  have h0 : I' 0 s := ⟨⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hp, hs, hl, hr, by omega, by omega,
+      Or.inl ⟨rfl, ha, hc⟩, rfl⟩, rfl, rfl⟩
+  have hstepM : ∀ j t, I' j t → ∃ bb t', (groupSplitStep p).run t = .ok bb t' ∧ (bb = true → I' (j + 1) t') ∧
+      StepAgree κ p t t' bb ∧ t'.Gs.size = s.Gs.size ∧ t'.C.size = s.C.size ∧ t'.E.size = s.E.size := by
+    intro j t ⟨hD, hGs, hCs⟩
+    have K' : GCaps κ t := ⟨by rw [hGs]; exact K.G, by rw [hD.ef.size]; exact K.E, by rw [hCs]; exact K.C, K.fl, K.f0⟩
+    obtain ⟨bb, t', hrun, hA, hG', hC', hE'⟩ := hD.stepAgree hXs hP (by intro z h1 h2 h3; exact hδ z h1 h2 h3) hTlo
+      hThi hbal0 (hXc t hD.x) K'
+    refine ⟨bb, t', hrun, fun hb => ?_, hA, hG'.trans hGs, hC'.trans hCs, hE'.trans hD.ef.size⟩
+    subst hb
+    obtain ⟨t1, h1 | h1⟩ := hD.step hXs hP (by intro z h1 h2 h3; exact hδ z h1 h2 h3) hTlo hThi hbal0
+    · rw [h1.1] at hrun; injection hrun with _ e; subst e
+      exact ⟨h1.2, hG'.trans hGs, hC'.trans hCs⟩
+    · rw [h1.1] at hrun; injection hrun with e; cases e
+  obtain ⟨s', hA⟩ := driveGroupFromS_agree' κ s I' h0 (fun j t h _ => by
+    obtain ⟨bb, t', a1, a2, a3, -⟩ := hstepM j t h; exact ⟨bb, t', a1, a2, a3⟩)
+  obtain ⟨t, hrun, hres⟩ := driveGroupFrom_ok (s := s) (p := p) I'
+    (fun t => t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size ∧ t.E.size = s.E.size) h0 (fun j t h _ => by
+      obtain ⟨bb, t', a1, a2, -, a4, a5, a6⟩ := hstepM j t h
+      cases bb
+      · exact ⟨t', Or.inr ⟨a1, a4, a5, a6⟩⟩
+      · exact ⟨t', Or.inl ⟨a1, a2 rfl⟩⟩)
+  rw [hA.1] at hrun; injection hrun with _ e; subst e
+  refine ⟨s', hA, ?_⟩
+  rcases hres with ⟨hD, hGs, hCs⟩ | h
+  · exact ⟨hGs, hCs, hD.ef.size⟩
+  · exact h
 
 theorem allocGroup_size (s : Core) (c : Nat) : (allocGroup s c).2.Gs.size ≤ s.Gs.size + 1 := by
   unfold allocGroup; split <;> simp
@@ -367,6 +379,10 @@ theorem splitState_size (s : Core) (g labL labR : Nat) : (splitState s g labL la
   have := allocGroup_size (allocGroup s (gC s g)).2 (gC s g)
   have := allocGroup_size s (gC s g)
   omega
+
+theorem DriveAgree.eq_of_run {κ : Caps} {q : Nat} {s s' s'' : Core} (hA : DriveAgree κ q s s'')
+    (h : (driveGroupFrom q).run s = .ok () s') : s'' = s' := by
+  rw [hA.1] at h; injection h
 
 /-- A drive that agrees, read off a `DriveAgree` for the run Level F made. -/
 theorem DriveAgree.of_run {κ : Caps} {q : Nat} {s s' s'' : Core} (hA : DriveAgree κ q s s'')
@@ -389,8 +405,9 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
     (((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true →
       ∃ L' n, evalF κ startGroupSplitS s (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g]) = .ok s1 L' n ∧
         n ≤ 600) ∧
-    ∃ L' n, evalF κ driveGroupS s1 (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g]) = .ok s' L' n ∧
-      n ≤ 30 + s1.P.K_G * 401 := by
+    (∃ L' n, evalF κ driveGroupS s1 (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g]) = .ok s' L' n ∧
+      n ≤ 30 + s1.P.K_G * 401) ∧
+    s'.Gs.size ≤ s.Gs.size + 2 ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size := by
   have hgl := hI.mem_glist_iff.mpr hg
   have hgT : g < κ.tbl .G := by have := hg.2.1; have := K.G; omega
   have hLg : OM.Machine.State.setLocs (fun _ => 0) ["g"] [g] "g" = g := by
@@ -399,12 +416,14 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
     intro p; by_cases h : p = g
     · subst h; simp [hpos]
     · simp [h]
-  refine ⟨fun hc => ?_, ?_⟩
-  · rw [if_pos hc] at h1
+  suffices hD : (∀ q, ((s1.Gs.getX g).st = .splitting ∧ q = g ∨
+      (s1.Gs.getX g).st = .overflow ∧ q = (s1.Gs.getX g).src) → DriveAgree κ q s1 s') ∧
+      s'.Gs.size ≤ s.Gs.size + 2 ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size by
+    refine ⟨fun hc => ?_, driveGroupS_agree κ s1 _ hLg hgT h2 hD.1, hD.2⟩
+    rw [if_pos hc] at h1
     exact startGroupSplitS_agree κ s _ hLg (by omega) K.C (hI.gP_lt hgl) (hI.gN_lt hgl) (hXc s hX g hg)
       (fun x hx => (hI.free x hx).2.1) hF0 hF h1
-  · refine driveGroupS_agree κ s1 _ hLg hgT h2 (fun q hq => ?_)
-    cases hst : gSt s g with
+  · cases hst : gSt s g with
     | quiet =>
       by_cases hsz : s.P.G ≤ gSz s g
       · obtain ⟨labL, labR, hL, hR⟩ := hroom hst hsz
@@ -420,7 +439,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
         have hX1 := hXg.split s A gh g labL labR hI rfl hG hg hst hgG hL hR hX
         have S := splitSpec hI hgl labL labR
         have hsz2 := splitState_size s g labL labR
-        generalize splitState s g labL labR = s1 at hef1 hI1 hG1 hX1 S hq h2 hsz2 ⊢
+        generalize splitState s g labL labR = s1 at hef1 hI1 hG1 hX1 S h2 hsz2 ⊢
         generalize gh.reset (splitL s g) (splitR s g) = gh1 at hG1
         have hg1 : LiveG s1 g := (S.live g).mpr (Or.inr (Or.inr hg))
         have hs1 : gSt s1 g = .splitting := by rw [S.st, if_pos rfl]
@@ -429,17 +448,22 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
         have hXd : XSteps X Y A1.elist (fun _ => 0) g (gC s1 g) := by
           rw [hel1, S.chk, if_neg (not_or.mpr ⟨S.ggl, S.ggr⟩)]; exact hXg.drive _ g
         have K1 : GCaps κ s1 := ⟨by omega, by rw [S.E]; exact K.E, by rw [S.Csize]; exact K.C, K.fl, K.f0⟩
-        obtain ⟨s2, hA⟩ := ginv_driveAgree hI1 hXd hX1 (hG1.weaken g) hP1 hg1 hs1
+        obtain ⟨s2, hA, hsz⟩ := ginv_driveAgree hI1 hXd hX1 (hG1.weaken g) hP1 hg1 hs1
           (hG1.split g hg1 hs1 hg1.1) (fun _ _ _ _ => rfl) (by simp) (by simp) hXc K1
         have hs1' : (s1.Gs.getX g).st = .splitting := hs1
+        rw [driveGroup_split hs1'] at h2
+        have e := hA.eq_of_run h2; subst e
+        refine ⟨fun q hq => ?_, by omega, by rw [hsz.2.1, S.Csize], by rw [hsz.2.2, S.E]⟩
         rcases hq with ⟨-, rfl⟩ | ⟨h, -⟩
-        · rw [driveGroup_split hs1'] at h2; exact hA.of_run h2
+        · exact hA
         · rw [hs1'] at h; cases h
       · have hc : ¬ ((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true := by
           simp only [gSt, gSz] at hst hsz; simp [hst]; omega
         rw [if_neg hc] at h1
         injection h1 with _ e; subst e
         simp only [gSt] at hst
+        rw [driveGroup_quiet hst] at h2; injection h2 with _ e; subst e
+        refine ⟨fun q hq => ?_, by omega, rfl, rfl⟩
         rcases hq with ⟨h, -⟩ | ⟨h, -⟩ <;> rw [hst] at h <;> cases h
     | overflow =>
       have hc : ¬ ((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true := by
@@ -462,16 +486,19 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
         rcases hlr with e | e
         · rw [← Fp.lC, e]; exact hXg.drive _ _
         · rw [← Fp.rC, e]; exact hXg.drive _ _
-      obtain ⟨s2, hA⟩ := ginv_driveAgree hI hXd hX (hG.weaken (gSrc s g)) hP hp hps
+      obtain ⟨s2, hA, hsz⟩ := ginv_driveAgree hI hXd hX (hG.weaken (gSrc s g)) hP hp hps
         (hG.split _ hp hps hp.1)
         (by intro z h1 h2 h3; have : z ≠ g := by
               rintro rfl; rcases hlr with e | e <;> [exact h1 e.symm; exact h3 e.symm]
             simp [this])
         hδs ⟨hδle _, hδle _, hδle _⟩ hXc K
       have hst' : (s.Gs.getX g).st = .overflow := hst
+      rw [driveGroup_ovf hst'] at h2
+      have e := hA.eq_of_run h2; subst e
+      refine ⟨fun q hq => ?_, by omega, hsz.2.1, hsz.2.2⟩
       rcases hq with ⟨h, -⟩ | ⟨-, rfl⟩
       · rw [hst'] at h; cases h
-      · rw [driveGroup_ovf hst'] at h2; exact hA.of_run h2
+      · exact hA
     | splitting =>
       have hc : ¬ ((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true := by
         simp only [gSt] at hst; simp [hst]
@@ -480,17 +507,21 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
       have Fp := hG.fam g hg hst
       have hl0 : gLl s g ≠ g := Fp.lp hI hg
       have hr0 : gRr s g ≠ g := Fp.rp hI hg
-      obtain ⟨s2, hA⟩ := ginv_driveAgree hI (hXg.drive _ _) hX (hG.weaken g) hP hg hst
+      obtain ⟨s2, hA, hsz⟩ := ginv_driveAgree hI (hXg.drive _ _) hX (hG.weaken g) hP hg hst
         (hG.split g hg hst hg.1) (by intro z _ h2 _; simp [h2]) (by simp [hl0, hr0])
         ⟨hδle _, hδle _, hδle _⟩ hXc K
       have hst' : (s.Gs.getX g).st = .splitting := hst
+      rw [driveGroup_split hst'] at h2
+      have e := hA.eq_of_run h2; subst e
+      refine ⟨fun q hq => ?_, by omega, hsz.2.1, hsz.2.2⟩
       rcases hq with ⟨-, rfl⟩ | ⟨h, -⟩
-      · rw [driveGroup_split hst'] at h2; exact hA.of_run h2
+      · exact hA
       · rw [hst'] at h; cases h
     | dead => exact absurd hst (hG.notDead g hg)
 
 theorem cremoveState_sizes {t : Core} {x : Nat} :
-    (cremoveState t x).Gs.size = t.Gs.size ∧ (cremoveState t x).C.size = t.C.size := by
+    (cremoveState t x).Gs.size = t.Gs.size ∧ (cremoveState t x).C.size = t.C.size ∧
+      (cremoveState t x).E.size = t.E.size := by
   simp [cremoveState]
 
 theorem _root_.OM.Proof.INV.mem_chunks {s : Core} {A : Abs} (hI : INV s A) {c : Nat} (hc : LiveC s c) :
@@ -522,7 +553,7 @@ theorem _root_.OM.Proof.CDriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L 
     (hδs : δ y + δ x + δ z ≤ 1) (hs0T : s₀ x ≤ s.P.T)
     (hD : CDriveInv X s L δ δu s₀ x y z a b c u₀ j t) {κ : Caps} (K : GCaps κ t) :
     ∃ bb t', (chunkSplitStep x).run t = .ok bb t' ∧ CStepAgree κ x t t' bb ∧ t'.Gs.size = t.Gs.size ∧
-      t'.C.size = t.C.size := by
+      t'.C.size = t.C.size ∧ t'.E.size = t.E.size := by
   obtain ⟨A', hI', hel⟩ := hD.inv
   obtain ⟨gh, hG⟩ := hD.ginv
   subst hel
@@ -554,7 +585,7 @@ theorem _root_.OM.Proof.CDriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L 
       rcases hbal with ⟨-, h1, h2⟩ | ⟨-, h1, h2⟩ <;> omega
     have hrun := chunkSplitStep_remove he hyz hxy hxz hD.live.2 ⟨Fx.lSt, Fx.lSrc⟩ ⟨Fx.rSt, Fx.rSrc⟩
       hszy hszz
-    refine ⟨false, _, hrun, fun Lc hLc => ?_, cremoveState_sizes.1, cremoveState_sizes.2⟩
+    refine ⟨false, _, hrun, fun Lc hLc => ?_, cremoveState_sizes⟩
     obtain ⟨L', n, e, hok, hn⟩ := chunkSplitStepS_remove κ t Lc hLc he hyz hxy hxz hD.live.2 ⟨Fx.lSt, Fx.lSrc⟩
       ⟨Fx.rSt, Fx.rSrc⟩ hszy hszz Fx.lLive.2 Fx.rLive.2 K.C
     exact ⟨L', n, e, by rw [hok]; rfl, by omega⟩
@@ -581,7 +612,7 @@ theorem _root_.OM.Proof.CDriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L 
       obtain ⟨-, hnd, hmem, hone, hcl, hm1, hm2⟩ := UF
       have M := cmoveL_spec (s := t) (x := x) (u := unitCand t x true) (labs := labs)
         (Ne.symm hxy) hD.live.2 Fx.lLive.2 hnd hlen (fun g hg => (hmem g hg).1.2.1)
-      refine ⟨true, _, hrun, fun Lc hLc => ?_, M.Gsize, M.Csize⟩
+      refine ⟨true, _, hrun, fun Lc hLc => ?_, M.Gsize, M.Csize, by rw [M.E]⟩
       obtain ⟨L', n, e, hok, -, hn⟩ := chunkSplitStepS_left κ t Lc hLc he hdir hlabs hD.live.2 Fx.lLive.2 Fx.rLive.2
         (Ne.symm hxy) K.C K.G (fun g hg => (hmem g hg).1.2.1) (by have := hg0L.2.1; have := K.G; omega)
         (fun hov => by have h2 : gSrc t (cF t x) < t.Gs.size := (hG.ovf _ hg0L hov).1.2.1; have := K.G; exact lt_of_lt_of_le h2 (by omega))
@@ -613,7 +644,7 @@ theorem _root_.OM.Proof.CDriveInv.stepAgree {X Y : Core → Prop} {s : Core} {L 
       have M := cmoveR_spec (s := t) (x := x) (u := unitCand t x false) (labs := labs)
         (Ne.symm hxz) hD.live.2 Fx.rLive.2 hnd hlen (fun g hg => (hmem g hg).1.2.1)
       have hglL := hI'.mem_glist_iff.mp hgl
-      refine ⟨true, _, hrun, fun Lc hLc => ?_, M.Gsize, M.Csize⟩
+      refine ⟨true, _, hrun, fun Lc hLc => ?_, M.Gsize, M.Csize, by rw [M.E]⟩
       obtain ⟨L', n, e, hok, -, hn⟩ := chunkSplitStepS_right κ t Lc hLc he hdir' hlabs hD.live.2 Fx.lLive.2 Fx.rLive.2
         (Ne.symm hxz) K.C K.G (fun g hg => (hmem g hg).1.2.1) (by have := hglL.2.1; have := K.G; omega)
         (fun hov => by have h2 : gSrc t (cLs t x) < t.Gs.size := (hG.ovf _ hglL hov).1.2.1; have := K.G; exact lt_of_lt_of_le h2 (by omega))
@@ -631,7 +662,7 @@ theorem cinv_driveAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {�
     (hδs : δ (cLl s x) + δ x + δ (cRr s x) ≤ 1)
     (hδle : δ (cLl s x) ≤ cSz s (cLl s x) ∧ δ x ≤ cSz s x ∧ δ (cRr s x) ≤ cSz s (cRr s x))
     {κ : Caps} (K : GCaps κ s) :
-    ∃ s', CDriveAgree κ x s s' := by
+    ∃ s', CDriveAgree κ x s s' ∧ s'.Gs.size = s.Gs.size ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size := by
   have Fx := hC.cfam x hxL hst
   generalize hl : cLl s x = y at *
   generalize hr : cRr s x = z at *
@@ -656,25 +687,40 @@ theorem cinv_driveAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {�
   have hbal0 : a ≤ c + umax s.P + 1 ∧ c ≤ a + umax s.P + 1 := by omega
   have hfam0 : a + b + c ≤ δ y + δ x + δ z + s₀ x + unitsOf s.P (s₀ x) / (s.P.K_C - 1) := by
     rw [hσ, hm]; omega
-  refine driveChunkFromS_agree' κ s (fun j t => CDriveInv X s A.elist δ δu s₀ x y z a b c (units s x) j t ∧
-    t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size)
-    ⟨⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hC, hxL, hst, hl, hr, by omega, by omega,
-      Or.inl ⟨rfl, ha, hc⟩⟩, rfl, rfl⟩ ?_
-  intro j t ⟨hD, hGs, hCs⟩ _
-  have K' : GCaps κ t := ⟨by rw [hGs]; exact K.G, by rw [hD.ef.size]; exact K.E, by rw [hCs]; exact K.C, K.fl, K.f0⟩
+  let I' := fun j t => CDriveInv X s A.elist δ δu s₀ x y z a b c (units s x) j t ∧
+    t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size
+  have h0 : I' 0 s := ⟨⟨hX, rfl, EFrame.refl s, ⟨A, hI, rfl⟩, ⟨gh, hG⟩, hC, hxL, hst, hl, hr, by omega, by omega,
+      Or.inl ⟨rfl, ha, hc⟩⟩, rfl, rfl⟩
   have hs0 : s₀ x ≤ s.P.T := by rw [hσ]; exact hs0T
-  obtain ⟨bb, t', hrun, hA, hG', hC'⟩ := hD.stepAgree hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi
-    hbal0 hfam0 hδs hs0 K'
-  refine ⟨bb, t', hrun, fun hb => ?_, hA⟩
-  subst hb
-  obtain ⟨t1, h1 | h1⟩ := hD.step hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi hbal0 hfam0 hδs hs0
-  · rw [h1.1] at hrun; injection hrun with _ e; subst e
-    exact ⟨h1.2, hG'.trans hGs, hC'.trans hCs⟩
-  · rw [h1.1] at hrun; injection hrun with e; cases e
+  have hstepM : ∀ j t, I' j t → ∃ bb t', (chunkSplitStep x).run t = .ok bb t' ∧ (bb = true → I' (j + 1) t') ∧
+      CStepAgree κ x t t' bb ∧ t'.Gs.size = s.Gs.size ∧ t'.C.size = s.C.size ∧ t'.E.size = s.E.size := by
+    intro j t ⟨hD, hGs, hCs⟩
+    have K' : GCaps κ t := ⟨by rw [hGs]; exact K.G, by rw [hD.ef.size]; exact K.E, by rw [hCs]; exact K.C, K.fl, K.f0⟩
+    obtain ⟨bb, t', hrun, hA, hG', hC', hE'⟩ := hD.stepAgree hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3)
+      hThi hbal0 hfam0 hδs hs0 K'
+    refine ⟨bb, t', hrun, fun hb => ?_, hA, hG'.trans hGs, hC'.trans hCs, hE'.trans hD.ef.size⟩
+    subst hb
+    obtain ⟨t1, h1 | h1⟩ := hD.step hXs hP hCP (by intro c' h1 h2 h3; exact hδ c' h1 h2 h3) hThi hbal0 hfam0 hδs hs0
+    · rw [h1.1] at hrun; injection hrun with _ e; subst e
+      exact ⟨h1.2, hG'.trans hGs, hC'.trans hCs⟩
+    · rw [h1.1] at hrun; injection hrun with e; cases e
+  obtain ⟨s', hA⟩ := driveChunkFromS_agree' κ s I' h0 (fun j t h _ => by
+    obtain ⟨bb, t', a1, a2, a3, -⟩ := hstepM j t h; exact ⟨bb, t', a1, a2, a3⟩)
+  obtain ⟨t, hrun, hres⟩ := driveChunkFrom_ok (s := s) (x := x) I'
+    (fun t => t.Gs.size = s.Gs.size ∧ t.C.size = s.C.size ∧ t.E.size = s.E.size) h0 (fun j t h _ => by
+      obtain ⟨bb, t', a1, a2, -, a4, a5, a6⟩ := hstepM j t h
+      cases bb
+      · exact ⟨t', Or.inr ⟨a1, a4, a5, a6⟩⟩
+      · exact ⟨t', Or.inl ⟨a1, a2 rfl⟩⟩)
+  rw [hA.1] at hrun; injection hrun with _ e; subst e
+  refine ⟨s', hA, ?_⟩
+  rcases hres with ⟨hD, hGs, hCs⟩ | h
+  · exact ⟨hGs, hCs, hD.ef.size⟩
+  · exact h
 
-theorem CDriveAgree.of_run {κ : Caps} {q : Nat} {s s' s'' : Core} (hA : CDriveAgree κ q s s'')
-    (h : (driveChunkFrom q).run s = .ok () s') : CDriveAgree κ q s s' := by
-  rw [hA.1] at h; injection h with _ e; subst e; exact hA
+theorem CDriveAgree.eq_of_run {κ : Caps} {q : Nat} {s s' s'' : Core} (hA : CDriveAgree κ q s s'')
+    (h : (driveChunkFrom q).run s = .ok () s') : s'' = s' := by
+  rw [hA.1] at h; injection h
 
 /-- **The chunk phase agrees** (the context of `driveChunk_ok`). -/
 theorem driveChunkAgree {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu : Nat → Nat}
@@ -683,12 +729,13 @@ theorem driveChunkAgree {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu
     (hN : CountInv t e pops) (hGP : GParams t.P) (hCP : CParams t.P) (hcL : LiveC t c)
     (hcnd : cSt t c ≠ .dead) (hcsz : 1 ≤ cSz t c) {κ : Caps} (K : GCaps κ t) {t4 : Core}
     (h : (driveChunk c).run t = .ok () t4) :
-    ∃ L' n, evalF κ driveChunkS t (OM.Machine.State.setLocs (fun _ => 0) ["x"] [c]) = .ok t4 L' n ∧
-      n ≤ 30 + t.P.K_C * 751 := by
+    (∃ L' n, evalF κ driveChunkS t (OM.Machine.State.setLocs (fun _ => 0) ["x"] [c]) = .ok t4 L' n ∧
+      n ≤ 30 + t.P.K_C * 751) ∧ t4.Gs.size = t.Gs.size ∧ t4.C.size = t.C.size ∧ t4.E.size = t.E.size := by
   have hδu := hC.δu
   have hcθ : cmax t.P ≤ t.P.theta := hCP.I4
   have drive : ∀ x, LiveC t x → cSt t x = .splitting →
-      (c = cLl t x ∨ c = x ∨ c = cRr t x) → ∃ t4, CDriveAgree κ x t t4 := by
+      (c = cLl t x ∨ c = x ∨ c = cRr t x) → ∃ t4, CDriveAgree κ x t t4 ∧ t4.Gs.size = t.Gs.size ∧
+        t4.C.size = t.C.size ∧ t4.E.size = t.E.size := by
     intro x hxL hxs hcx
     subst hel
     have Fx := hC.cfam x hxL hxs
@@ -708,14 +755,37 @@ theorem driveChunkAgree {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu
       (by
         unfold δ1
         refine ⟨?_, ?_, ?_⟩ <;> split <;> first | omega | (subst_vars; exact hcsz)) K
-  refine driveChunkS_agree κ t _ (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
-    (by have := hcL.2; have := K.C; omega) h (fun q hq => ?_)
-  rcases hq with ⟨hs, rfl⟩ | ⟨hs, rfl⟩
-  · obtain ⟨t5, hA⟩ := drive q hcL hs (Or.inr (Or.inl rfl))
-    rw [driveChunk_split hs] at h; exact hA.of_run h
-  · obtain ⟨hxL, hxs, hlr⟩ := hC.covf c hcL hs
-    obtain ⟨t5, hA⟩ := drive _ hxL hxs (by rcases hlr with h | h; exact Or.inl h.symm; exact Or.inr (Or.inr h.symm))
-    rw [driveChunk_ovf hs] at h; exact hA.of_run h
+  have hxT : c < κ.tbl .C := by have := hcL.2; have := K.C; omega
+  have hLx : OM.Machine.State.setLocs (fun _ => 0) ["x"] [c] "x" = c := by
+    simp [OM.Machine.State.setLocs, OM.Machine.State.upd]
+  cases hs : cSt t c with
+  | splitting =>
+    have hs' : (t.C.getX c).st = .splitting := hs
+    obtain ⟨t5, hA, hsz⟩ := drive c hcL hs (Or.inr (Or.inl rfl))
+    rw [driveChunk_split hs'] at h
+    have e := hA.eq_of_run h; subst e
+    refine ⟨driveChunkS_agree κ t _ hLx hxT (by rw [driveChunk_split hs']; exact h) (fun q hq => ?_), hsz⟩
+    rcases hq with ⟨-, rfl⟩ | ⟨h', -⟩
+    · exact hA
+    · rw [hs'] at h'; cases h'
+  | overflow =>
+    have hs' : (t.C.getX c).st = .overflow := hs
+    obtain ⟨hxL, hxs, hlr⟩ := hC.covf c hcL hs
+    obtain ⟨t5, hA, hsz⟩ := drive _ hxL hxs
+      (by rcases hlr with h | h; exact Or.inl h.symm; exact Or.inr (Or.inr h.symm))
+    rw [driveChunk_ovf hs'] at h
+    have e := hA.eq_of_run h; subst e
+    refine ⟨driveChunkS_agree κ t _ hLx hxT (by rw [driveChunk_ovf hs']; exact h) (fun q hq => ?_), hsz⟩
+    rcases hq with ⟨h', -⟩ | ⟨-, rfl⟩
+    · rw [hs'] at h'; cases h'
+    · exact hA
+  | quiet =>
+    have hs' : (t.C.getX c).st = .quiet := hs
+    have h' := h
+    rw [driveChunk_quiet hs'] at h'; injection h' with _ e; subst e
+    refine ⟨driveChunkS_agree κ t _ hLx hxT h (fun q hq => ?_), rfl, rfl, rfl⟩
+    rcases hq with ⟨h', -⟩ | ⟨h', -⟩ <;> rw [hs'] at h' <;> cases h'
+  | dead => exact absurd hs hcnd
 
 theorem ResAgree.mono {κ : Caps} {t t' : Core} {stop : Bool} {D D' : Nat} (h : ResAgree κ t t' stop D)
     (hD : D ≤ D') : ResAgree κ t t' stop D' := fun L hdn => by
