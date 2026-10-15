@@ -245,6 +245,9 @@ abbrev arrLen (p : Nat) (k : LK) : Arr := arr p (.len k)
 abbrev arrPath (p : Nat) : Arr := arr p .path
 abbrev arrO (p : Nat) (o : OF) : Arr := arr p (.opt o)
 
+/-- The width of a path row, read from the parameters: `H + 1`. -/
+def rowW (p : Nat) : OM.Machine.Expr := .bin .add (.load (arrP p) (.lit PF.H.idx)) (.lit 1)
+
 def Exp.compile (p : Nat) (κ : Caps) : Exp → OM.Machine.Expr
   | .lit n => .lit n
   | .var x => .var x
@@ -253,9 +256,9 @@ def Exp.compile (p : Nat) (κ : Caps) : Exp → OM.Machine.Expr
   | .prm k => .load (arrP p) (.lit k.idx)
   | .bin op a b => .bin op (a.compile p κ) (b.compile p κ)
   | .un op a => .un op (a.compile p κ)
-  | .lrd k b i j => .load (arrL p k b) (.bin .add (.bin .mul (i.compile p κ) (.lit (κ.lcap k))) (j.compile p κ))
+  | .lrd k b i j => .load (arrL p k b) (.bin .add (.bin .mul (i.compile p κ) (.lit (k.stride κ.lcap))) (j.compile p κ))
   | .llen k i => .load (arrLen p k) (i.compile p κ)
-  | .prd c j => .load (arrPath p) (.bin .add (.bin .mul (c.compile p κ) (.lit κ.pw)) (j.compile p κ))
+  | .prd c j => .load (arrPath p) (.bin .add (.bin .mul (c.compile p κ) (rowW p)) (j.compile p κ))
   | .opt o => .load (arrO p o) (.lit 0)
 
 /-- A store to a single-cell array. -/
@@ -276,10 +279,10 @@ def Stm.compile (p : Nat) (κ : Caps) : Stm → OM.Machine.Stmt
   | .bug => .assign "bug" (.bin .sub (.lit 0) (.lit 1))
   | .catch c h => .catch (c.compile p κ) (h.compile p κ)
   | .lwr k b i j e =>
-    .store (arrL p k b) (.bin .add (.bin .mul (i.compile p κ) (.lit (κ.lcap k))) (j.compile p κ)) (e.compile p κ)
+    .store (arrL p k b) (.bin .add (.bin .mul (i.compile p κ) (.lit (k.stride κ.lcap))) (j.compile p κ)) (e.compile p κ)
   | .lgrow k i a b =>
     let li := OM.Machine.Expr.load (arrLen p k) (i.compile p κ)
-    let ix := OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ) (.lit (κ.lcap k))) li
+    let ix := OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ) (.lit (k.stride κ.lcap))) li
     .seq (.store (arrL p k false) ix (a.compile p κ))
       (.seq (.store (arrL p k true) ix (b.compile p κ))
         (.store (arrLen p k) (i.compile p κ) (.bin .add li (.lit 1))))
@@ -287,7 +290,7 @@ def Stm.compile (p : Nat) (κ : Caps) : Stm → OM.Machine.Stmt
     .store (arrLen p k) (i.compile p κ) (.bin .sub (.load (arrLen p k) (i.compile p κ)) (.lit 1))
   | .lclear k i => .store (arrLen p k) (i.compile p κ) (.lit 0)
   | .pwr c j e =>
-    .store (arrPath p) (.bin .add (.bin .mul (c.compile p κ) (.lit κ.pw)) (j.compile p κ)) (e.compile p κ)
+    .store (arrPath p) (.bin .add (.bin .mul (c.compile p κ) (rowW p)) (j.compile p κ)) (e.compile p κ)
   | .rowReset _ => .skip
   | .prepInit c b =>
     .call "prepInit" ["c", "b"]
@@ -301,7 +304,7 @@ def Stm.compile (p : Nat) (κ : Caps) : Stm → OM.Machine.Stmt
         (st1 (arrO p .prepTag) (.var "t"))))
       [] [h.compile p κ, b.compile p κ, t.compile p κ] []
   | .prepPath j e =>
-    .store (arrPath p) (.bin .add (.bin .mul (.load (arrO p .prepChunk) (.lit 0)) (.lit κ.pw)) (j.compile p κ))
+    .store (arrPath p) (.bin .add (.bin .mul (.load (arrO p .prepChunk) (.lit 0)) (rowW p)) (j.compile p κ))
       (e.compile p κ)
   | .prepCommit =>
     .seq (st1 (arrO p .prepOn) (.lit 0)) (.seq (st1 (arrO p .prepChunk) (.lit 0))
@@ -336,7 +339,7 @@ theorem Exp.cost_compile (p : Nat) (κ : Caps) (e : Exp) : (e.compile p κ).cost
   | un op a ih => simp [Exp.compile, OM.Machine.Expr.cost, Exp.cost, ih]
   | lrd k b i j ihi ihj => simp [Exp.compile, OM.Machine.Expr.cost, Exp.cost, ihi, ihj]
   | llen k i ih => simp [Exp.compile, OM.Machine.Expr.cost, Exp.cost, ih]
-  | prd c j ihc ihj => simp [Exp.compile, OM.Machine.Expr.cost, Exp.cost, ihc, ihj]
+  | prd c j ihc ihj => simp [Exp.compile, OM.Machine.Expr.cost, Exp.cost, ihc, ihj, rowW]
 
 /-! ### The encoding -/
 
@@ -354,13 +357,16 @@ structure Enc (p : Nat) (κ : Caps) (s : Core) (m : OM.Machine.State) : Prop whe
   lcapN : ∀ k, m.cap (arrLen p k) = κ.lrec k
   llen : ∀ k, ∀ i < κ.lrec k, m.mem (arrLen p k) i = (k.view s i).length ∧ (k.view s i).length ≤ κ.lcap k
   lmem : ∀ k, ∀ i < κ.lrec k, ∀ j < (k.view s i).length,
-    m.mem (arrL p k false) (i * κ.lcap k + j) = ((k.view s i).getD j (0, 0)).1 ∧
-      m.mem (arrL p k true) (i * κ.lcap k + j) = ((k.view s i).getD j (0, 0)).2
+    m.mem (arrL p k false) (i * k.stride κ.lcap + j) = ((k.view s i).getD j (0, 0)).1 ∧
+      m.mem (arrL p k true) (i * k.stride κ.lcap + j) = ((k.view s i).getD j (0, 0)).2
   /-- Paths: chunk `c`'s row is stored from `c · pw`. -/
   wcap : m.cap (arrPath p) = κ.tbl .C * κ.pw
   wmem : ∀ c < κ.tbl .C, ∀ j < κ.pw, m.mem (arrPath p) (c * κ.pw + j) = (rowOf s c).getX j
   ocap : ∀ o, m.cap (arrO p o) = 1
   omem : ∀ o, m.mem (arrO p o) 0 = o.get s
   prepC : ∀ pr, s.prep = some pr → pr.chunk < κ.tbl .C
+  /-- The path rows are `H + 1` wide; the free-group stack is one record. -/
+  pwH : κ.pw = s.P.H + 1
+  frec : κ.lrec .freeG = 1
 
 end OM.Impl

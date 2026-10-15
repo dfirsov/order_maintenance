@@ -30,11 +30,11 @@ variable {p : Nat} {κ : Caps}
 
 theorem Enc.congr {s : Core} {m m' : State} (h : Enc p κ s m) (hm : m'.mem = m.mem)
     (hc : m'.cap = m.cap) : Enc p κ s m' := by
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16⟩ := h
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18⟩ := h
   exact ⟨by rw [hc]; exact h1, by rw [hm]; exact h2, by rw [hc]; exact h3, by rw [hm]; exact h4, h5,
     by rw [hc]; exact h6, by rw [hm]; exact h7, by rw [hc]; exact h8, by rw [hc]; exact h9,
     by rw [hm]; exact h10, by rw [hm]; exact h11, by rw [hc]; exact h12, by rw [hm]; exact h13,
-    by rw [hc]; exact h14, by rw [hm]; exact h15, h16⟩
+    by rw [hc]; exact h14, by rw [hm]; exact h15, h16, h17, h18⟩
 
 theorem Enc.bump {s : Core} {m : State} (h : Enc p κ s m) (v : Nat) : Enc p κ s (m.bump v) :=
   h.congr rfl rfl
@@ -74,7 +74,7 @@ theorem Enc.write {s s' : Core} {m : State} (h : Enc p κ s m) {f : Fld} {j v : 
   obtain ⟨hL, hR, hO⟩ := Fld.set_rest hs
   refine ⟨fun g => h.cap g, fun g i hi => ?_, fun t => h.scap t, fun t => ?_, fun t => ?_, h.pcap,
     fun k => ?_, h.lcapA, h.lcapN, fun k i hi => ?_, fun k i hi j hj => ?_, h.wcap, fun c hc j hj => ?_,
-    h.ocap, fun o => ?_, fun pr hpr => ?_⟩
+    h.ocap, fun o => ?_, fun pr hpr => ?_, by rw [hP]; exact h.pwH, h.frec⟩
   · simp only [State.write]
     rw [Fld.get_set hs g hi]
     by_cases eg : arrF p g = arrF p f
@@ -99,7 +99,7 @@ theorem Enc.push {s : Core} {m : State} (h : Enc p κ s m) {t : Tbl} (ht : t.siz
   obtain ⟨hL, hR, hO⟩ := Tbl.push_rest s t
   refine ⟨fun g => h.cap g, fun g i hi => ?_, fun t' => h.scap t', fun t' => ?_, fun t' => ?_,
     h.pcap, fun k => ?_, h.lcapA, h.lcapN, fun k i hi => ?_, fun k i hi j hj => ?_, h.wcap,
-    fun c hc j hj => ?_, h.ocap, fun o => ?_, fun pr hpr => ?_⟩
+    fun c hc j hj => ?_, h.ocap, fun o => ?_, fun pr hpr => ?_, by cases t <;> exact h.pwH, h.frec⟩
   · rw [write_other (arr_ne (by simp)), Tbl.push_get]; exact h.mem g i hi
   · simp only [State.write, Tbl.push_size]
     by_cases e : arrS p t' = arrS p t
@@ -118,6 +118,41 @@ theorem Enc.push {s : Core} {m : State} (h : Enc p κ s m) {t : Tbl} (ht : t.siz
     rw [this] at hpr; exact h.prepC pr hpr
 
 /-! ### Expressions -/
+
+theorem mul_add_inj {i i' j j' w : Nat} (hj : j < w) (hj' : j' < w) (h : i * w + j = i' * w + j') :
+    i = i' ∧ j = j' := by
+  have hw : 0 < w := by omega
+  have h1 : (i * w + j) / w = i := by rw [Nat.add_comm, Nat.add_mul_div_right _ _ hw, Nat.div_eq_of_lt hj]; simp
+  have h2 : (i' * w + j') / w = i' := by rw [Nat.add_comm, Nat.add_mul_div_right _ _ hw, Nat.div_eq_of_lt hj']; simp
+  have h3 : (i * w + j) % w = j := by rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt hj]
+  have h4 : (i' * w + j') % w = j' := by rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt hj']
+  rw [h] at h1 h3; exact ⟨h1.symm.trans h2, h3.symm.trans h4⟩
+
+theorem Enc.stride_lt {s : Core} {m : State} (h : Enc p κ s m) {k : LK} {i j : Nat} (hi : i < κ.lrec k)
+    (hj : j < κ.lcap k) : i * k.stride κ.lcap + j < κ.lrec k * κ.lcap k := by
+  cases k with
+  | freeG =>
+    have := h.frec; have hi0 : i = 0 := by omega
+    subst hi0; simp [LK.stride, this]; exact hj
+  | _ => exact lt_mul_add hi hj
+
+theorem Enc.stride_inj {s : Core} {m : State} (h : Enc p κ s m) {k : LK} {i i' j j' : Nat} (hi : i < κ.lrec k)
+    (hi' : i' < κ.lrec k) (hj : j < κ.lcap k) (hj' : j' < κ.lcap k)
+    (e : i * k.stride κ.lcap + j = i' * k.stride κ.lcap + j') : i = i' ∧ j = j' := by
+  cases k with
+  | freeG =>
+    have := h.frec
+    have h0 : i = 0 := by omega
+    have h0' : i' = 0 := by omega
+    subst h0; subst h0'; simp [LK.stride] at e; exact ⟨rfl, e⟩
+  | _ => exact mul_add_inj hj hj' e
+
+theorem Enc.rowW_eval {s : Core} {m : State} (h : Enc p κ s m) : (rowW p).eval m = some κ.pw := by
+  have := h.pmem .H
+  simp only [PF.get, PF.idx] at this
+  simp [rowW, OM.Machine.Expr.eval, h.pcap, PF.idx, this, h.pwH, OM.Machine.BinOp.eval]
+
+theorem rowW_maxv (p : Nat) (m : State) : (rowW p).maxv m ≥ 0 := Nat.zero_le _
 
 theorem Exp.ev_compile {s : Core} {m : State} {L : Loc} (h : Enc p κ s m) (hL : m.loc = L) :
     ∀ (e : Exp) {v : Nat}, e.ev κ s L = some v → (e.compile p κ).eval m = some v
@@ -155,8 +190,8 @@ theorem Exp.ev_compile {s : Core} {m : State} {L : Loc} (h : Enc p κ s m) (hL :
       cases hv
       have hle := (h.llen k x hc.1).2
       have hm := h.lmem k x hc.1 y hc.2
-      have hlt : x * κ.lcap k + y < m.cap (arrL p k b) := by
-        rw [h.lcapA]; exact lt_mul_add hc.1 (by omega)
+      have hlt : x * k.stride κ.lcap + y < m.cap (arrL p k b) := by
+        rw [h.lcapA]; exact h.stride_lt hc.1 (by omega)
       simp only [Exp.compile, OM.Machine.Expr.eval, Exp.ev_compile h hL i hx, Exp.ev_compile h hL j hy,
         Option.bind_some, OM.Machine.BinOp.eval, if_pos hlt]
       cases b <;> simp [hm.1, hm.2]
@@ -178,7 +213,7 @@ theorem Exp.ev_compile {s : Core} {m : State} {L : Loc} (h : Enc p κ s m) (hL :
       cases hv
       have hlt : x * κ.pw + y < m.cap (arrPath p) := by rw [h.wcap]; exact lt_mul_add hc.1 hc.2
       simp only [Exp.compile, OM.Machine.Expr.eval, Exp.ev_compile h hL c hx, Exp.ev_compile h hL j hy,
-        Option.bind_some, OM.Machine.BinOp.eval, if_pos hlt, h.wmem x hc.1 y hc.2]
+        h.rowW_eval, Option.bind_some, OM.Machine.BinOp.eval, if_pos hlt, h.wmem x hc.1 y hc.2]
     · simp at hv
   | .opt o, v, hv => by
     simp [Exp.ev] at hv; subst hv
@@ -247,8 +282,8 @@ theorem Enc.frame {s s' : Core} {m m' : State} (h : Enc p κ s m) (hcap : m'.cap
     (hPm : m'.mem (arrP p) = m.mem (arrP p))
     (hlen : ∀ k : LK, ∀ i < κ.lrec k, m'.mem (arrLen p k) i = (k.view s' i).length ∧ (k.view s' i).length ≤ κ.lcap k)
     (hlm : ∀ k : LK, ∀ i < κ.lrec k, ∀ j < (k.view s' i).length,
-      m'.mem (arrL p k false) (i * κ.lcap k + j) = ((k.view s' i).getD j (0, 0)).1 ∧
-        m'.mem (arrL p k true) (i * κ.lcap k + j) = ((k.view s' i).getD j (0, 0)).2)
+      m'.mem (arrL p k false) (i * k.stride κ.lcap + j) = ((k.view s' i).getD j (0, 0)).1 ∧
+        m'.mem (arrL p k true) (i * k.stride κ.lcap + j) = ((k.view s' i).getD j (0, 0)).2)
     (hw : ∀ c < κ.tbl .C, ∀ j < κ.pw, m'.mem (arrPath p) (c * κ.pw + j) = (rowOf s' c).getX j)
     (ho : ∀ o : OF, m'.mem (arrO p o) 0 = o.get s')
     (hpc : ∀ pr, s'.prep = some pr → pr.chunk < κ.tbl .C) : Enc p κ s' m' :=
@@ -257,7 +292,7 @@ theorem Enc.frame {s s' : Core} {m m' : State} (h : Enc p κ s m) (hcap : m'.cap
     fun t => by rw [hT]; exact h.sle t, by rw [hcap]; exact h.pcap,
     fun k => by rw [hPm, hP]; exact h.pmem k, fun k b => by rw [hcap]; exact h.lcapA k b,
     fun k => by rw [hcap]; exact h.lcapN k, hlen, hlm, by rw [hcap]; exact h.wcap, hw,
-    fun o => by rw [hcap]; exact h.ocap o, ho, hpc⟩
+    fun o => by rw [hcap]; exact h.ocap o, ho, hpc, by rw [hP]; exact h.pwH, h.frec⟩
 
 /-- A step that changes only the optional records, and only their cells. -/
 theorem Enc.optOnly {s s' : Core} {m m' : State} (h : Enc p κ s m) (hcap : m'.cap = m.cap)
@@ -487,15 +522,6 @@ theorem sim_prepCommit {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL :
       cases o <;> simp [OF.get, State.upd, b2n, hpr] at this ⊢ <;> exact this
   · trivial
 
-theorem mul_add_inj {i i' j j' w : Nat} (hj : j < w) (hj' : j' < w) (h : i * w + j = i' * w + j') :
-    i = i' ∧ j = j' := by
-  have hw : 0 < w := by omega
-  have h1 : (i * w + j) / w = i := by rw [Nat.add_comm, Nat.add_mul_div_right _ _ hw, Nat.div_eq_of_lt hj]; simp
-  have h2 : (i' * w + j') / w = i' := by rw [Nat.add_comm, Nat.add_mul_div_right _ _ hw, Nat.div_eq_of_lt hj']; simp
-  have h3 : (i * w + j) % w = j := by rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt hj]
-  have h4 : (i' * w + j') % w = j' := by rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt hj']
-  rw [h] at h1 h3; exact ⟨h1.symm.trans h2, h3.symm.trans h4⟩
-
 theorem sim_pwr {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.loc = L) (c j e : Exp) :
     Agree p κ (evalF κ (.pwr c j e) s L) (exec (Stm.compile p κ (.pwr c j e)) m) := by
   simp only [evalF]
@@ -506,9 +532,9 @@ theorem sim_pwr {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.loc 
       obtain ⟨hxC, hyw, hnp⟩ := hc
       have hlt : x * κ.pw + y < m.cap (arrPath p) := by rw [h.wcap]; exact lt_mul_add hxC hyw
       simp only [Stm.compile, exec, OM.Machine.Expr.eval, Exp.ev_compile h hL c hx, Exp.ev_compile h hL j hy,
-        Exp.ev_compile h hL e hv, Option.bind_some, OM.Machine.BinOp.eval]
+        Exp.ev_compile h hL e hv, h.rowW_eval, Option.bind_some, OM.Machine.BinOp.eval]
       rw [if_pos (by simpa using hlt)]
-      refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost]; omega⟩
+      refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost, rowW]; omega⟩
       have hv : ∀ (k : LK) i, k.view { s with path := s.path.setX x ((s.path.getX x).setX y v) } i =
           k.view s i := fun k i => by cases k <;> rfl
       refine h.frame (by mem_simp) (fun f j => by cases f <;> (rename_i k; cases k <;> rfl))
@@ -598,9 +624,9 @@ theorem sim_prepPath {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m
       have hch : m.mem (arrO p .prepChunk) 0 = pr.chunk := by rw [h.omem]; simp [OF.get, hpr]
       have hlt : pr.chunk * κ.pw + y < m.cap (arrPath p) := by rw [h.wcap]; exact lt_mul_add hpc hyw
       simp only [Stm.compile, exec, OM.Machine.Expr.eval, Exp.ev_compile h hL j hy, Exp.ev_compile h hL e hv,
-        Option.bind_some, OM.Machine.BinOp.eval, h.ocap, Nat.zero_lt_one, if_true, hch]
+        h.rowW_eval, Option.bind_some, OM.Machine.BinOp.eval, h.ocap, Nat.zero_lt_one, if_true, hch]
       rw [if_pos (by simpa using hlt)]
-      refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost]; omega⟩
+      refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost, rowW]; omega⟩
       have hv' : ∀ (k : LK) i, k.view { s with prep := some { pr with path := pr.path.setX y v } } i =
           k.view s i := fun k i => by cases k <;> rfl
       refine h.frame (by mem_simp) (fun f j => by cases f <;> (rename_i k; cases k <;> rfl))
@@ -633,9 +659,9 @@ theorem Enc.listUpd {s s' : Core} {m m' : State} (h : Enc p κ s m) {k : LK} {x 
     (hlen : ∀ i, i ≠ x → m'.mem (arrLen p k) i = m.mem (arrLen p k) i)
     (hlenx : m'.mem (arrLen p k) x = l'.length)
     (hel : ∀ b i j, i < κ.lrec k → i ≠ x → j < κ.lcap k →
-      m'.mem (arrL p k b) (i * κ.lcap k + j) = m.mem (arrL p k b) (i * κ.lcap k + j))
-    (helx : ∀ j < l'.length, m'.mem (arrL p k false) (x * κ.lcap k + j) = (l'.getD j (0, 0)).1 ∧
-      m'.mem (arrL p k true) (x * κ.lcap k + j) = (l'.getD j (0, 0)).2) : Enc p κ s' m' := by
+      m'.mem (arrL p k b) (i * k.stride κ.lcap + j) = m.mem (arrL p k b) (i * k.stride κ.lcap + j))
+    (helx : ∀ j < l'.length, m'.mem (arrL p k false) (x * k.stride κ.lcap + j) = (l'.getD j (0, 0)).1 ∧
+      m'.mem (arrL p k true) (x * k.stride κ.lcap + j) = (l'.getD j (0, 0)).2) : Enc p κ s' m' := by
   unfold LK.set at hs
   split at hs
   · next hc =>
@@ -687,11 +713,11 @@ theorem sim_lwr {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.loc 
         obtain ⟨hxr, -⟩ := LK.set_lrec hs
         have hle := (h.llen k x hxr).2
         have hyc : y < κ.lcap k := Nat.lt_of_lt_of_le hyl hle
-        have hlt : x * κ.lcap k + y < m.cap (arrL p k b) := by rw [h.lcapA]; exact lt_mul_add hxr hyc
+        have hlt : x * k.stride κ.lcap + y < m.cap (arrL p k b) := by rw [h.lcapA]; exact h.stride_lt hxr hyc
         simp only [Stm.compile, exec, OM.Machine.Expr.eval, Exp.ev_compile h hL i hx, Exp.ev_compile h hL j hy,
           Exp.ev_compile h hL e hv, Option.bind_some, OM.Machine.BinOp.eval]
         rw [if_pos (by simpa using hlt)]
-        refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost]; omega⟩
+        refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost, rowW]; omega⟩
         refine h.listUpd hs (by mem_simp) (fun sl h1 _ => by
             funext q; simp only [st_write_mem, st_bump_mem, arr_eq_iff, h1 b, if_false])
           (fun q _ => by mem_simp) (by mem_simp; rw [(h.llen k x hxr).1, List.length_set])
@@ -699,7 +725,7 @@ theorem sim_lwr {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.loc 
         · mem_simp
           by_cases eb : b' = b
           · subst eb; simp only [and_self, if_true, State.upd]
-            rw [if_neg (fun h' => hqx (mul_add_inj hj' hyc h').1)]
+            rw [if_neg (fun h' => hqx (h.stride_inj hq hxr hj' hyc h').1)]
           · simp [eb]
         · rw [List.length_set] at hj'
           have hm := h.lmem k x hxr j' hj'
@@ -707,7 +733,7 @@ theorem sim_lwr {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.loc 
           by_cases ej : j' = y
           · subst ej
             cases b <;> simp [State.upd, List.getD_eq_getElem?_getD, List.getElem?_set, hyl, hm.1, hm.2]
-          · have hne : x * κ.lcap k + j' ≠ x * κ.lcap k + y := by omega
+          · have hne : x * k.stride κ.lcap + j' ≠ x * k.stride κ.lcap + y := by omega
             cases b <;> simp [State.upd, hne, List.getD_eq_getElem?_getD, List.getElem?_set, Ne.symm ej, ej] <;>
               simpa [List.getD_eq_getElem?_getD] using hm
       · trivial
@@ -717,7 +743,7 @@ theorem sim_lwr {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.loc 
 /-- A write past the end of a list keeps the encoding. -/
 theorem Enc.writeBeyond {s : Core} {m : State} (h : Enc p κ s m) {k : LK} {b : Bool} {x n v : Nat}
     (hx : x < κ.lrec k) (hn : (k.view s x).length ≤ n) (hnc : n < κ.lcap k) :
-    Enc p κ s (m.write (arrL p k b) (x * κ.lcap k + n) v) := by
+    Enc p κ s (m.write (arrL p k b) (x * k.stride κ.lcap + n) v) := by
   refine h.frame (by mem_simp) (fun _ _ => rfl) (fun _ => rfl) rfl (fun f => by funext q; mem_simp)
     (fun t => by funext q; mem_simp) (by funext q; mem_simp) (fun k' i hi => by mem_simp; exact h.llen k' i hi)
     (fun k' i hi j hj => ?_) (fun c hc j hj => by mem_simp; exact h.wmem c hc j hj)
@@ -726,11 +752,11 @@ theorem Enc.writeBeyond {s : Core} {m : State} (h : Enc p κ s m) {k : LK} {b : 
   by_cases ek : k' = k
   · subst ek
     have hjc : j < κ.lcap k' := Nat.lt_of_lt_of_le hj (h.llen k' i hi).2
-    have hne : i * κ.lcap k' + j ≠ x * κ.lcap k' + n := by
+    have hne : i * k'.stride κ.lcap + j ≠ x * k'.stride κ.lcap + n := by
       intro e
       by_cases ei : i = x
       · subst ei; omega
-      · exact ei (mul_add_inj hjc hnc e).1
+      · exact ei (h.stride_inj hi hx hjc hnc e).1
     simp only [st_write_mem, arr_eq_iff, Slot.lst.injEq, true_and]
     constructor
     · by_cases eb : false = b
@@ -760,31 +786,31 @@ theorem sim_lgrow {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.lo
       rw [List.length_append, List.length_singleton] at hlc
       have hlen := (h.llen k x hxr).1
       generalize hn : (k.view s x).length = n at hlc hlen
-      have hlt : x * κ.lcap k + n < κ.lrec k * κ.lcap k := lt_mul_add hxr (by omega)
+      have hlt : x * k.stride κ.lcap + n < κ.lrec k * κ.lcap k := h.stride_lt hxr (by omega)
       -- the first store
       have h1 := (h.bump (OM.Machine.Expr.maxv m (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ)
-          (.lit (κ.lcap k))) (.load (arrLen p k) (i.compile p κ))))).bump (a.compile p κ |>.maxv m)
+          (.lit (k.stride κ.lcap))) (.load (arrLen p k) (i.compile p κ))))).bump (a.compile p κ |>.maxv m)
         |>.writeBeyond (b := false) (v := va) hxr (le_of_eq hn) (by omega)
-      have hix : (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ) (.lit (κ.lcap k)))
-          (.load (arrLen p k) (i.compile p κ))).eval m = some (x * κ.lcap k + n) := by
+      have hix : (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ) (.lit (k.stride κ.lcap)))
+          (.load (arrLen p k) (i.compile p κ))).eval m = some (x * k.stride κ.lcap + n) := by
         simp [Exp.ev_compile h hL i hx, h.lcapN, hxr, hlen]
       simp only [Stm.compile]
       rw [OM.Machine.exec, exec_store_ok hix (Exp.ev_compile h hL a ha) (by rw [h.lcapA]; exact hlt), out_bind_ok]
       generalize hm1 : (((m.bump (OM.Machine.Expr.maxv m (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ)
-          (.lit (κ.lcap k))) (.load (arrLen p k) (i.compile p κ))))).bump (a.compile p κ |>.maxv m)).write
-          (arrL p k false) (x * κ.lcap k + n) va) = m1 at h1
+          (.lit (k.stride κ.lcap))) (.load (arrLen p k) (i.compile p κ))))).bump (a.compile p κ |>.maxv m)).write
+          (arrL p k false) (x * k.stride κ.lcap + n) va) = m1 at h1
       have hL1 : m1.loc = L := by rw [← hm1]; simp [hL]
-      have hix1 : (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ) (.lit (κ.lcap k)))
-          (.load (arrLen p k) (i.compile p κ))).eval m1 = some (x * κ.lcap k + n) := by
+      have hix1 : (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ) (.lit (k.stride κ.lcap)))
+          (.load (arrLen p k) (i.compile p κ))).eval m1 = some (x * k.stride κ.lcap + n) := by
         simp [Exp.ev_compile h1 hL1 i hx, h1.lcapN, hxr, (h1.llen k x hxr).1, hn]
       have h2 := (h1.bump (OM.Machine.Expr.maxv m1 (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ)
-          (.lit (κ.lcap k))) (.load (arrLen p k) (i.compile p κ))))).bump (b.compile p κ |>.maxv m1)
+          (.lit (k.stride κ.lcap))) (.load (arrLen p k) (i.compile p κ))))).bump (b.compile p κ |>.maxv m1)
         |>.writeBeyond (b := true) (v := vb) hxr (le_of_eq hn) (by omega)
       rw [OM.Machine.exec, exec_store_ok hix1 (Exp.ev_compile h1 hL1 b hb) (by rw [h1.lcapA]; exact hlt),
         out_bind_ok]
       generalize hm2 : (((m1.bump (OM.Machine.Expr.maxv m1 (OM.Machine.Expr.bin .add (.bin .mul (i.compile p κ)
-          (.lit (κ.lcap k))) (.load (arrLen p k) (i.compile p κ))))).bump (b.compile p κ |>.maxv m1)).write
-          (arrL p k true) (x * κ.lcap k + n) vb) = m2 at h2
+          (.lit (k.stride κ.lcap))) (.load (arrLen p k) (i.compile p κ))))).bump (b.compile p κ |>.maxv m1)).write
+          (arrL p k true) (x * k.stride κ.lcap + n) vb) = m2 at h2
       have hL2 : m2.loc = L := by rw [← hm2]; simp [hL1]
       have hn2 : (OM.Machine.Expr.bin .add (.load (arrLen p k) (i.compile p κ)) (.lit 1)).eval m2 = some (n + 1) := by
         simp [Exp.ev_compile h2 hL2 i hx, h2.lcapN, hxr, (h2.llen k x hxr).1, hn]
@@ -799,7 +825,7 @@ theorem sim_lgrow {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.lo
           (by simp only [st_write_mem, st_bump_mem, arr_eq_iff, reduceCtorEq, if_false, if_true, State.upd];
               simp [hn])
           (fun b' q j' hq hqx hj' => ?_) (fun j' hj' => ?_)
-        · have hne : q * κ.lcap k + j' ≠ x * κ.lcap k + n := fun e => hqx (mul_add_inj hj' (by omega) e).1
+        · have hne : q * k.stride κ.lcap + j' ≠ x * k.stride κ.lcap + n := fun e => hqx (h.stride_inj hq hxr hj' (by omega) e).1
           simp only [st_write_mem, st_bump_mem, arr_eq_iff, reduceCtorEq, if_false, Slot.lst.injEq, true_and]
           cases b' <;> simp [State.upd, hne]
         · rw [List.length_append, List.length_singleton] at hj'
@@ -832,7 +858,7 @@ theorem sim_lshrink {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.
           intro e; rw [e] at hne; simp at hne
         simp only [Stm.compile]
         rw [exec_store_ok (Exp.ev_compile h hL i hx) hv (by rw [h.lcapN]; exact hxr)]
-        refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost]; omega⟩
+        refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost, rowW]; omega⟩
         refine h.listUpd hs (by mem_simp)
           (fun sl h1 h2 => by funext q; simp only [st_write_mem, st_bump_mem, arr_eq_iff, h2, if_false])
           (fun q hq => by simp only [st_write_mem, st_bump_mem, if_true, State.upd, if_neg hq])
@@ -857,7 +883,7 @@ theorem sim_lclear {s : Core} {L : Loc} {m : State} (h : Enc p κ s m) (hL : m.l
       obtain ⟨hxr, -⟩ := LK.set_lrec hs
       simp only [Stm.compile]
       rw [exec_store_ok (Exp.ev_compile h hL i hx) (by rfl) (by rw [h.lcapN]; exact hxr)]
-      refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost]; omega⟩
+      refine ⟨rfl, ?_, by simp [hL], by simp [Exp.cost_compile, OM.Machine.Expr.cost, rowW]; omega⟩
       refine h.listUpd hs (by mem_simp)
         (fun sl h1 h2 => by funext q; simp only [st_write_mem, st_bump_mem, arr_eq_iff, h2, if_false])
         (fun q hq => by simp only [st_write_mem, st_bump_mem, if_true, State.upd, if_neg hq])

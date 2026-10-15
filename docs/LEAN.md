@@ -660,6 +660,15 @@ or `pcSet` keeps `resJob` (`NoJob.lean`, one syntactic lemma for all programs). 
 `insertAfter` the guard handlers are `bug`: on the states of the cost invariant FALLBACK never runs
 (`insertAfter_cost`).
 
+**One program for every capacity.** The cores grow (`N' = 4·max(live, 16)`), but the machine
+program is fixed, so the compiled code must not depend on a core's capacities. It used to embed the
+path width `κ.pw = H + 1` (which grows with `N`) and the list strides `κ.lcap`. Now a path address
+uses the row width read at run time from the parameter cell (`rowW p`), with `κ.pw = H + 1` an
+invariant of the encoding (`Enc.pwH`). The free-group stack, the one list whose length is not
+bounded by a constant, has stride 0 (`LK.stride`; it has one record, `Enc.frec`). The code
+depends on `κ` only through the strides of the per-node and per-chunk lists, whose bounds (160
+table entries, and so on) are constants.
+
 **Kernel timeouts.** Rewriting or splitting the status `match` inside a hypothesis about
 `driveGroup` times out the kernel. The fix: goal-side lemmas per status
 (`driveGroup_split/ovf/quiet/dead`, proved by `unfold; rw`), then `rw [lemma] at h`.

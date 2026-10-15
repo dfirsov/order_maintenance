@@ -192,6 +192,12 @@ def LK.put (s : Core) (i : Nat) (l : List (Nat × Nat)) : LK → Core
   | .cin => { s with cin := s.cin.setX i (l.map (·.1)) }
   | .freeG => { s with freeG := (l.map (·.1)).reverse }
 
+/-- The distance between consecutive records' lists in the machine array. The free-group stack
+has a single record, so its stride is 0 and the compiled code does not depend on its capacity. -/
+def LK.stride (κlcap : LK → Nat) : LK → Nat
+  | .freeG => 0
+  | k => κlcap k
+
 /-- The record holding the list exists. -/
 def LK.recOk (s : Core) (i : Nat) : LK → Bool
   | .children | .table | .inTab | .side => decide (i < s.nodes.size)
@@ -386,7 +392,7 @@ def Exp.cost : Exp → Nat
   | .un _ a => 1 + a.cost
   | .lrd _ _ i j => 1 + (1 + (1 + i.cost + 1) + j.cost)
   | .llen _ i => 1 + i.cost
-  | .prd c j => 1 + (1 + (1 + c.cost + 1) + j.cost)
+  | .prd c j => 1 + (1 + (1 + c.cost + 4) + j.cost)
   | .opt _ => 2
 
 def costList (es : List Exp) : Nat := (es.map Exp.cost).sum
@@ -491,7 +497,7 @@ def evalF (κ : Caps) : Stm → Core → Loc → Res
     match c.ev κ s L, j.ev κ s L, e.ev κ s L with
     | some x, some y, some v =>
       if x < κ.tbl .C ∧ y < κ.pw ∧ notPrep s x then
-        .ok { s with path := s.path.setX x ((s.path.getX x).setX y v) } L (4 + c.cost + j.cost + e.cost)
+        .ok { s with path := s.path.setX x ((s.path.getX x).setX y v) } L (7 + c.cost + j.cost + e.cost)
       else .bug
     | _, _, _ => .bug
   | .rowReset c, s, L =>
@@ -518,7 +524,7 @@ def evalF (κ : Caps) : Stm → Core → Loc → Res
     match s.prep, j.ev κ s L, e.ev κ s L with
     | some pr, some y, some v =>
       if y < κ.pw then
-        .ok { s with prep := some { pr with path := pr.path.setX y v } } L (6 + j.cost + e.cost)
+        .ok { s with prep := some { pr with path := pr.path.setX y v } } L (9 + j.cost + e.cost)
       else .bug
     | _, _, _ => .bug
   | .prepCommit, s, L =>

@@ -51,10 +51,10 @@ theorem jcopyS_ok {κ : Caps} {s : Core} {L : Loc} {j : Job} {l : Nat} (hjob : s
   have h1l : L1 "ja" = l := by rw [h1 _ (by decide), hl]
   have h1v : L1 "v" = v := by simp [L1, OM.Machine.State.upd]
   set s1 : Core := { s with path := s.path.setX j.y ((s.path.getX j.y).setX l v) }
-  have e2 : evalF κ (.pwr "jy" "ja" "v") s L1 = .ok s1 L1 7 := by
+  have e2 : evalF κ (.pwr "jy" "ja" "v") s L1 = .ok s1 L1 10 := by
     simp [evalF, Exp.ev, h1y, h1l, h1v, hyC, hlw, hny, Exp.cost, s1]
   set s2 : Core := { s1 with path := s1.path.setX j.z ((s1.path.getX j.z).setX l v) }
-  have e3 : evalF κ (.pwr "jz" "ja" "v") s1 L1 = .ok s2 L1 7 := by
+  have e3 : evalF κ (.pwr "jz" "ja" "v") s1 L1 = .ok s2 L1 10 := by
     have : notPrep s1 j.z := hnz
     simp [evalF, Exp.ev, h1z, h1l, h1v, hzC, hlw, this, Exp.cost, s2]
   set V := s.nodes.getX v
@@ -146,7 +146,7 @@ def belowS (c r : Reg) : Stm := .ite ("h" =ₑ 1) (r ::= .var c) (r ::= .prd c (
 theorem belowS_ok {κ : Caps} {s : Core} {L : Loc} {c r : Reg} {h y : Nat} (hh : L "h" = h) (hc : L c = y)
     (h1 : 1 ≤ h) (hnp : notPrep s y) (hyC : y < κ.tbl .C) (hw : h - 1 < κ.pw) :
     evalF κ (belowS c r) s L = .ok s (upd L r (if h == 1 then y else (s.path.getX y).getX (h - 1)))
-      (if h = 1 then 6 else 13) := by
+      (if h = 1 then 6 else 16) := by
   by_cases e : h = 1
   · simp [belowS, evalF, Exp.ev, hh, hc, OM.Machine.BinOp.eval, e, Exp.cost, Res.addCost]
   · simp [belowS, evalF, Exp.ev, hh, hc, OM.Machine.BinOp.eval, e, Exp.cost, Res.addCost, hyC, hw,
@@ -469,7 +469,7 @@ theorem dsMutS_ok {κ : Caps} {s : Core} {L : Loc} {v old new : Nat}
   have h3lf : L3 "lf" = b2n (decide (goesLeft s v)) := by rw [h3 _ (by decide) (by decide), hlf]
   -- the path
   set s2 : Core := { s1 with path := s1.path.setX y ((s1.path.getX y).setX V.height t) }
-  have e5 : evalF κ (.pwr "y" "h" "t") s1 L3 = .ok s2 L3 7 := by
+  have e5 : evalF κ (.pwr "y" "h" "t") s1 L3 = .ok s2 L3 10 := by
     have : notPrep s1 y := hnp
     simp [evalF, Exp.ev, h3y, h3h, h3t, hyC, hw, this, Exp.cost, s2]
   have hs2v : s2.nodes = s.nodes := rfl
