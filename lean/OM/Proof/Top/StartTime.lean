@@ -275,6 +275,166 @@ theorem tw_new_range (w : Nat) (hw : w = s.nodes.size ∨ w = s.nodes.size + 1) 
     · exact ⟨a1, a2⟩
     · exact ⟨a3, a4⟩
 
+theorem pend_new {w : Nat} (hw : w = s.nodes.size ∨ w = s.nodes.size + 1) :
+    w ∉ pend S' (some (drainJob j v (nd (ts s) v).livePar)) := by
+  intro h
+  rw [show drainJob j v (nd (ts s) v).livePar = { j with pc := .afterDrain v (nd (ts s) v).livePar } from rfl,
+    C.pend_mem] at h
+  obtain ⟨hl, -, -⟩ := C.up
+  have hp := sd_pend C.pc C.v0 C.I C.lp
+  rw [hp] at h
+  rcases List.mem_cons.mp h.1 with e | e
+  · exact h.2 e
+  · have := (C.S.upChain_mem _ _ w hl e).1
+    have h' : w < s.nodes.size := this.1.2.1
+    omega
+
+theorem rng_v_le : (rng (ts s) cl v).length ≤ tw (ts s) cl v := by
+  unfold rng tw
+  have e : cl.filter (fun c => decide (Top.pp (ts s) c (Top.ht (ts s) v) = v)) =
+      (cl.filter (fun c => decide (Top.anc (ts s) c (Top.ht (ts s) v) = v))).filter
+        (fun c => decide (Top.pp (ts s) c (Top.ht (ts s) v) = v)) := by
+    rw [List.filter_filter]
+    apply List.filter_congr
+    intro c hc
+    by_cases hp : Top.pp (ts s) c (Top.ht (ts s) v) = v
+    · have : Top.anc (ts s) c (Top.ht (ts s) v) = v := by
+        rcases C.S.P c hc _ C.h1 (by have := C.hHt; omega) with h | ⟨hg, -⟩
+        · rw [← h, hp]
+        · rw [hp] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+      simp [hp, this]
+    · simp [hp]
+  rw [e]
+  exact (List.filter_sublist).length_le
+
+/-- **The drain timing after a drain starts.** -/
+theorem time : Timing S' cl (some (drainJob j v (nd (ts s) v).livePar)) := by
+  have Ti := C.Ti
+  have hvlt := C.H.hv
+  have hNH := C.NH
+  have hP' := C.H.P
+  have hpm : ∀ x, x ∈ pend S' (some (drainJob j v (nd (ts s) v).livePar)) ↔ x ∈ pend (ts s) (some j) ∧ x ≠ v :=
+    fun x => C.pend_mem
+  have hwv : (nd (ts s) v).weight ≤ Wd s.P (Top.ht (ts s) v) := Ti.wA v C.vl C.lp C.of
+  have htv := sd_tw C.pc C.v0 C.I C.lp
+  have hW := C.W
+  refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun g hg => ?_, fun g hg => ?_, fun g hg => ?_,
+    fun g hg => ?_, fun u hu hH => ?_, fun t ht hs => ?_, fun u hu hH => ?_, fun u hu => ?_⟩
+  · -- wts
+    rw [C.liveN] at hu
+    rcases hu with ⟨hul, huv⟩ | hw | hw
+    · have hun := C.nN u hul.1
+      rw [C.H.weight, if_neg hun.1, if_neg hun.2, if_neg huv, C.tw_old hul.1 huv, ← Ti.wts u hul]
+      by_cases hp : u ∈ pend (ts s) (some j)
+      · rw [if_pos ((hpm u).mpr ⟨hp, huv⟩), if_pos hp]
+      · rw [if_neg (fun h => hp ((hpm u).mp h).1), if_neg hp]
+    all_goals
+      rw [if_neg (C.pend_new (by omega)), Nat.add_zero]
+      exact (C.tw_new _ (by omega)).1.symm
+  · -- wA
+    rw [C.liveN] at hu
+    rw [C.srcOf] at hs
+    rcases hu with ⟨hul, huv⟩ | hw | hw
+    · have hun := C.nN u hul.1
+      have hnn : ¬(u = s.nodes.size ∨ u = s.nodes.size + 1) := fun h => h.elim hun.1 hun.2
+      rw [if_neg hnn] at hs
+      rw [C.H.weight, if_neg hun.1, if_neg hun.2, if_neg huv, C.ht u, if_neg hnn, hP']
+      apply Ti.wA u hul _ hs
+      by_cases hk : Top.ht (ts s) v ≠ 1 ∧ u ∈ (nd (ts s) v).children
+      · have := ((C.S.mem_children C.vl).mp hk.2).2
+        rw [par_live (Or.inr hul), if_neg (by have := C.h1; omega)] at this
+        rw [this]; exact C.v0
+      · rwa [C.livePar_old hul.1 huv (fun h1 h => hk ⟨h1, h⟩)] at hp
+    all_goals rw [if_pos (by omega)] at hs; exact absurd hs C.v0
+  · -- wB
+    rw [C.ghostN] at hg
+    rcases hg with hg | hgv
+    · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+      have hgn := C.nN g hg.1
+      rw [C.H.weight, if_neg hgn.1, if_neg hgn.2, if_neg hgv, C.ht g, if_neg (fun h => h.elim hgn.1 hgn.2), hP']
+      exact Ti.wB g hg
+    · rw [hgv, C.H.weight, if_neg (by omega), if_neg (by omega), if_pos rfl, C.ht v,
+        if_neg (show ¬(v = s.nodes.size ∨ v = s.nodes.size + 1) by omega), hP']
+      constructor <;> omega
+  · -- wF
+    rw [C.ghostN] at hg
+    rcases hg with hg | hgv
+    · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+      have hgn := C.nN g hg.1
+      rw [C.H.weight, if_neg hgn.1, if_neg hgn.2, if_neg hgv, C.ew_old hg.1]
+      exact Ti.wF g hg
+    · rw [hgv, C.H.weight, if_neg (by omega), if_neg (by omega), if_pos rfl, C.ew_v, htv]
+      simp
+  · -- wC
+    rw [C.ghostN] at hg
+    rcases hg with hg | hgv
+    · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+      have hgn := C.nN g hg.1
+      have hw : (nd S' g).weight = (nd (ts s) g).weight := by
+        rw [C.H.weight, if_neg hgn.1, if_neg hgn.2, if_neg hgv]
+      have hf : fundOf S' cl g = fundOf (ts s) cl g := by unfold fundOf; rw [C.ew_old hg.1, hw]
+      rw [C.rng_old hg.1, hf, hw, C.slack_old hg, hP']
+      exact Ti.wC g hg
+    · rw [hgv]
+      have hw : (nd S' v).weight = (nd (ts s) v).weight + 2 := by
+        rw [C.H.weight, if_neg (by omega), if_neg (by omega), if_pos rfl]
+      have hf : fundOf S' cl v = 0 := by unfold fundOf; rw [C.ew_v, hw, htv]; simp
+      rw [C.rng_old C.vl.1, hf, hw, C.slack_v]
+      have := C.rng_v_le
+      omega
+  · -- wC'
+    rw [C.ghostN] at hg
+    rcases hg with hg | hgv
+    · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+      have hgn := C.nN g hg.1
+      have hw : (nd S' g).weight = (nd (ts s) g).weight := by
+        rw [C.H.weight, if_neg hgn.1, if_neg hgn.2, if_neg hgv]
+      have hf : fundOf S' cl g = fundOf (ts s) cl g := by unfold fundOf; rw [C.ew_old hg.1, hw]
+      have := Ti.wC' g hg
+      rw [hf, hw, hP']
+      by_cases hfd : funded (ts s) (some j) g
+      · rw [if_pos ((C.funded_old hg).mpr hfd)]; rw [if_pos hfd] at this; exact this
+      · rw [if_neg (fun h => hfd ((C.funded_old hg).mp h))]; rw [if_neg hfd] at this; exact this
+    · rw [hgv]
+      have hw : (nd S' v).weight = (nd (ts s) v).weight + 2 := by
+        rw [C.H.weight, if_neg (by omega), if_neg (by omega), if_pos rfl]
+      have hf : fundOf S' cl v = 0 := by unfold fundOf; rw [C.ew_v, hw, htv]; simp
+      rw [hf]; simp
+  · -- wD
+    rw [C.liveN] at hu
+    rw [hP'] at hH
+    rcases hu with ⟨hul, huv⟩ | hw | hw
+    · have hun := C.nN u hul.1
+      rw [C.ht u, if_neg (fun h => h.elim hun.1 hun.2), C.tw_old hul.1 huv, hP']
+      exact Ti.wD u hul hH
+    · subst hw; rw [C.ht _, if_pos (Or.inl rfl), hP']; exact (C.tw_new_range _ (Or.inl rfl)).1
+    · subst hw; rw [C.ht _, if_pos (Or.inr rfl), hP']; exact (C.tw_new_range _ (Or.inr rfl)).1
+  · -- big
+    rw [C.liveN] at ht
+    rw [C.srcOf] at hs
+    rw [hP']
+    rcases ht with ⟨htl, -⟩ | hw | hw
+    · have htn := C.nN t htl.1
+      rw [if_neg (fun h => h.elim htn.1 htn.2)] at hs
+      exact Ti.big t htl hs
+    all_goals omega
+  · -- chain
+    rw [C.isN] at hu
+    rw [hP'] at hH
+    rcases hu with hu | hw | hw
+    · have hun := C.nN u hu
+      rw [C.ht u, if_neg (fun h => h.elim hun.1 hun.2)]
+      exact Ti.chain u hu hH
+    all_goals omega
+  · -- tw1
+    rw [C.liveN] at hu
+    rcases hu with ⟨hul, huv⟩ | hw | hw
+    · rw [C.tw_old hul.1 huv]; exact Ti.tw1 u hul
+    all_goals
+      have := (C.tw_new_range u (by omega)).1
+      have hl := C.TP.lamK (Top.ht (ts s) v) C.h1
+      omega
+
 end SDCtx
 
 end OM.Proof.Top
