@@ -34,7 +34,6 @@ def chainNd (P : Params) (m k : Nat) : Node :=
 structure Stage (P : Params) (h : Nat) (s : Core) : Prop where
   low : TopRelR (initState P) s
   res : s.resJob = none
-  rdy : s.ready = false
   pr : ∃ pa : Array Nat, s.prep = some
       { chunk := 1, h := h, below := if h = 1 then 1 else h - 1, tag := chainTag P (h - 1), path := pa } ∧
     pa.size = P.H + 1 ∧ ∀ j, pa.getX j = if 1 ≤ j ∧ j < h then j else NIL
@@ -96,11 +95,11 @@ theorem initCore_lazy_run (s : Core) : (initCore true).run s = .ok ()
   simp
   rfl
 
-theorem stage_one (s : Core) : Stage s.P 1
+theorem stage_one (s : Core) (r : Bool) : Stage s.P 1
     { initState s.P with
       prep := some { chunk := 1, below := 1, path := Array.replicate (s.P.H + 1) NIL },
-      ready := false } := by
-  refine ⟨?_, rfl, rfl, ⟨_, rfl, by simp, fun j => ?_⟩, fun h => absurd h (by omega),
+      ready := r } := by
+  refine ⟨?_, rfl, ⟨_, rfl, by simp, fun j => ?_⟩, fun h => absurd h (by omega),
     fun h => absurd h (by omega), fun h => absurd h (by omega), fun h => absurd h (by omega)⟩
   · exact TopRel.topRelR ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
       ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩ |>.trans (by
@@ -112,12 +111,12 @@ theorem stage_one (s : Core) : Stage s.P 1
 
 /-- The first step: stage 1 to stage 2. -/
 theorem stage_first {P : Params} {s : Core} (S : Stage P 1 s) (hH : 1 ≤ P.H) (hb : 1 ≤ P.beta) :
-    ∃ s', initStep.run s = .ok false s' ∧ Stage P 2 s' := by
+    ∃ s', initStep.run s = .ok false s' ∧ Stage P 2 s' ∧ s'.ready = s.ready := by
   obtain ⟨pa, hp, hsz, hpa⟩ := S.pr
   have hP := S.P
   rw [if_pos rfl] at hp
-  refine ⟨_, initStep_first s _ hp rfl (by rw [hP]; exact hH), ?_⟩
-  refine ⟨TopRelR.top S.low _ _ _ _ _, S.res, S.rdy, ⟨pa.setX 1 1, ?_, ?_, fun j => ?_⟩, fun _ => ?_, fun _ k => ?_,
+  refine ⟨_, initStep_first s _ hp rfl (by rw [hP]; exact hH), ?_, rfl⟩
+  refine ⟨TopRelR.top S.low _ _ _ _ _, S.res, ⟨pa.setX 1 1, ?_, ?_, fun j => ?_⟩, fun _ => ?_, fun _ k => ?_,
     fun _ => ?_, fun _ => ?_⟩
   · simp only [prepNext, hP]
     congr 2
@@ -144,14 +143,14 @@ theorem stage_first {P : Params} {s : Core} (S : Stage P 1 s) (hH : 1 ≤ P.H) (
 
 /-- A middle step: stage `h` to stage `h + 1`. -/
 theorem stage_mid {P : Params} {h : Nat} {s : Core} (S : Stage P h s) (h2 : 2 ≤ h) (hH : h ≤ P.H)
-    (hb : 1 ≤ P.beta) : ∃ s', initStep.run s = .ok false s' ∧ Stage P (h + 1) s' := by
+    (hb : 1 ≤ P.beta) : ∃ s', initStep.run s = .ok false s' ∧ Stage P (h + 1) s' ∧ s'.ready = s.ready := by
   obtain ⟨pa, hp, hsz, hpa⟩ := S.pr
   have hP := S.P
   have hn := S.nsz h2
   rw [if_neg (by omega)] at hp
-  refine ⟨_, initStep_mid s _ hp (by simp; omega) (by rw [hP]; exact hH), ?_⟩
+  refine ⟨_, initStep_mid s _ hp (by simp; omega) (by rw [hP]; exact hH), ?_, rfl⟩
   simp only [hn]
-  refine ⟨TopRelR.top S.low _ _ _ _ _, S.res, S.rdy, ⟨pa.setX h h, ?_, ?_, fun j => ?_⟩, fun _ => ?_,
+  refine ⟨TopRelR.top S.low _ _ _ _ _, S.res, ⟨pa.setX h h, ?_, ?_, fun j => ?_⟩, fun _ => ?_,
     fun _ k => ?_, fun _ => S.cin h2, fun _ => S.lpar h2⟩
   · simp only [prepNext, hP]
     rw [if_neg (by omega), show h + 1 - 1 = h by omega]
@@ -187,11 +186,11 @@ theorem stage_mid {P : Params} {h : Nat} {s : Core} (S : Stage P h s) (h2 : 2 �
 
 /-- The last step: stage `H + 1` to the complete chain. -/
 theorem stage_last {P : Params} {s : Core} (S : Stage P (P.H + 1) s) (hH : 1 ≤ P.H) :
-    ∃ s', initStep.run s = .ok true s' ∧ Final P s' := by
+    ∃ s', initStep.run s = .ok true s' ∧ Final P s' ∧ s'.ready = s.ready := by
   obtain ⟨pa, hp, hsz, hpa⟩ := S.pr
   have hP := S.P
   rw [if_neg (by omega)] at hp
-  refine ⟨_, initStep_last s _ hp (show P.H + 1 ≠ 1 by omega) (by rw [hP]; show P.H < P.H + 1; omega), ?_⟩
+  refine ⟨_, initStep_last s _ hp (show P.H + 1 ≠ 1 by omega) (by rw [hP]; show P.H < P.H + 1; omega), ?_, rfl⟩
   have hCs : s.C.size = 2 := by rw [S.low.Csize]; rfl
   refine ⟨?_, S.res, rfl, S.nsz (by omega), fun k => ?_, S.cin (by omega), S.lpar (by omega), ?_, fun j => ?_, ?_⟩
   · refine S.low.trans (TopRel.topRelR ?_)
@@ -210,5 +209,22 @@ theorem stage_last {P : Params} {s : Core} (S : Stage P (P.H + 1) s) (hH : 1 ≤
     · rw [if_neg (by omega), if_neg hj]
   · show ((s.C.modify 1 fun C => { C with tag := chainTag P (P.H + 1 - 1) }).getX 1).tag = _
     rw [getX_modify', if_pos ⟨rfl, by omega⟩, Nat.add_sub_cancel]
+
+/-- A building step: stage `h` to stage `h + 1`. -/
+theorem stage_next {P : Params} {h : Nat} {s : Core} (S : Stage P h s) (h1 : 1 ≤ h) (hH : h ≤ P.H)
+    (hb : 1 ≤ P.beta) : ∃ s', initStep.run s = .ok false s' ∧ Stage P (h + 1) s' ∧ s'.ready = s.ready := by
+  by_cases e : h = 1
+  · subst e; exact stage_first S hH hb
+  · exact stage_mid S (by omega) hH hb
+
+/-- The steps left at stage `h`. -/
+def topNu (s : Core) : Nat :=
+  match s.prep with
+  | some pr => s.P.H + 2 - pr.h
+  | none => 0
+
+theorem Stage.nu {P : Params} {h : Nat} {s : Core} (S : Stage P h s) : topNu s = P.H + 2 - h := by
+  obtain ⟨pa, hp, -, -⟩ := S.pr
+  unfold topNu; rw [hp, S.P]
 
 end OM.Proof.Top
