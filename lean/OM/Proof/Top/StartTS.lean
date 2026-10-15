@@ -199,6 +199,94 @@ theorem livePar_old {u : Nat} (hu : Top.isN (ts s) u) (huv : u ≠ v) (hk : Top.
   rw [C.livePar, if_neg huv, if_neg (fun h => h.elim this.1 this.2)]
   rw [if_neg (fun h => hk h.1 (List.mem_of_mem_drop h.2)), if_neg (fun h => hk h.1 (List.mem_of_mem_take h.2))]
 
+theorem kids_split {e : Nat} (he : e ∈ (nd (ts s) v).children) :
+    (e ∈ (nd (ts s) v).children.take (sK (wiC s v) v) ∧ e ∉ (nd (ts s) v).children.drop (sK (wiC s v) v)) ∨
+    (e ∉ (nd (ts s) v).children.take (sK (wiC s v) v) ∧ e ∈ (nd (ts s) v).children.drop (sK (wiC s v) v)) := by
+  obtain ⟨hnd, -, -⟩ := C.S.kids v C.vl
+  have hsp : (nd (ts s) v).children = (nd (ts s) v).children.take (sK (wiC s v) v) ++
+      (nd (ts s) v).children.drop (sK (wiC s v) v) := (List.take_append_drop _ _).symm
+  have hdis := (List.nodup_append.mp (hsp ▸ hnd)).2.2
+  have hm := he; rw [hsp, List.mem_append] at hm
+  rcases hm with h | h
+  · exact Or.inl ⟨h, fun h' => hdis e h e h' rfl⟩
+  · exact Or.inr ⟨fun h' => hdis e h' e h rfl, h⟩
+
+/-- **The live ancestors after the drain starts.** -/
+theorem anc {c : Nat} (hc : c ∈ cl) : ∀ i, i ≤ s.P.H → Top.anc S' c i =
+    if i = Top.ht (ts s) v ∧ Top.anc (ts s) c (Top.ht (ts s) v) = v then
+      (if Top.anc (ts s) c (Top.ht (ts s) v - 1) ∈ (nd (ts s) v).children.take (sK (wiC s v) v)
+        then s.nodes.size else s.nodes.size + 1)
+    else Top.anc (ts s) c i
+  | 0, _ => by
+    rw [if_neg (fun h => by have := C.h1; omega)]; rfl
+  | 1, hi => by
+    show Top.lpr S' c = _
+    rw [C.lpr]
+    have e1 : Top.anc (ts s) c 1 = Top.lpr (ts s) c := rfl
+    by_cases h1 : Top.ht (ts s) v = 1
+    · rw [if_pos h1]
+      have hiff : Top.lpr (ts s) c = v ↔ c ∈ (nd (ts s) v).children := by
+        rw [C.S.mem_children C.vl, if_pos h1, h1, Nat.sub_self, par_live (Or.inl rfl), if_pos rfl]
+        exact ⟨fun h => ⟨hc, h⟩, fun h => h.2⟩
+      have e0 : Top.anc (ts s) c (Top.ht (ts s) v - 1) = c := by rw [h1]; rfl
+      have e2 : Top.anc (ts s) c (Top.ht (ts s) v) = Top.lpr (ts s) c := by rw [h1]; rfl
+      rw [e0, e2]
+      by_cases hl : Top.lpr (ts s) c = v
+      · rw [if_pos (show 1 = Top.ht (ts s) v ∧ Top.lpr (ts s) c = v from ⟨h1.symm, hl⟩)]
+        rcases C.kids_split (hiff.mp hl) with ⟨a, b⟩ | ⟨a, b⟩
+        · rw [if_neg b, if_pos a, if_pos a]
+        · rw [if_pos b, if_neg a]
+      · rw [if_neg (show ¬(1 = Top.ht (ts s) v ∧ Top.lpr (ts s) c = v) from fun h => hl h.2)]
+        have hk : c ∉ (nd (ts s) v).children := fun h => hl (hiff.mpr h)
+        rw [if_neg (fun h => hk (List.mem_of_mem_drop h)), if_neg (fun h => hk (List.mem_of_mem_take h)), e1]
+    · rw [if_neg h1, if_neg (show ¬(1 = Top.ht (ts s) v ∧ _) from fun h => h1 h.1.symm)]; rfl
+  | i + 2, hi => by
+    show (nd S' (Top.anc S' c (i + 1))).livePar = _
+    rw [anc hc (i + 1) (by omega)]
+    have hP : (ts s).P = s.P := rfl
+    obtain ⟨hal, hah⟩ := C.S.anc_live hc (i + 1) (by omega) (by rw [hP]; omega)
+    have hnN : (nd S' s.nodes.size).livePar = (nd (ts s) v).livePar := by
+      rw [C.livePar, if_neg (by have := C.H.hv; omega), if_pos (Or.inl rfl)]
+    have hnN1 : (nd S' (s.nodes.size + 1)).livePar = (nd (ts s) v).livePar := by
+      rw [C.livePar, if_neg (by have := C.H.hv; omega), if_pos (Or.inr rfl)]
+    by_cases hb : i + 1 = Top.ht (ts s) v ∧ Top.anc (ts s) c (Top.ht (ts s) v) = v
+    · rw [if_pos hb, if_neg (show ¬(i + 2 = Top.ht (ts s) v ∧ Top.anc (ts s) c (Top.ht (ts s) v) = v) from
+        fun h => by have := h.1; have := hb.1; omega)]
+      have hL : (nd (ts s) v).livePar = Top.anc (ts s) c (i + 2) := by
+        rw [← hb.2, ← anc_succ c _ C.h1, show Top.ht (ts s) v + 1 = i + 2 by omega]
+      split
+      · rw [hnN, hL]
+      · rw [hnN1, hL]
+    · rw [if_neg hb]
+      have hav : Top.anc (ts s) c (i + 1) ≠ v := by
+        intro e; apply hb; refine ⟨?_, ?_⟩
+        · rw [← e, hah]
+        · rw [show Top.ht (ts s) v = i + 1 by rw [← e, hah], e]
+      by_cases hkk : Top.ht (ts s) v ≠ 1 ∧ Top.anc (ts s) c (i + 1) ∈ (nd (ts s) v).children
+      · -- the ancestor is a child of `v`
+        have h1v := C.h1
+        have hk1 := hkk.1
+        have hpar : (nd (ts s) (Top.anc (ts s) c (i + 1))).livePar = v := by
+          obtain ⟨-, hp⟩ := (C.S.mem_children C.vl).mp hkk.2
+          rw [par_live (Or.inr hal), if_neg (by omega)] at hp
+          exact hp
+        have hih : i + 2 = Top.ht (ts s) v := by
+          have := ((C.S.mem_children C.vl).mp hkk.2).1; rw [if_neg hkk.1] at this; omega
+        have hav2 : Top.anc (ts s) c (Top.ht (ts s) v) = v := by
+          rw [← hih, anc_succ c _ (by omega), hpar]
+        rw [if_pos ⟨hih, hav2⟩, show Top.ht (ts s) v - 1 = i + 1 by omega]
+        rw [C.livePar, if_neg hav, if_neg (fun h => h.elim (C.nN _ hal.1).1 (C.nN _ hal.1).2)]
+        rcases C.kids_split hkk.2 with ⟨a, b⟩ | ⟨a, b⟩
+        · rw [if_neg (fun h => b h.2), if_pos ⟨hkk.1, a⟩, if_pos a]
+        · rw [if_pos ⟨hkk.1, b⟩, if_neg a]
+      · rw [C.livePar_old hal.1 hav (fun h1 h => hkk ⟨h1, h⟩), ← anc_succ c _ (by omega)]
+        rw [if_neg]
+        rintro ⟨hih, hav2⟩
+        apply hkk
+        have h1' : Top.ht (ts s) v ≠ 1 := by omega
+        refine ⟨h1', (C.S.mem_children C.vl).mpr ⟨by rw [if_neg h1']; exact ⟨hal, by omega⟩, ?_⟩⟩
+        rw [par_live (Or.inr hal), if_neg (by omega), ← anc_succ c _ (by omega), hih, hav2]
+
 end SDCtx
 
 end OM.Proof.Top
