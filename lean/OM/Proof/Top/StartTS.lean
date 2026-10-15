@@ -38,6 +38,7 @@ structure SDCtx (s : Core) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat
   of : (nd (ts s) v).overflowOf = NIL
   W : Wd s.P (ht (ts s) v) < (nd (ts s) v).weight + 2
   hside : sSideO (wiC s v) v = some side
+  cl1 : ∀ c ∈ cl, 1 ≤ c
   look : ∀ x, lookup side x =
     if 2 ≤ ht (ts s) v ∧ x ∈ sEntries (wiC s v) v ∧ (nd (ts s) x).draining = true then
       lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) (nd (ts s) x).t1
@@ -56,6 +57,7 @@ theorem vl : liveN (ts s) v := (sd_live C.pc C.v0 C.I C.lp).1
 theorem vy : v = anc (ts s) j.y (ht (ts s) v) := (sd_live C.pc C.v0 C.I C.lp).2
 theorem h1 : 1 ≤ ht (ts s) v := (sd_ht C.pc C.v0 C.I C.lp).1
 theorem hH : ht (ts s) v < s.P.H := (sd_ht C.pc C.v0 C.I C.lp).2
+theorem hHt : ht (ts s) v < (ts s).P.H := (sd_ht C.pc C.v0 C.I C.lp).2
 theorem up : liveN (ts s) (nd (ts s) v).livePar ∧ ht (ts s) (nd (ts s) v).livePar = ht (ts s) v + 1 ∧
     v ∈ (nd (ts s) (nd (ts s) v).livePar).children := sd_up C.pc C.v0 C.I C.lp
 theorem ch : sCh1 (wiC s v) v side = (nd (ts s) v).children.take (sK (wiC s v) v) ∧

@@ -983,6 +983,72 @@ theorem sh_side : ∀ g, Top.ghostN S' g → ∀ e ∈ Top.order S' g,
       · rw [if_pos ht, if_pos (hiff.mpr ht)]
       · rw [if_neg ht, if_neg (fun h => ht (hiff.mp h))]
 
+theorem sh_pathSize : ∀ c ∈ cl, ((ts (sdS (wiC s v) v side)).path.getX c).size =
+    (ts (sdS (wiC s v) v side)).P.H + 1 := by
+  intro c hc; rw [C.H.path, C.H.P]; exact C.S.pathSize c hc
+
+/-- The path entry at `v`'s height of a chunk below `v` is `v`. -/
+theorem pp_v {c : Nat} (hc : c ∈ cl) (hav : Top.anc (ts s) c (Top.ht (ts s) v) = v) :
+    Top.pp (ts s) c (Top.ht (ts s) v) = v := by
+  rcases C.S.P c hc _ C.h1 (by have := C.hHt; omega) with h | ⟨hg, ht⟩
+  · rw [h, hav]
+  · exfalso
+    rw [hav] at ht
+    obtain ⟨-, -, -, -, h5, h6, -⟩ := C.S.ghost _ hg
+    rcases ht with e | e
+    · rw [← e, show Top.srcOf (ts s) v = NIL from C.of] at h5; exact hg.1.1 h5.symm
+    · rw [← e, show Top.srcOf (ts s) v = NIL from C.of] at h6; exact hg.1.1 h6.symm
+
+theorem sh_P : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ (ts (sdS (wiC s v) v side)).P.H →
+    Top.pp S' c j = Top.anc S' c j ∨ (Top.ghostN S' (Top.pp S' c j) ∧
+      (Top.anc S' c j = (nd S' (Top.pp S' c j)).t1 ∨ Top.anc S' c j = (nd S' (Top.pp S' c j)).t2)) := by
+  intro c hc j hj1 hj
+  have hvlt := C.H.hv
+  rw [C.H.P] at hj
+  rw [C.pp, C.anc hc j hj]
+  by_cases hb : j = Top.ht (ts s) v ∧ Top.anc (ts s) c (Top.ht (ts s) v) = v
+  · rw [if_pos hb, hb.1, C.pp_v hc hb.2]
+    right
+    refine ⟨(C.ghostN v).mpr (Or.inr rfl), ?_⟩
+    rw [C.H.t1, C.H.t2, if_pos rfl, if_pos rfl]
+    split
+    · exact Or.inl rfl
+    · exact Or.inr rfl
+  · rw [if_neg hb]
+    rcases C.S.P c hc j hj1 hj with h | ⟨hg, ht⟩
+    · exact Or.inl h
+    · right
+      have hgv : Top.pp (ts s) c j ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+      have hgn := C.nN _ hg.1
+      refine ⟨(C.ghostN _).mpr (Or.inl hg), ?_⟩
+      rw [C.H.t1, C.H.t2, if_neg hgv, if_neg hgv, if_neg (fun h => h.elim hgn.1 hgn.2),
+        if_neg (fun h => h.elim hgn.1 hgn.2)]
+      exact ht
+
+theorem sh_ends : ∀ u, Top.isN S' u → (nd S' u).first = (rng S' cl u).headD NIL ∧
+    (nd S' u).last = (rng S' cl u).getLastD NIL := by
+  intro u hu
+  have hvlt := C.H.hv
+  rw [C.H.first, C.H.last]
+  rw [C.isN] at hu
+  rcases hu with hu | hu | hu
+  · have hun := C.nN u hu
+    have hnn : ¬(u = s.nodes.size ∨ u = s.nodes.size + 1) := fun h => h.elim hun.1 hun.2
+    rw [if_neg hnn, if_neg hnn]
+    have : rng S' cl u = rng (ts s) cl u := by
+      unfold rng; rw [C.ht u, if_neg hnn]; congr 1; funext c; rw [C.pp]
+    rw [this]; exact C.S.ends u hu
+  all_goals
+    rw [if_pos (by omega), if_pos (by omega)]
+    have : rng S' cl u = [] := by
+      unfold rng; rw [C.ht u, if_pos (by omega)]
+      apply List.filter_eq_nil_iff.mpr
+      intro c hc
+      rw [C.pp]
+      have := C.fresh C.h1 (by have := C.hH; omega) (C.S.pathEnt c hc _ (by have := C.hHt; omega))
+      simp only [decide_eq_true_eq]; omega
+    rw [this]; exact ⟨rfl, rfl⟩
+
 end SDCtx
 
 end OM.Proof.Top
