@@ -28,6 +28,7 @@ structure ShapeT (s : TS) (cl : List Nat) (ord : Nat → List Nat) : Prop where
   ord0 : ord 0 = cl
   ordNodup : ∀ h, (ord h).Nodup
   ordMem : ∀ h, 1 ≤ h → h ≤ s.P.H → ∀ v, v ∈ ord h ↔ isN s v ∧ ht s v = h
+  ordHigh : ∀ h, s.P.H < h → ord h = []
   htN : ∀ v, isN s v → 1 ≤ ht s v ∧ ht s v ≤ s.P.H
   root : ord s.P.H = [s.P.H] ∧ liveN s s.P.H ∧ (nd s s.P.H).livePar = NIL
   pathEnt : ∀ c ∈ cl, ∀ j, j ≤ s.P.H → Ent ord j (pp s c j)

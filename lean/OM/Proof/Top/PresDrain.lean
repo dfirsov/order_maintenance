@@ -275,7 +275,8 @@ theorem Shape.drain_shapeT (tag : Nat) : ShapeT (ts (dsS s v tag)) cl ord := by
     · exact Or.inr (hR h).2
   have inR : ∀ d, d ∈ cl → pp (ts s) d (ht (ts s) v) = v → d ∈ rng (ts s) cl v := fun d hd h => by
     simp only [rng, List.mem_filter, decide_eq_true_eq]; exact ⟨hd, h⟩
-  refine ⟨by rw [hP]; exact S.H3, S.ord0, S.ordNodup, fun h h1 h2 u => ?_, fun u hu => ?_,
+  refine ⟨by rw [hP]; exact S.H3, S.ord0, S.ordNodup, fun h h1 h2 u => ?_,
+    fun h hh => by rw [hP] at hh; exact S.ordHigh h hh, fun u hu => ?_,
     ?_, fun c hc j hj => ?_, fun c hc j hj1 hj => ?_, fun j hj c d hcd => ?_, fun X hX => ?_,
     fun X hX => ?_⟩
   · rw [hP] at h2; rw [T.isN, T.ht]; exact S.ordMem h h1 h2 u
@@ -821,7 +822,7 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
   have Ro := hI.room
   refine ⟨SH, ?_, ?_, ?_⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
-      fun u hu => ?_, fun u hu hu' => ?_⟩
+      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
     · rw [T.liveN] at hu; rw [T.weight, T.pend_fund j w up v k (k + 1), T.tw]; exact Ti.wts u hu
     · rw [T.liveN] at hu; rw [T.livePar] at hp; rw [T.srcOf] at hs
       rw [T.weight, T.ht, T.P]; exact Ti.wA u hu hp hs
@@ -851,6 +852,7 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
       · rw [if_neg (fun h => hf (by have := (T.funded _ u).mp h; unfold funded at this ⊢; exact this))]
         rw [if_neg hf] at this; exact this
     · rw [T.liveN] at hu; rw [T.P] at hu'; rw [T.tw, T.ht, T.P]; exact Ti.wD u hu hu'
+    · rw [T.liveN] at hu; rw [T.srcOf] at hs; rw [T.P]; exact Ti.big u hu hs
   · refine ⟨fun X hX => ?_, fun X hX h1 => ?_, fun X hX h2 => ?_⟩
     · rw [T.isN] at hX; rw [T.labs, T.P]; exact Ro.gaps X hX
     · rw [T.isN] at hX; rw [T.ht] at h1; rw [T.ew, T.P]; exact Ro.pot1 X hX h1

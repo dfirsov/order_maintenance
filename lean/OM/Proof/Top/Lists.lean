@@ -215,6 +215,31 @@ theorem headD_ne_nil' {l : List Nat} (hnil : NIL ∉ l) (hl : l ≠ []) : l.head
 theorem getLastD_ne_nil' {l : List Nat} (hnil : NIL ∉ l) (hl : l ≠ []) : l.getLastD NIL ≠ NIL :=
   fun e => hnil (e ▸ getLastD_mem hl NIL)
 
+/-! ### Erasing an element -/
+
+theorem before_erase {l : List Nat} (hl : l.Nodup) {a b v : Nat} (ha : a ≠ v) (hb : b ≠ v) :
+    Before (l.erase v) a b ↔ Before l a b := by
+  constructor
+  · intro h; exact h.mono (List.erase_sublist)
+  · intro h
+    have hm : ∀ x, x ≠ v → (x ∈ l.erase v ↔ x ∈ l) := fun x hx => List.mem_erase_of_ne hx
+    exact before_of_sublist (List.erase_sublist) hl ((hm a ha).mpr h.mem_left)
+      ((hm b hb).mpr h.mem_right) h
+
+theorem sublist_erase_of_not_mem {l m : List Nat} {v : Nat} (h : l.Sublist m) (hv : v ∉ l) :
+    l.Sublist (m.erase v) := by
+  have := h.erase v
+  rwa [List.erase_of_not_mem hv] at this
+
+theorem infix_erase {l t : List Nat} {v : Nat} (hl : l.Nodup) (h : t <:+: l) (hv : v ∉ t) :
+    t <:+: l.erase v := by
+  obtain ⟨u, w, rfl⟩ := h
+  by_cases hu : v ∈ u
+  · rw [List.append_assoc, List.erase_append_left _ hu]
+    exact ⟨u.erase v, w, by simp⟩
+  · rw [List.append_assoc, List.erase_append_right _ hu, List.erase_append_right _ hv]
+    exact ⟨u, w.erase v, by simp⟩
+
 /-! ### Infix triples -/
 
 theorem before_of_infix2 {l : List Nat} {a b : Nat} (h : [a, b] <:+: l) : Before l a b :=

@@ -40,6 +40,15 @@ def gamd (h : Nat) : Nat := Wd P h + 1 - taud P h
 
 end consts
 
+/-! ### Conditions on the parameters -/
+
+/-- What the top structure's timing and label room need of the parameters (`docs/PROOF.md`
+§4.5.3–4.5.5); `topParams_proof` checks them for the proof parameters. -/
+structure TopParams (P : Params) : Prop where
+  s3 : 3 ≤ P.s
+  /-- A released target fits under the drain threshold (I6, in the form `λ_h ≥ 2 + 2K_h`). -/
+  lamK : ∀ h, 1 ≤ h → 2 + 2 * Kd P h ≤ lamd P h
+
 /-! ### The copy phase -/
 
 /-- One step of the path copy (`jobStep`, `.copy l`), as a state update. -/
@@ -142,6 +151,8 @@ structure Timing (s : TS) (cl : List Nat) (oj : Option Job) : Prop where
     (s.P.s - 2) * (fundOf s cl v - (if funded s oj v then 1 else 0)) ≤ (nd s v).weight
   /-- Fresh targets are heavy (T0), and weights never decrease. -/
   wD : ∀ v, liveN s v → s.P.H < v → lamd s.P (ht s v) ≤ tw s cl v
+  /-- Targets are not chain nodes. -/
+  big : ∀ t, liveN s t → srcOf s t ≠ NIL → s.P.H < t
 
 /-! ### Label room -/
 
