@@ -905,4 +905,247 @@ theorem stage3S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
   · intro r h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15
     rw [hF5 r h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15, hL4 r h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15]
 
+/-! ### Stage 4: the entries learn their new tables -/
+
+def atBody : Stm :=
+  "e" ::= .lrd .table false "w" "j" ;;
+  .ite ("h" ≤ₑ 1) (.lgrow .cin "e" "w" 0) (.lgrow .inTab "e" "w" 0)
+def atS : Stm := "nt" ::= .llen .table "w" ;; .loop "j" "nt" atBody
+
+theorem addTableS_table (h w e : Nat) (s : Core) (u : Nat) :
+    ((addTableS h w e s).nodes.getX u).table = (s.nodes.getX u).table := by
+  unfold addTableS; split
+  · rfl
+  · simp only [getX_modify']; split <;> rfl
+
+theorem addTableS_size (h w e : Nat) (s : Core) : (addTableS h w e s).nodes.size = s.nodes.size := by
+  unfold addTableS; split <;> simp
+
+theorem addTableS_P (h w e : Nat) (s : Core) : (addTableS h w e s).P = s.P := by
+  unfold addTableS; split <;> rfl
+
+/-- How long a list of tables can get during the loop. -/
+def tabsLen (s : Core) (hh e : Nat) : Nat := if hh = 0 then (s.cin.getX e).length else (s.nodes.getX e).inTables.length
+
+theorem tabsLen_addTableS (hh w e u : Nat) (s : Core) :
+    tabsLen (addTableS hh w e s) hh u ≤ tabsLen s hh u + 1 := by
+  unfold tabsLen addTableS
+  by_cases h0 : hh = 0
+  · simp only [h0, if_true]; rw [getX_setX']; split
+    · next e' => subst e'; simp
+    · omega
+  · simp only [h0, if_false]; rw [getX_modify']; split
+    · next e' => obtain ⟨rfl, -⟩ := e'; simp
+    · omega
+
+theorem atS_ok {κ : Caps} {St : Core} {L : Loc} {w hh : Nat} {l : List Nat}
+    (hLw : L "w" = w) (hLh : L "h" = hh) (hw : w < St.nodes.size) (hwt : w < κ.lrec .table)
+    (hkeys : (St.nodes.getX w).table.map (·.1) = l)
+    (hE : ∀ e ∈ l, (hh ≤ 1 → e < κ.lrec .cin) ∧ (1 < hh → e < κ.lrec .inTab ∧ e < St.nodes.size))
+    (hcap : ∀ e ∈ l, tabsLen St (hh - 1) e + l.length ≤ (if hh ≤ 1 then κ.lcap .cin else κ.lcap .inTab)) :
+    ∃ L' c, evalF κ atS St L = .ok (l.foldl (fun s e => addTableS (hh - 1) w e s) St) L' c ∧
+      c ≤ 5 + 40 * l.length ∧ ∀ r, r ≠ "nt" → r ≠ "j" → r ≠ "e" → L' r = L r := by
+  set F := fun (s : Core) (e : Nat) => addTableS (hh - 1) w e s
+  have hfoldT : ∀ (m : List Nat) (s : Core) u, ((m.foldl F s).nodes.getX u).table = (s.nodes.getX u).table := by
+    intro m; induction m with
+    | nil => intro s u; rfl
+    | cons e m ih => intro s u; simp only [List.foldl_cons]; rw [ih, addTableS_table]
+  have hfoldS : ∀ (m : List Nat) (s : Core), (m.foldl F s).nodes.size = s.nodes.size := by
+    intro m; induction m with
+    | nil => intro s; rfl
+    | cons e m ih => intro s; simp only [List.foldl_cons]; rw [ih, addTableS_size]
+  have hln : (St.nodes.getX w).table.length = l.length := by rw [← hkeys, List.length_map]
+  have a1 := evalF_assign_ok (κ := κ) (s := St) (L := L) (x := "nt") (e := .llen .table "w") (v := l.length)
+    (by simp [Exp.ev, hLw, hwt, LK.view, hln])
+  obtain ⟨S', L', c, he, hc, hS', hF, -⟩ := evalF_loop (κ := κ) (x := "j") (n := .var "nt") (b := atBody)
+    (s := St) (L := upd L "nt" l.length) (N := l.length) (by simp [Exp.ev, OM.Machine.State.upd])
+    (fun j S L' => S = (l.take j).foldl F St ∧ (∀ r, r ≠ "nt" → r ≠ "j" → r ≠ "e" → L' r = L r) ∧
+      ∀ u, tabsLen S (hh - 1) u ≤ tabsLen St (hh - 1) u + j) 33
+    ⟨by simp, fun r h1 _ _ => by simp [OM.Machine.State.upd, h1], fun u => by omega⟩
+    (by
+      intro j hj S L1 ⟨hS, hF1, hlen⟩
+      subst hS
+      set S := (l.take j).foldl F St
+      have hwv : LK.view S w .table = (St.nodes.getX w).table := by simp [LK.view, S, hfoldT]
+      have hlj : l[j] ∈ l := List.getElem_mem hj
+      have hkj : (St.nodes.getX w).table[j].1 = l[j] := by
+        subst hkeys; simp
+      set L2 := upd L1 "j" j
+      have h2w : L2 "w" = w := by
+        simp [L2, OM.Machine.State.upd]; rw [hF1 "w" (by decide) (by decide) (by decide), hLw]
+      have h2h : L2 "h" = hh := by
+        simp [L2, OM.Machine.State.upd]; rw [hF1 "h" (by decide) (by decide) (by decide), hLh]
+      have e1 := evalF_assign_ok (κ := κ) (s := S) (L := L2) (x := "e") (e := .lrd .table false "w" "j") (v := l[j])
+        (by simp [Exp.ev, h2w, hwt, hwv, show L2 "j" = j by simp [L2, OM.Machine.State.upd], hln, hj, hkj])
+      set L3 := upd L2 "e" l[j]
+      have h3w : L3 "w" = w := by simp [L3, OM.Machine.State.upd, h2w]
+      have h3h : L3 "h" = hh := by simp [L3, OM.Machine.State.upd, h2h]
+      have h3e : L3 "e" = l[j] := by simp [L3, OM.Machine.State.upd]
+      have hstep : (l.take (j + 1)).foldl F St = F S l[j] := by
+        rw [List.take_succ_eq_append_getElem hj, List.foldl_append]; rfl
+      have hlenj := hlen l[j]
+      have hcj := hcap l[j] hlj
+      by_cases h1 : hh ≤ 1
+      · have h0 : hh - 1 = 0 := by omega
+        have hcl : (LK.view S l[j] .cin).length + 1 ≤ κ.lcap .cin := by
+          simp only [tabsLen, h0, if_true] at hlenj hcj; rw [if_pos h1] at hcj
+          simp [LK.view]; omega
+        have hso := LK.set_ok (κ := κ) (s := S) (i := l[j]) (l := LK.view S l[j] .cin ++ [(w, 0)]) (k := .cin)
+          rfl (by simp [LK.valid, LK.view]) (by simpa using hcl) ((hE _ hlj).1 h1)
+        have hput : LK.put S l[j] (LK.view S l[j] .cin ++ [(w, 0)]) .cin = F S l[j] := by
+          simp [F, addTableS, h0, LK.put, LK.view, Function.comp_def]
+        refine ⟨_, L3, _, evalF_seq_ok2 e1 (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h3h, h1])
+          one_ne_zero (by simp only [evalF, Exp.ev, h3w, h3e, hso, hput]; rfl)), ?_,
+          hstep.symm, fun r h1 h2 h3 => by simp [L3, L2, OM.Machine.State.upd, h2, h3]; exact hF1 r h1 h2 h3, ?_⟩
+        · simp [Exp.cost]
+        · intro u; have := tabsLen_addTableS (hh - 1) w l[j] u S; have := hlen u
+          show tabsLen (addTableS (hh - 1) w l[j] S) (hh - 1) u ≤ _; omega
+      · have h0 : hh - 1 ≠ 0 := by omega
+        have hjS : l[j] < S.nodes.size := by rw [hfoldS]; exact ((hE _ hlj).2 (by omega)).2
+        have hcl : (LK.view S l[j] .inTab).length + 1 ≤ κ.lcap .inTab := by
+          simp only [tabsLen, h0, if_false] at hlenj hcj; rw [if_neg h1] at hcj
+          simp [LK.view]; omega
+        have hso := LK.set_ok (κ := κ) (s := S) (i := l[j]) (l := LK.view S l[j] .inTab ++ [(w, 0)]) (k := .inTab)
+          (by simp [LK.recOk, hjS]) (by simp [LK.valid, LK.view]) (by simpa using hcl) ((hE _ hlj).2 (by omega)).1
+        have hput : LK.put S l[j] (LK.view S l[j] .inTab ++ [(w, 0)]) .inTab = F S l[j] := by
+          simp [F, addTableS, h0, LK.put, LK.view, Function.comp_def]
+        refine ⟨_, L3, _, evalF_seq_ok2 e1 (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h3h]; omega)
+          (by simp only [evalF, Exp.ev, h3w, h3e, hso, hput]; rfl)), ?_,
+          hstep.symm, fun r h1 h2 h3 => by simp [L3, L2, OM.Machine.State.upd, h2, h3]; exact hF1 r h1 h2 h3, ?_⟩
+        · simp [Exp.cost]
+        · intro u; have := tabsLen_addTableS (hh - 1) w l[j] u S; have := hlen u
+          show tabsLen (addTableS (hh - 1) w l[j] S) (hh - 1) u ≤ _; omega)
+  rw [hS', List.take_length] at he
+  refine ⟨L', _, evalF_seq_ok2 a1 he, ?_, hF⟩
+  simp only [Exp.cost] at hc ⊢; omega
+
+theorem addTableS_phi (hh w e v : Nat) (side : List (Nat × Side)) (X : Core) :
+    addTableS hh w e (phiS v side X) = phiS v side (addTableS hh w e X) := by
+  unfold addTableS phiS
+  split
+  · rfl
+  · have hg : ((X.nodes.modify v fun n => { n with side := side }).getX e).inTables = (X.nodes.getX e).inTables := by
+      rw [getX_modify']; split <;> rfl
+    simp only [hg]
+    congr 1
+    by_cases h : e = v
+    · subst h; rw [Array.modify_modify_same, Array.modify_modify_same]; rfl
+    · rw [Array.modify_comm _ (Ne.symm h)]
+
+theorem fold_addTableS_phi (hh w v : Nat) (side : List (Nat × Side)) : ∀ (l : List Nat) (X : Core),
+    l.foldl (fun s e => addTableS hh w e s) (phiS v side X) = phiS v side (l.foldl (fun s e => addTableS hh w e s) X)
+  | [], _ => rfl
+  | e :: l, X => by simp only [List.foldl_cons]; rw [addTableS_phi, fold_addTableS_phi hh w v side l]
+
+theorem fold_tabsLen (hh w u : Nat) : ∀ (l : List Nat) (s : Core),
+    tabsLen (l.foldl (fun s e => addTableS hh w e s) s) hh u ≤ tabsLen s hh u + l.length
+  | [], _ => by simp
+  | e :: l, s => by
+    simp only [List.foldl_cons, List.length_cons]
+    have := fold_tabsLen hh w u l (addTableS hh w e s); have := tabsLen_addTableS hh w e u s; omega
+
+theorem fold_addTableS_table (hh w u : Nat) : ∀ (l : List Nat) (s : Core),
+    ((l.foldl (fun s e => addTableS hh w e s) s).nodes.getX u).table = (s.nodes.getX u).table
+  | [], _ => rfl
+  | e :: l, s => by simp only [List.foldl_cons]; rw [fold_addTableS_table hh w u l, addTableS_table]
+
+theorem fold_addTableS_size (hh w : Nat) : ∀ (l : List Nat) (s : Core),
+    (l.foldl (fun s e => addTableS hh w e s) s).nodes.size = s.nodes.size
+  | [], _ => rfl
+  | e :: l, s => by simp only [List.foldl_cons]; rw [fold_addTableS_size hh w l, addTableS_size]
+
+theorem evenTable_keys (β : Nat) (l : List Nat) : (evenTable β l).map (·.1) = l := by
+  simp only [evenTable, List.map_map, Function.comp_def]
+  rw [show (fun x : Nat × Nat => x.2) = Prod.snd from rfl, List.map_snd_zip (by simp)]
+
+theorem aroundStep_inTables (t : Core) (v : Nat) (ns : Array Node) (T e : Nat) :
+    ((aroundStep t v ns T).getX e).inTables = (ns.getX e).inTables := by
+  simp only [aroundStep, getX_modify']; split <;> rfl
+
+theorem sd4_inTables {t : Core} {v e : Nat} {side : List (Nat × Side)} (he : e < t.nodes.size) :
+    ((phiS v side (sd4 t v side)).nodes.getX e).inTables = (t.nodes.getX e).inTables := by
+  have h1 : ((phiS v side (sd4 t v side)).nodes.getX e).inTables = ((sd2 t v).nodes.getX e).inTables := by
+    simp only [phiS, sd4, getX_modify']
+    split_ifs with h1 h2 h3 <;> first | rfl | (exfalso; omega)
+  have h2 : ∀ (m : List Nat) (ns : Array Node), ((m.foldl (aroundStep t v) ns).getX e).inTables = (ns.getX e).inTables := by
+    intro m; induction m with
+    | nil => intro ns; rfl
+    | cons T m ih => intro ns; simp only [List.foldl_cons]; rw [ih, aroundStep_inTables]
+  rw [h1, ← sdJ_all]; simp only [sdJ]; rw [h2, sd1_getX t v he]
+
+theorem sd4_cin (t : Core) (v : Nat) (side : List (Nat × Side)) : (phiS v side (sd4 t v side)).cin = t.cin := rfl
+
+def stage4S : Stm := "w" ::= .var "v1" ;; atS ;; "w" ::= .var "v2" ;; atS
+
+theorem sd4_table_N (t : Core) (v : Nat) (side : List (Nat × Side)) (hv : v < t.nodes.size) :
+    ((phiS v side (sd4 t v side)).nodes.getX t.nodes.size).table = evenTable t.P.beta (sLeft t v side) := by
+  have hsz : t.nodes.size < (sd2 t v).nodes.size := by rw [← sdJ_all, sdJ_size]; omega
+  rw [phiS_getX_ne (by omega)]
+  simp only [sd4, getX_modify']
+  rw [if_neg (fun h => by omega), if_pos ⟨trivial, hsz⟩]
+
+theorem sd4_table_N1 (t : Core) (v : Nat) (side : List (Nat × Side)) (hv : v < t.nodes.size) :
+    ((phiS v side (sd4 t v side)).nodes.getX (t.nodes.size + 1)).table = evenTable t.P.beta (sRight t v side) := by
+  have hsz : t.nodes.size + 1 < (sd2 t v).nodes.size := by rw [← sdJ_all, sdJ_size]; omega
+  rw [phiS_getX_ne (by omega)]
+  simp only [sd4, getX_modify']
+  split_ifs <;> simp_all <;> omega
+
+theorem stage4S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
+    (hv : v < t.nodes.size) (hK : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
+    (hLv1 : L "v1" = t.nodes.size) (hLv2 : L "v2" = t.nodes.size + 1) (hLh : L "h" = sH t v)
+    (hwt : t.nodes.size + 1 < κ.lrec .table)
+    (hE : ∀ e ∈ (t.nodes.getX v).table.map (·.1), (sH t v ≤ 1 → e < κ.lrec .cin) ∧ (1 < sH t v → e < κ.lrec .inTab))
+    (hcap : ∀ e ∈ (t.nodes.getX v).table.map (·.1), tabsLen t (sH t v - 1) e + 2 * (t.nodes.getX v).table.length ≤
+      (if sH t v ≤ 1 then κ.lcap .cin else κ.lcap .inTab)) :
+    ∃ L' c, evalF κ stage4S (phiS v side (sd4 t v side)) L = .ok (phiS v side (sd6 t v side)) L' c ∧
+      c ≤ 14 + 80 * (t.nodes.getX v).table.length ∧
+      ∀ r, r ≠ "w" → r ≠ "nt" → r ≠ "j" → r ≠ "e" → L' r = L r := by
+  set N := t.nodes.size
+  set o := (t.nodes.getX v).table.map (·.1)
+  set S4 := phiS v side (sd4 t v side)
+  have hS4sz : S4.nodes.size = N + 2 := by simp [S4, phiS, sd4, ← sdJ_all, sdJ_size, N]
+  have hlo : o.length = (t.nodes.getX v).table.length := by simp [o]
+  have hLsub : ∀ e ∈ sLeft t v side, e ∈ o := by
+    intro e he; rw [sLeft_part] at he; exact List.mem_of_mem_filter he
+  have hRsub : ∀ e ∈ sRight t v side, e ∈ o := by
+    intro e he; rw [sRight_part] at he; exact List.mem_of_mem_filter he
+  have hLlen : (sLeft t v side).length ≤ o.length := by rw [sLeft_part]; exact List.length_filter_le _ _
+  have hRlen : (sRight t v side).length ≤ o.length := by rw [sRight_part]; exact List.length_filter_le _ _
+  have htl : ∀ e ∈ o, tabsLen S4 (sH t v - 1) e = tabsLen t (sH t v - 1) e := by
+    intro e he; unfold tabsLen; split
+    · rfl
+    · rw [sd4_inTables (hK e he)]
+  have a1 := evalF_assign_ok (κ := κ) (s := S4) (L := L) (x := "w") (e := .var "v1") (v := N) (by simp [Exp.ev, hLv1])
+  obtain ⟨L2, c2, e2, hc2, hF2⟩ := atS_ok (κ := κ) (St := S4) (L := upd L "w" N) (w := N) (hh := sH t v)
+    (l := sLeft t v side) (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, hLh]) (by omega)
+    (by omega) (by rw [sd4_table_N t v side hv, evenTable_keys])
+    (fun e he => ⟨(hE e (hLsub e he)).1, fun h1 => ⟨(hE e (hLsub e he)).2 h1, by
+      have := hK e (hLsub e he); omega⟩⟩)
+    (fun e he => by rw [htl e (hLsub e he)]; have := hcap e (hLsub e he); split at this <;> split <;> omega)
+  set F1 := (sLeft t v side).foldl (fun s e => addTableS (sH t v - 1) N e s) S4
+  have hfr2 : ∀ r, r ≠ "w" → r ≠ "nt" → r ≠ "j" → r ≠ "e" → L2 r = L r := fun r h1 h2 h3 h4 => by
+    rw [hF2 r h2 h3 h4]; simp [OM.Machine.State.upd, h1]
+  have a3 := evalF_assign_ok (κ := κ) (s := F1) (L := L2) (x := "w") (e := .var "v2") (v := N + 1)
+    (by simp [Exp.ev, hfr2 "v2" (by decide) (by decide) (by decide) (by decide), hLv2])
+  obtain ⟨L4, c4, e4, hc4, hF4⟩ := atS_ok (κ := κ) (St := F1) (L := upd L2 "w" (N + 1)) (w := N + 1)
+    (hh := sH t v) (l := sRight t v side) (by simp [OM.Machine.State.upd])
+    (by simp [OM.Machine.State.upd]; rw [hfr2 "h" (by decide) (by decide) (by decide) (by decide), hLh])
+    (by rw [fold_addTableS_size]; omega) hwt
+    (by rw [fold_addTableS_table, sd4_table_N1 t v side hv, evenTable_keys])
+    (fun e he => ⟨(hE e (hRsub e he)).1, fun h1 => ⟨(hE e (hRsub e he)).2 h1, by
+      rw [fold_addTableS_size]; have := hK e (hRsub e he); omega⟩⟩)
+    (fun e he => by
+      have h1 : tabsLen F1 (sH t v - 1) e ≤ tabsLen S4 (sH t v - 1) e + (sLeft t v side).length :=
+        fold_tabsLen (sH t v - 1) N e (sLeft t v side) S4
+      rw [htl e (hRsub e he)] at h1
+      have := hcap e (hRsub e he); split at this <;> split <;> omega)
+  have hfin : (sRight t v side).foldl (fun s e => addTableS (sH t v - 1) (N + 1) e s) F1 = phiS v side (sd6 t v side) := by
+    simp only [F1, S4, fold_addTableS_phi]; rfl
+  rw [hfin] at e4
+  refine ⟨L4, _, evalF_seq_ok2 a1 (evalF_seq_ok2 e2 (evalF_seq_ok2 a3 e4)), ?_, ?_⟩
+  · simp only [Exp.cost] at hc2 hc4 ⊢; omega
+  · intro r h1 h2 h3 h4
+    rw [hF4 r h2 h3 h4]; simp only [OM.Machine.State.upd, if_neg h1]; exact hfr2 r h1 h2 h3 h4
+
 end OM.Impl
