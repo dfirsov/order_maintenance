@@ -395,4 +395,182 @@ theorem dsLabS_ok {κ : Caps} {s : Core} {L : Loc} {v h y t bl pt tb pv vb : Nat
     simp only [L9, L8, L7, OM.Machine.State.upd, if_neg g, if_neg i, if_neg k, if_neg m]
     exact hL6 r a b c d e f
 
+/-- Two writes to the same node. -/
+theorem evalF_wrN2 {κ : Caps} {s : Core} {L : Loc} {k1 k2 : NF} {i e1 e2 : Exp} {j w1 w2 : Nat}
+    (hi : ∀ S : Core, i.ev κ S L = some j) (he1 : ∀ S : Core, e1.ev κ S L = some w1)
+    (he2 : ∀ S : Core, e2.ev κ S L = some w2) (hj : j < s.nodes.size) (hc : j < κ.tbl .N)
+    (hk1 : k1.ok w1 = true) (hk2 : k2.ok w2 = true) :
+    evalF κ (.wr (.n k1) i e1 ;; .wr (.n k2) i e2) s L =
+      .ok { s with nodes := s.nodes.modify j fun n => NF.set (NF.set n w1 k1) w2 k2 } L
+        (1 + i.cost + e1.cost + (1 + i.cost + e2.cost)) := by
+  have w1' := evalF_wrN_ok (κ := κ) (s := s) (L := L) (k := k1) (i := i) (e := e1) (j := j) (w := w1) (hi _) (he1 _)
+    hj hc hk1
+  have w2' := evalF_wrN_ok (κ := κ) (s := { s with nodes := s.nodes.modify j (NF.set · w1 k1) }) (L := L) (k := k2)
+    (i := i) (e := e2) (j := j) (w := w2) (hi _) (he2 _) (by simp [hj]) hc hk2
+  rw [Array.modify_modify_same] at w2'
+  exact evalF_seq_ok2 w1' w2'
+
+def dsTagS : Stm :=
+  "ty" ::= .rd (.c .tag) "y" ;; .ite ("ty" <ₑ "old") .fail .skip ;;
+  "tg" ::= "ty" - "old" + "new" ;; gstP.call [.var "y", .var "tg"] []
+def dsRangeS : Stm :=
+  .ite (.rd (.n .first) "v" =ₑ .rd (.n .last) "v") (.wr (.n .first) "v" 0 ;; .wr (.n .last) "v" 0)
+    (.ite "lf" (.wr (.n .first) "v" (.rd (.c .next) "y")) (.wr (.n .last) "v" (.rd (.c .prev) "y")))
+def dsTgtS : Stm :=
+  .ite "lf" (.ite (.rd (.n .first) "t" =ₑ 0) (.wr (.n .first) "t" "y") .skip ;; .wr (.n .last) "t" "y")
+            (.ite (.rd (.n .last) "t" =ₑ 0) (.wr (.n .last) "t" "y") .skip ;; .wr (.n .first) "t" "y")
+/-- The writes of a sweep step that moves chunk `y` to target `t` (locals `v h y t lf old new`). -/
+def dsMutS : Stm := dsTagS ;; .pwr "y" "h" "t" ;; dsRangeS ;; dsTgtS
+
+theorem dsMutS_ok {κ : Caps} {s : Core} {L : Loc} {v old new : Nat}
+    (hv : L "v" = v) (hh : L "h" = (s.nodes.getX v).height) (hy : L "y" = dsY s v) (ht : L "t" = dsT s v)
+    (hlf : L "lf" = b2n (decide (goesLeft s v))) (hold : L "old" = old) (hnew : L "new" = new)
+    (hle : old ≤ (s.C.getX (dsY s v)).tag) (hok : OM.Proof.TagOK s (dsY s v) ((s.C.getX (dsY s v)).tag - old + new))
+    (hys : dsY s v < s.C.size) (hyC : dsY s v < κ.tbl .C)
+    (hyP : (s.C.getX (dsY s v)).prev < κ.tbl .C) (hyN : (s.C.getX (dsY s v)).next < κ.tbl .C)
+    (hnp : notPrep s (dsY s v)) (hw : (s.nodes.getX v).height < κ.pw)
+    (hvs : v < s.nodes.size) (hts : dsT s v < s.nodes.size) (hvN : v < κ.tbl .N) (htN : dsT s v < κ.tbl .N)
+    (htv : dsT s v ≠ v) :
+    ∃ L' c, evalF κ dsMutS s L = .ok (dsS s v ((s.C.getX (dsY s v)).tag - old + new)) L' c ∧ c ≤ 150 ∧
+      ∀ r, r ≠ "ty" → r ≠ "tg" → L' r = L r := by
+  set y := dsY s v
+  set t := dsT s v
+  set V := s.nodes.getX v
+  set cy := s.C.getX y
+  set tag := cy.tag - old + new
+  -- the tag
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "ty") (e := .rd (.c .tag) "y") (v := cy.tag)
+    (by simp [Exp.ev, hy, hyC, Fld.cap, Fld.get, CF.get, cy, y])
+  set L1 := upd L "ty" cy.tag
+  have e2 : evalF κ (.ite ("ty" <ₑ "old") .fail .skip) s L1 = .ok s L1 5 := by
+    have : ¬ cy.tag < old := by omega
+    simp [evalF, Exp.ev, L1, OM.Machine.State.upd, hold, OM.Machine.BinOp.eval, this, Exp.cost, Res.addCost]
+  have a3 := evalF_assign_ok (κ := κ) (s := s) (L := L1) (x := "tg") (e := "ty" - "old" + "new") (v := tag)
+    (by simp [Exp.ev, L1, OM.Machine.State.upd, hold, hnew, OM.Machine.BinOp.eval, hle, tag])
+  set L3 := upd L1 "tg" tag
+  have h3 : ∀ r, r ≠ "ty" → r ≠ "tg" → L3 r = L r := fun r h1 h2 => by simp [L3, L1, OM.Machine.State.upd, h1, h2]
+  obtain ⟨Lg, cg, eg, hcg⟩ := gstP_agree (κ := κ) (s := s)
+    (L := OM.Machine.State.setLocs (fun _ => 0) ["c", "t"] [y, tag]) (c := y) (t := tag)
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    hys hyC hyP hyN hok
+  have e4 := evalF_call_ok (q := gstP) (args := [.var "y", .var "tg"]) (ds := []) (L := L3)
+    (by simp [evList, Exp.ev, L3, L1, OM.Machine.State.upd, hy]) eg
+  set s1 : Core := { s with C := s.C.modify y fun C => { C with tag := tag } }
+  have e14 : ∃ c, evalF κ dsTagS s L = .ok s1 L3 c ∧ c ≤ 60 := by
+    refine ⟨_, evalF_seq_ok2 a1 (evalF_seq_ok2 e2 (evalF_seq_ok2 a3 e4)), ?_⟩
+    simp [Exp.cost, costList]; omega
+  obtain ⟨c14, e14, hc14⟩ := e14
+  have h3v : L3 "v" = v := by rw [h3 _ (by decide) (by decide), hv]
+  have h3h : L3 "h" = V.height := by rw [h3 _ (by decide) (by decide), hh]
+  have h3y : L3 "y" = y := by rw [h3 _ (by decide) (by decide), hy]
+  have h3t : L3 "t" = t := by rw [h3 _ (by decide) (by decide), ht]
+  have h3lf : L3 "lf" = b2n (decide (goesLeft s v)) := by rw [h3 _ (by decide) (by decide), hlf]
+  -- the path
+  set s2 : Core := { s1 with path := s1.path.setX y ((s1.path.getX y).setX V.height t) }
+  have e5 : evalF κ (.pwr "y" "h" "t") s1 L3 = .ok s2 L3 7 := by
+    have : notPrep s1 y := hnp
+    simp [evalF, Exp.ev, h3y, h3h, h3t, hyC, hw, this, Exp.cost, s2]
+  have hs2v : s2.nodes = s.nodes := rfl
+  have hs2y : s2.C.getX y = { cy with tag := tag } := by
+    simp only [s2, s1, getX_modify', hys, and_self, if_true]; rfl
+  -- the range of `v`
+  set s3 : Core := if V.first == V.last then
+      { s2 with nodes := s2.nodes.modify v fun n => { n with first := NIL, last := NIL } }
+    else if goesLeft s v then { s2 with nodes := s2.nodes.modify v fun n => { n with first := cy.next } }
+    else { s2 with nodes := s2.nodes.modify v fun n => { n with last := cy.prev } }
+  have e6 : ∃ c6, evalF κ dsRangeS s2 L3 = .ok s3 L3 c6 ∧ c6 ≤ 20 := by
+    by_cases hfl : V.first = V.last
+    · have hfl' : (s.nodes.getX v).first = (s.nodes.getX v).last := hfl
+      have w := evalF_wrN2 (κ := κ) (s := s2) (L := L3) (k1 := .first) (k2 := .last) (i := .var "v") (e1 := (0 : Exp))
+        (e2 := (0 : Exp)) (ev_var_const h3v) (ev_lit_const 0) (ev_lit_const 0) (by rw [hs2v]; exact hvs) hvN rfl rfl
+      have hs3 : s3 = { s2 with nodes := s2.nodes.modify v fun n => NF.set (NF.set n 0 .first) 0 .last } := by
+        simp only [s3, hfl, beq_self_eq_true, if_true]; rfl
+      rw [← hs3] at w
+      exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h3v, hvN, Fld.cap, Fld.get, NF.get,
+        hs2v, hfl']) one_ne_zero w, by simp [Exp.cost]⟩
+    · have hfl' : ¬ (s.nodes.getX v).first = (s.nodes.getX v).last := hfl
+      have hc : (.rd (.n .first) "v" =ₑ .rd (.n .last) "v" : Exp).ev κ s2 L3 = some 0 := by
+        simp [Exp.ev, OM.Machine.BinOp.eval, h3v, hvN, Fld.cap, Fld.get, NF.get, hs2v, hfl']
+      by_cases hl : goesLeft s v
+      · have w := evalF_wrN_ok (κ := κ) (s := s2) (L := L3) (k := .first) (i := .var "v") (e := .rd (.c .next) "y")
+          (j := v) (w := cy.next) (by simp [Exp.ev, h3v]) (by simp [Exp.ev, h3y, hyC, Fld.cap, Fld.get, CF.get, hs2y])
+          (by rw [hs2v]; exact hvs) hvN rfl
+        have hs3 : s3 = { s2 with nodes := s2.nodes.modify v (NF.set · cy.next .first) } := by
+          simp only [s3, if_neg (show ¬ (V.first == V.last) = true by simpa using hfl), if_pos hl]; rfl
+        rw [← hs3] at w
+        exact ⟨_, evalF_ite_f hc (evalF_ite_t (v := 1) (by simp [Exp.ev, h3lf, hl, b2n]) one_ne_zero w),
+          by simp [Exp.cost]⟩
+      · have w := evalF_wrN_ok (κ := κ) (s := s2) (L := L3) (k := .last) (i := .var "v") (e := .rd (.c .prev) "y")
+          (j := v) (w := cy.prev) (by simp [Exp.ev, h3v]) (by simp [Exp.ev, h3y, hyC, Fld.cap, Fld.get, CF.get, hs2y])
+          (by rw [hs2v]; exact hvs) hvN rfl
+        have hs3 : s3 = { s2 with nodes := s2.nodes.modify v (NF.set · cy.prev .last) } := by
+          simp only [s3, if_neg (show ¬ (V.first == V.last) = true by simpa using hfl), if_neg hl]; rfl
+        rw [← hs3] at w
+        exact ⟨_, evalF_ite_f hc (evalF_ite_f (by simp [Exp.ev, h3lf, hl, b2n]) w), by simp [Exp.cost]⟩
+  obtain ⟨c6, e6, hc6⟩ := e6
+  have hs3t : s3.nodes.getX t = s.nodes.getX t := by
+    simp only [s3]; split
+    · simp only [getX_modify']; rw [if_neg (fun h => htv h.1)]
+    · split <;> simp only [getX_modify'] <;> rw [if_neg (fun h => htv h.1)]
+  have hs3n : s3.nodes.size = s.nodes.size := by simp only [s3]; split; simp [s2, s1]; split <;> simp [s2, s1]
+  -- the target
+  set T := s.nodes.getX t
+  have e7 : ∃ c7, evalF κ dsTgtS s3 L3 = .ok (dsS s v tag) L3 c7 ∧ c7 ≤ 30 := by
+    by_cases hl : goesLeft s v
+    · set s4 : Core := if T.first == NIL then { s3 with nodes := s3.nodes.modify t fun n => { n with first := y } } else s3
+      have hfin : dsS s v tag = { s4 with nodes := s4.nodes.modify t fun n => { n with last := y } } := by
+        simp only [dsS, s4, s3, if_pos hl]; rfl
+      have e8 : ∃ c8, evalF κ (.ite (.rd (.n .first) "t" =ₑ 0) (.wr (.n .first) "t" "y") .skip) s3 L3 = .ok s4 L3 c8 ∧
+          c8 ≤ 12 := by
+        by_cases hT : T.first = 0
+        · have hT' : (s.nodes.getX t).first = 0 := hT
+          have w := evalF_wrN_ok (κ := κ) (s := s3) (L := L3) (k := .first) (i := .var "t") (e := .var "y")
+            (j := t) (w := y) (by simp [Exp.ev, h3t]) (by simp [Exp.ev, h3y]) (by rw [hs3n]; exact hts) htN rfl
+          have hs4 : s4 = { s3 with nodes := s3.nodes.modify t (NF.set · y .first) } := by
+            simp only [s4, show (T.first == NIL) = true from beq_iff_eq.mpr hT, if_true]; rfl
+          rw [← hs4] at w
+          exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h3t, htN, Fld.cap, Fld.get, NF.get,
+            hs3t, hT]) one_ne_zero w, by simp [Exp.cost]⟩
+        · have hT' : ¬ (s.nodes.getX t).first = 0 := hT
+          have hs4 : s4 = s3 := by
+            simp only [s4, show (T.first == NIL) = false from beq_eq_false_iff_ne.mpr hT, Bool.false_eq_true, if_false]
+          rw [hs4]
+          exact ⟨_, evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h3t, htN, Fld.cap, Fld.get, NF.get,
+            hs3t, hT]) evalF_skip, by simp [Exp.cost]⟩
+      obtain ⟨c8, e8, hc8⟩ := e8
+      have hs4n : s4.nodes.size = s.nodes.size := by simp only [s4]; split <;> simp [hs3n]
+      have w := evalF_wrN_ok (κ := κ) (s := s4) (L := L3) (k := .last) (i := .var "t") (e := .var "y")
+        (j := t) (w := y) (by simp [Exp.ev, h3t]) (by simp [Exp.ev, h3y]) (by rw [hs4n]; exact hts) htN rfl
+      rw [hfin]
+      exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, h3lf, hl, b2n]) one_ne_zero (evalF_seq_ok2 e8 w),
+        by simp [Exp.cost]; omega⟩
+    · set s4 : Core := if T.last == NIL then { s3 with nodes := s3.nodes.modify t fun n => { n with last := y } } else s3
+      have hfin : dsS s v tag = { s4 with nodes := s4.nodes.modify t fun n => { n with first := y } } := by
+        simp only [dsS, s4, s3, if_neg hl]; rfl
+      have e8 : ∃ c8, evalF κ (.ite (.rd (.n .last) "t" =ₑ 0) (.wr (.n .last) "t" "y") .skip) s3 L3 = .ok s4 L3 c8 ∧
+          c8 ≤ 12 := by
+        by_cases hT : T.last = 0
+        · have hT' : (s.nodes.getX t).last = 0 := hT
+          have w := evalF_wrN_ok (κ := κ) (s := s3) (L := L3) (k := .last) (i := .var "t") (e := .var "y")
+            (j := t) (w := y) (by simp [Exp.ev, h3t]) (by simp [Exp.ev, h3y]) (by rw [hs3n]; exact hts) htN rfl
+          have hs4 : s4 = { s3 with nodes := s3.nodes.modify t (NF.set · y .last) } := by
+            simp only [s4, show (T.last == NIL) = true from beq_iff_eq.mpr hT, if_true]; rfl
+          rw [← hs4] at w
+          exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h3t, htN, Fld.cap, Fld.get, NF.get,
+            hs3t, hT]) one_ne_zero w, by simp [Exp.cost]⟩
+        · have hT' : ¬ (s.nodes.getX t).last = 0 := hT
+          have hs4 : s4 = s3 := by
+            simp only [s4, show (T.last == NIL) = false from beq_eq_false_iff_ne.mpr hT, Bool.false_eq_true, if_false]
+          rw [hs4]
+          exact ⟨_, evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h3t, htN, Fld.cap, Fld.get, NF.get,
+            hs3t, hT]) evalF_skip, by simp [Exp.cost]⟩
+      obtain ⟨c8, e8, hc8⟩ := e8
+      have hs4n : s4.nodes.size = s.nodes.size := by simp only [s4]; split <;> simp [hs3n]
+      have w := evalF_wrN_ok (κ := κ) (s := s4) (L := L3) (k := .first) (i := .var "t") (e := .var "y")
+        (j := t) (w := y) (by simp [Exp.ev, h3t]) (by simp [Exp.ev, h3y]) (by rw [hs4n]; exact hts) htN rfl
+      rw [hfin]
+      exact ⟨_, evalF_ite_f (by simp [Exp.ev, h3lf, hl, b2n]) (evalF_seq_ok2 e8 w), by simp [Exp.cost]; omega⟩
+  obtain ⟨c7, e7, hc7⟩ := e7
+  exact ⟨L3, _, evalF_seq_ok2 e14 (evalF_seq_ok2 e5 (evalF_seq_ok2 e6 e7)), by omega, h3⟩
+
 end OM.Impl
