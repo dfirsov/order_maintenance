@@ -197,4 +197,150 @@ theorem linkGroupPairS_agree (κ : Caps) (σ : Core) (L : Loc) {g gl gr labL lab
   simp only [Exp.cost, Exp.gF, Exp.cF] at hn2 hn4 hn5 hn7 hn8 ⊢
   omega
 
+/-! ### `unlinkGroup` -/
+
+def ulCE : Exp := ("cf" =ₑ "g") &&ₑ ("cl" =ₑ "g")
+def ulG : Stm := .wgF .dead "g" 1 ;; .wgF .next "g" 0 ;; .wgF .prev "g" 0
+/-- `unlinkGroup`: unlink `g` from the group list and its chunk, and free it (local `g`). -/
+def unlinkGroupS : Stm :=
+  "gp" ::= .gF .prev "g" ;; "gn" ::= .gF .next "g" ;; "c" ::= .gF .chk "g" ;;
+  .ite (!ₑ ("gp" =ₑ 0)) (.wgF .next "gp" "gn") .skip ;;
+  .ite (!ₑ ("gn" =ₑ 0)) (.wgF .prev "gn" "gp") .skip ;;
+  ulG ;;
+  "cf" ::= .cF .first "c" ;; "cl" ::= .cF .last "c" ;;
+  .ite ulCE (.wcF .first "c" 0 ;; .wcF .last "c" 0)
+    (.ite ("cf" =ₑ "g") (.wcF .first "c" "gn") (.ite ("cl" =ₑ "g") (.wcF .last "c" "gp") .skip)) ;;
+  .ite ("gp" =ₑ 0) (.wsc .firstGroup "gn") .skip ;;
+  .lgrow .freeG 0 "g" 0
+
+theorem unlinkGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g)
+    (hgG : g < σ.Gs.size) (hpG : (σ.Gs.getX g).prev < σ.Gs.size) (hnG : (σ.Gs.getX g).next < σ.Gs.size)
+    (hcC : (σ.Gs.getX g).chk < σ.C.size) (hG : σ.Gs.size ≤ κ.tbl .G) (hC : σ.C.size ≤ κ.tbl .C)
+    (hF : σ.freeG.length + 1 ≤ κ.lcap .freeG) (hF0 : 0 < κ.lrec .freeG) :
+    ∃ L' n, evalF κ unlinkGroupS σ L = .ok (unlinkGroup σ g) L' n ∧ n ≤ 150 := by
+  set G := σ.Gs.getX g
+  set c := G.chk
+  set C := σ.C.getX c
+  have hgT : g < κ.tbl .G := by omega
+  have hcT : c < κ.tbl .C := by omega
+  have e1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "gp") (e := .gF .prev "g") (v := G.prev)
+    (by simp [Exp.gF, Exp.ev, hg, Fld.cap, Fld.get, GF.get, G, hgT])
+  have e2 := evalF_assign_ok (κ := κ) (s := σ) (L := upd L "gp" G.prev) (x := "gn") (e := .gF .next "g") (v := G.next)
+    (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, hg, Fld.cap, Fld.get, GF.get, G, hgT])
+  have e3 := evalF_assign_ok (κ := κ) (s := σ) (L := upd (upd L "gp" G.prev) "gn" G.next) (x := "c")
+    (e := .gF .chk "g") (v := c) (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, hg, Fld.cap, Fld.get, GF.get, c, G, hgT])
+  set L3 := upd (upd (upd L "gp" G.prev) "gn" G.next) "c" c
+  have rg : L3 "g" = g := by simp [L3, OM.Machine.State.upd, hg]
+  have rgp : L3 "gp" = G.prev := by simp [L3, OM.Machine.State.upd]
+  have rgn : L3 "gn" = G.next := by simp [L3, OM.Machine.State.upd]
+  have rc : L3 "c" = c := by simp [L3, OM.Machine.State.upd]
+  -- the neighbours
+  set A1 := if G.prev != NIL then σ.Gs.modify G.prev (fun X => { X with next := G.next }) else σ.Gs
+  obtain ⟨n4, b4, hn4⟩ := ite_skip_ok (κ := κ) (c := !ₑ ("gp" =ₑ 0)) (t := .wgF .next "gp" "gn")
+    (s := σ) (s' := { σ with Gs := A1 }) (L := L3) (ct := 3) (G.prev != NIL)
+    (by by_cases h : G.prev = 0 <;> simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.UnOp.eval, rgp, h, NIL])
+    (fun hb => by
+      simp only [A1, hb, if_true, Stm.wgF]
+      exact evalF_wrG_ok (by simp [Exp.ev, rgp]) (by simp [Exp.ev, rgn]) hpG (by omega) rfl)
+    (fun hb => by simp [A1, hb])
+  have hA1 : A1.size = σ.Gs.size := by simp only [A1]; split <;> simp
+  set A2 := if G.next != NIL then A1.modify G.next (fun X => { X with prev := G.prev }) else A1
+  obtain ⟨n5, b5, hn5⟩ := ite_skip_ok (κ := κ) (c := !ₑ ("gn" =ₑ 0)) (t := .wgF .prev "gn" "gp")
+    (s := { σ with Gs := A1 }) (s' := { σ with Gs := A2 }) (L := L3) (ct := 3) (G.next != NIL)
+    (by by_cases h : G.next = 0 <;> simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.UnOp.eval, rgn, h, NIL])
+    (fun hb => by
+      simp only [A2, hb, if_true, Stm.wgF]
+      exact evalF_wrG_ok (by simp [Exp.ev, rgn]) (by simp [Exp.ev, rgp]) (by simp [hA1]; exact hnG) (by omega) rfl)
+    (fun hb => by simp [A2, hb])
+  have hA2 : A2.size = σ.Gs.size := by simp only [A2]; split <;> simp [hA1]
+  -- `g` itself
+  set A3 := A2.modify g fun X => { X with alive := false, next := NIL, prev := NIL }
+  have b6 : evalF κ ulG { σ with Gs := A2 } L3 = .ok { σ with Gs := A3 } L3 9 := by
+    simp only [ulG, Stm.wgF]
+    have hv : ∀ s' : Core, (Exp.var "g").ev κ s' L3 = some g := fun _ => by simp [Exp.ev, rg]
+    rw [evalF_seq_ok2 (evalF_wrG_ok (hv _) rfl (by simp [hA2, hgG]) hgT rfl)
+      (evalF_seq_ok2 (evalF_wrG_ok (hv _) rfl (by simp [hA2, hgG]) hgT rfl)
+        (evalF_wrG_ok (hv _) rfl (by simp [hA2, hgG]) hgT rfl))]
+    simp only [Array.modify_modify_same, Function.comp_def, Exp.cost]
+    rfl
+  -- the chunk
+  have ecf := evalF_assign_ok (κ := κ) (s := { σ with Gs := A3 }) (L := L3) (x := "cf") (e := .cF .first "c")
+    (v := C.first) (by simp [Exp.cF, Exp.ev, rc, hcT, Fld.cap, Fld.get, CF.get, C])
+  have ecl := evalF_assign_ok (κ := κ) (s := { σ with Gs := A3 }) (L := upd L3 "cf" C.first) (x := "cl")
+    (e := .cF .last "c") (v := C.last) (by simp [Exp.cF, Exp.ev, OM.Machine.State.upd, rc, hcT, Fld.cap, Fld.get, CF.get, C])
+  set L5 := upd (upd L3 "cf" C.first) "cl" C.last
+  have r5 : ∀ x, x ≠ "cf" → x ≠ "cl" → L5 x = L3 x := fun x h1 h2 => by simp [L5, OM.Machine.State.upd, h1, h2]
+  set C' := if C.first == g && C.last == g then σ.C.modify c (fun X => { X with first := NIL, last := NIL })
+      else if C.first == g then σ.C.modify c (fun X => { X with first := G.next })
+      else if C.last == g then σ.C.modify c (fun X => { X with last := G.prev })
+      else σ.C
+  have hcv : ∀ s' : Core, (Exp.var "c").ev κ s' L5 = some c := fun _ => by
+    simp [Exp.ev, r5 "c" (by decide) (by decide), rc]
+  have b7 : ∃ n7, evalF κ (.ite ulCE (.wcF .first "c" 0 ;; .wcF .last "c" 0)
+      (.ite ("cf" =ₑ "g") (.wcF .first "c" "gn") (.ite ("cl" =ₑ "g") (.wcF .last "c" "gp") .skip)))
+      { σ with Gs := A3 } L5 = .ok { σ with Gs := A3, C := C' } L5 n7 ∧ n7 ≤ 30 := by
+    have h5f : L5 "cf" = C.first := by simp [L5, OM.Machine.State.upd]
+    have h5l : L5 "cl" = C.last := by simp [L5, OM.Machine.State.upd]
+    have h5g : L5 "g" = g := by rw [r5 "g" (by decide) (by decide), rg]
+    have h5p : L5 "gp" = G.prev := by rw [r5 "gp" (by decide) (by decide), rgp]
+    have h5n : L5 "gn" = G.next := by rw [r5 "gn" (by decide) (by decide), rgn]
+    simp only [Stm.wcF]
+    have hcs : (({ σ with Gs := A3 } : Core)).C.size = σ.C.size := rfl
+    by_cases hf : C.first = g <;> by_cases hl : C.last = g
+    · have hC' : C' = (σ.C.modify c (CF.set · 0 .first)).modify c (CF.set · 0 .last) := by
+        rw [Array.modify_modify_same]; simp [C', hf, hl]; rfl
+      have w1 := evalF_wrC_ok (κ := κ) (s := { σ with Gs := A3 }) (L := L5) (k := .first) (e := (0 : Exp)) (w := 0)
+        (hcv _) rfl hcC hcT rfl
+      have w2 := evalF_wrC_ok (κ := κ) (s := { σ with Gs := A3, C := σ.C.modify c (CF.set · 0 .first) }) (L := L5)
+        (k := .last) (e := (0 : Exp)) (w := 0) (hcv _) rfl (by simp [hcC]) hcT rfl
+      rw [hC']
+      exact ⟨_, evalF_ite_t (v := 1) (by simp [ulCE, Exp.ev, OM.Machine.BinOp.eval, h5f, h5l, h5g, hf, hl])
+        one_ne_zero (evalF_seq_ok2 w1 w2), by simp [Exp.cost, ulCE]⟩
+    · have hC' : C' = σ.C.modify c (CF.set · G.next .first) := by simp [C', hf, hl]; rfl
+      have w1 := evalF_wrC_ok (κ := κ) (s := { σ with Gs := A3 }) (L := L5) (k := .first) (e := .var "gn")
+        (w := G.next) (hcv _) (by simp [Exp.ev, h5n]) hcC hcT rfl
+      rw [hC']
+      exact ⟨_, evalF_ite_f (by simp [ulCE, Exp.ev, OM.Machine.BinOp.eval, h5f, h5l, h5g, hf, hl])
+        (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h5f, h5g, hf]) one_ne_zero w1),
+        by simp [Exp.cost, ulCE]⟩
+    · have hC' : C' = σ.C.modify c (CF.set · G.prev .last) := by simp [C', hf, hl]; rfl
+      have w1 := evalF_wrC_ok (κ := κ) (s := { σ with Gs := A3 }) (L := L5) (k := .last) (e := .var "gp")
+        (w := G.prev) (hcv _) (by simp [Exp.ev, h5p]) hcC hcT rfl
+      rw [hC']
+      exact ⟨_, evalF_ite_f (by simp [ulCE, Exp.ev, OM.Machine.BinOp.eval, h5f, h5l, h5g, hf, hl])
+        (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h5f, h5g, hf])
+          (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h5l, h5g, hl]) one_ne_zero w1)),
+        by simp [Exp.cost, ulCE]⟩
+    · have hC' : C' = σ.C := by simp [C', hf, hl]
+      rw [hC']
+      exact ⟨_, evalF_ite_f (by simp [ulCE, Exp.ev, OM.Machine.BinOp.eval, h5f, h5l, h5g, hf, hl])
+        (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h5f, h5g, hf])
+          (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, h5l, h5g, hl]) evalF_skip)),
+        by simp [Exp.cost, ulCE]⟩
+  obtain ⟨n7, b7, hn7⟩ := b7
+  set fg := if G.prev != NIL then σ.firstGroup else G.next
+  obtain ⟨n8, b8, hn8⟩ := ite_skip_ok (κ := κ) (c := "gp" =ₑ 0) (t := .wsc .firstGroup "gn")
+    (s := { σ with Gs := A3, C := C' }) (s' := { σ with Gs := A3, C := C', firstGroup := fg }) (L := L5) (ct := 3)
+    (G.prev == NIL)
+    (by simp [Exp.ev, OM.Machine.BinOp.eval, r5 "gp" (by decide) (by decide), rgp, NIL])
+    (fun hb => by
+      have hb' : G.prev = 0 := by simpa [NIL] using hb
+      simp only [fg, hb', NIL, bne_self_eq_false, Bool.false_eq_true, if_false, Stm.wsc]
+      exact evalF_wrS_ok (κ := κ) (L := L5) (k := .firstGroup) (e := .var "gn") (w := G.next)
+        (by simp [Exp.ev, r5 "gn" (by decide) (by decide), rgn]) rfl)
+    (fun hb => by
+      have hb' : (G.prev != NIL) = true := by simpa [NIL] using hb
+      simp only [fg]; rw [if_pos hb'])
+  set S8 : Core := { σ with Gs := A3, C := C', firstGroup := fg }
+  have hso : LK.set κ S8 0 (LK.view S8 0 .freeG ++ [(g, 0)]) .freeG =
+      some { S8 with freeG := g :: σ.freeG } := by
+    rw [LK.set_ok (by simp [LK.recOk]) (by simp [LK.valid, LK.view]) (by simp [LK.view, S8]; omega) hF0]
+    simp [LK.put, LK.view, S8, Function.comp_def]
+  have b9 : evalF κ (.lgrow .freeG 0 "g" 0) S8 L5 = .ok { S8 with freeG := g :: σ.freeG } L5 22 := by
+    simp only [evalF, Exp.ev, Exp.ofNat_def, r5 "g" (by decide) (by decide), rg, hso, Exp.cost]
+  refine ⟨L5, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 b4 (evalF_seq_ok2 b5
+    (evalF_seq_ok2 b6 (evalF_seq_ok2 ecf (evalF_seq_ok2 ecl (evalF_seq_ok2 b7 (evalF_seq_ok2 b8 b9))))))))), ?_⟩
+  simp only [Exp.cost, Exp.gF, Exp.cF] at hn4 hn5 hn8 ⊢
+  omega
+
 end OM.Impl
