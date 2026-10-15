@@ -87,4 +87,63 @@ theorem insertAroundIn_run {s : Core} {e n1 n2 T a b : Nat} {A Bs : List (Nat ×
     simp only [Array.getElem_modify]
     split <;> rfl
 
+theorem foldl_ext {α β : Type} {f g : β → α → β} :
+    ∀ (l : List α) (init : β), (∀ x ∈ l, ∀ acc, f acc x = g acc x) → l.foldl f init = l.foldl g init
+  | [], _, _ => rfl
+  | x :: t, init, h => by
+    simp only [List.foldl_cons]
+    rw [h x (by simp) init]
+    exact foldl_ext t _ fun y hy acc => h y (List.mem_cons_of_mem _ hy) acc
+
+/-- `aroundTab`, computed from the table itself. -/
+def aroundT (tab : List (Nat × Nat)) (e n1 n2 a b : Nat) : List (Nat × Nat) :=
+  let i := (tab.findIdx? (·.1 == e)).getD 0
+  (tab.insertIdx (i + 1) (n2, b)).insertIdx i (n1, a)
+
+theorem aroundT_eq {A Bs : List (Nat × Nat)} {e le n1 n2 a b : Nat} (hA : e ∉ A.map (·.1)) :
+    aroundT (A ++ (e, le) :: Bs) e n1 n2 a b = aroundTab A Bs e le n1 n2 a b := by
+  unfold aroundT aroundTab
+  simp only [findIdx_split hA, Option.getD_some]
+  rw [insertIdx_len1, insertIdx_len]
+
+/-- The update `insertAroundIn` makes to table `T`. -/
+def aroundF (s : Core) (e n1 n2 : Nat) (f : Nat → Nat × Nat) (T : Nat) : Node → Node :=
+  setTS (aroundT (s.nodes.getX T).table e n1 n2 (f T).1 (f T).2) (sideAround (s.nodes.getX T) e n1 n2)
+
+/-- Entry `e` is in table `T`, once (as the table's keys are distinct). -/
+def AroundOK (s : Core) (e T : Nat) : Prop :=
+  ∃ A le Bs, (s.nodes.getX T).table = A ++ (e, le) :: Bs ∧ e ∉ A.map (·.1) ∧
+    ((s.nodes.getX T).draining = true → (lookup (s.nodes.getX T).side e).isSome)
+
+/-- **Insertions around `e` in a list of distinct tables.** -/
+theorem forM_around_run (e n1 n2 : Nat) (f : Nat → Nat × Nat) (hne : n1 ≠ e) :
+    ∀ (tbs : List Nat) (s : Core), tbs.Nodup → (∀ T ∈ tbs, AroundOK s e T) →
+      ((tbs.map fun T => (T, f T)).forM (insertAroundIn e n1 n2)).run s =
+        .ok ⟨⟩ { s with nodes := tbs.foldl (fun ns T => ns.modify T (aroundF s e n1 n2 f T)) s.nodes }
+  | [], s, _, _ => rfl
+  | T :: rest, s, hnd, hok => by
+    have hT := List.nodup_cons.mp hnd
+    obtain ⟨A, le, Bs, htab, hA, hside⟩ := hok T (by simp)
+    show (do insertAroundIn e n1 n2 (T, f T); (rest.map fun T => (T, f T)).forM (insertAroundIn e n1 n2)).run s = _
+    rw [run_bind, insertAroundIn_run htab hA hne hside]
+    simp only
+    set s1 : Core := { s with nodes := s.nodes.modify T (setTS (aroundTab A Bs e le n1 n2 (f T).1 (f T).2) (sideAround (s.nodes.getX T) e n1 n2)) } with hs1
+    have hsame : ∀ T', T' ≠ T → s1.nodes.getX T' = s.nodes.getX T' := fun T' h => by
+      rw [hs1]; show (s.nodes.modify T _).getX T' = _; rw [Array.getX_modify, if_neg (fun h' => h h'.1.symm)]
+    have hok1 : ∀ T' ∈ rest, AroundOK s1 e T' := fun T' hT' => by
+      have hne' : T' ≠ T := fun h => hT.1 (h ▸ hT')
+      unfold AroundOK; rw [hsame T' hne']; exact hok T' (by simp [hT'])
+    rw [forM_around_run e n1 n2 f hne rest s1 hT.2 hok1]
+    congr 1
+    simp only [hs1, List.foldl_cons]
+    have hTF : aroundF s e n1 n2 f T = setTS (aroundTab A Bs e le n1 n2 (f T).1 (f T).2)
+        (sideAround (s.nodes.getX T) e n1 n2) := by
+      unfold aroundF; rw [htab, aroundT_eq hA]
+    rw [hTF]
+    congr 1
+    apply foldl_ext
+    intro T' hT' acc
+    have hne' : T' ≠ T := fun h => hT.1 (h ▸ hT')
+    unfold aroundF; rw [hsame T' hne']
+
 end OM.Proof.Top
