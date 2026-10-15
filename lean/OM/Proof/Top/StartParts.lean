@@ -253,6 +253,16 @@ theorem sp_side : ∃ side, sSideO (wiC s v) v = some side ∧ ∀ x, lookup sid
   · rw [if_neg (by omega)]
     exact ⟨_, rfl, fun x => by rw [if_neg (fun h => h2 h.1)]⟩
 
+theorem sw_entries {e : Nat} : e ∈ sEntries (wiC s v) v ↔ e ∈ order (ts s) v ∧
+    (ht (ts s) v = 1 ∨ e ∈ (nd (ts s) v).children ∨ (nd (ts s) e).first ≠ NIL) := by
+  unfold sEntries drainEntries
+  rw [show ((wiC s v).nodes.getX v).order = order (ts s) v from (wiC_sameTree s v).order v,
+    show ((wiC s v).nodes.getX v).height = ht (ts s) v from (wiC_sameTree s v).height v,
+    show ((wiC s v).nodes.getX v).children = (nd (ts s) v).children from (wiC_sameTree s v).children v,
+    List.mem_filter]
+  simp only [Bool.or_eq_true, beq_iff_eq, List.contains_iff_mem, bne_iff_ne, ne_eq,
+    show ((wiC s v).nodes.getX e).first = (nd (ts s) e).first from wiC_first s v e, or_assoc]
+
 section side
 variable {side : List (Nat × Side)} (hside : sSideO (wiC s v) v = some side)
   (hlook : ∀ x, lookup side x =
@@ -384,6 +394,113 @@ theorem sw_ch : sCh1 (wiC s v) v side = (nd (ts s) v).children.take (sK (wiC s v
     rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook he]; split <;> simp_all
   · rw [← f2]; apply List.filter_congr; intro e he
     rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook he]; split <;> simp_all
+
+/-- **The left part**: the children before the boundary, and the ghosts with a range between them. -/
+theorem sw_left {e : Nat} : e ∈ sLeft (wiC s v) v side ↔
+    e ∈ (nd (ts s) v).children.take (sK (wiC s v) v) ∨
+      (2 ≤ ht (ts s) v ∧ e ∈ order (ts s) v ∧ (nd (ts s) e).draining = true ∧ (nd (ts s) e).first ≠ NIL ∧
+        (nd (ts s) e).t1 ∈ (nd (ts s) v).children.take (sK (wiC s v) v)) := by
+  have hsub := sp_kids_sub hpc hv0 hI hlp hTP hof hW
+  obtain ⟨h1, -⟩ := sd_ht hpc hv0 hI hlp
+  unfold sLeft
+  rw [List.mem_filter, sw_entries hpc hv0 hI hlp hTP hof hW]
+  simp only [beq_iff_eq]
+  constructor
+  · rintro ⟨⟨hm, hcase⟩, hsd⟩
+    by_cases hd : 2 ≤ ht (ts s) v ∧ (nd (ts s) e).draining = true
+    · right
+      rw [sw_ghost hpc hv0 hI hlp hTP hof hW hlook hd.1 hm hd.2] at hsd
+      obtain ⟨ht1, -⟩ := sp_ghost hpc hv0 hI hlp hTP hof hW hd.1 hm hd.2
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook ht1] at hsd
+      refine ⟨hd.1, hm, hd.2, ?_, ?_⟩
+      · rcases hcase with h | h | h
+        · omega
+        · exfalso
+          obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+          obtain ⟨-, -, hk⟩ := (hI.shape).kids v hvl
+          have := (hk e h).2 hd.1; rw [this.2] at hd; exact absurd hd.2 (by simp)
+        · exact h
+      · split at hsd
+        · assumption
+        · exact absurd hsd (by simp)
+    · left
+      have hk : e ∈ (nd (ts s) v).children := by
+        by_cases h2 : 2 ≤ ht (ts s) v
+        · exact ((sp_entry hpc hv0 hI hlp hTP hof hW hm).2 h2).2.2 (by simpa using fun h => hd ⟨h2, h⟩)
+        · exact (sp_entry hpc hv0 hI hlp hTP hof hW hm).1 (by omega)
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook hk] at hsd
+      split at hsd
+      · assumption
+      · exact absurd hsd (by simp)
+  · rintro (h | ⟨h2, hm, hd, hf, ht1⟩)
+    · have hk := List.mem_of_mem_take h
+      refine ⟨⟨hsub.subset hk, Or.inr (Or.inl hk)⟩, ?_⟩
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook hk, if_pos h]
+    · refine ⟨⟨hm, Or.inr (Or.inr hf)⟩, ?_⟩
+      rw [sw_ghost hpc hv0 hI hlp hTP hof hW hlook h2 hm hd]
+      obtain ⟨ht1', -⟩ := sp_ghost hpc hv0 hI hlp hTP hof hW h2 hm hd
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook ht1', if_pos ht1]
+
+/-- **The right part**: the children from the boundary on, and the ghosts with a range between them. -/
+theorem sw_right {e : Nat} : e ∈ sRight (wiC s v) v side ↔
+    e ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) ∨
+      (2 ≤ ht (ts s) v ∧ e ∈ order (ts s) v ∧ (nd (ts s) e).draining = true ∧ (nd (ts s) e).first ≠ NIL ∧
+        (nd (ts s) e).t1 ∈ (nd (ts s) v).children.drop (sK (wiC s v) v)) := by
+  have hsub := sp_kids_sub hpc hv0 hI hlp hTP hof hW
+  have S := hI.shape
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  obtain ⟨hnd, -, hkk⟩ := S.kids v hvl
+  have hdis : ∀ x ∈ (nd (ts s) v).children, (x ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) ↔
+      x ∉ (nd (ts s) v).children.take (sK (wiC s v) v)) := by
+    intro x hx
+    have hsp : (nd (ts s) v).children = (nd (ts s) v).children.take (sK (wiC s v) v) ++
+        (nd (ts s) v).children.drop (sK (wiC s v) v) := (List.take_append_drop _ _).symm
+    have hnd' := hsp ▸ hnd
+    have hd := (List.nodup_append.mp hnd').2.2
+    constructor
+    · intro h h'; exact hd x h' x h rfl
+    · intro h
+      have := hx; rw [hsp, List.mem_append] at this
+      rcases this with h' | h'
+      · exact absurd h' h
+      · exact h'
+  obtain ⟨h1, -⟩ := sd_ht hpc hv0 hI hlp
+  unfold sRight
+  rw [List.mem_filter, sw_entries hpc hv0 hI hlp hTP hof hW]
+  simp only [beq_iff_eq]
+  constructor
+  · rintro ⟨⟨hm, hcase⟩, hsd⟩
+    by_cases hd : 2 ≤ ht (ts s) v ∧ (nd (ts s) e).draining = true
+    · right
+      rw [sw_ghost hpc hv0 hI hlp hTP hof hW hlook hd.1 hm hd.2] at hsd
+      obtain ⟨ht1, -⟩ := sp_ghost hpc hv0 hI hlp hTP hof hW hd.1 hm hd.2
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook ht1] at hsd
+      refine ⟨hd.1, hm, hd.2, ?_, ?_⟩
+      · rcases hcase with h | h | h
+        · omega
+        · exfalso
+          have := (hkk e h).2 hd.1; rw [this.2] at hd; exact absurd hd.2 (by simp)
+        · exact h
+      · split at hsd
+        · exact absurd hsd (by simp)
+        · next hn => exact (hdis _ ht1).mpr hn
+    · left
+      have hk : e ∈ (nd (ts s) v).children := by
+        by_cases h2 : 2 ≤ ht (ts s) v
+        · exact ((sp_entry hpc hv0 hI hlp hTP hof hW hm).2 h2).2.2 (by simpa using fun h => hd ⟨h2, h⟩)
+        · exact (sp_entry hpc hv0 hI hlp hTP hof hW hm).1 (by omega)
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook hk] at hsd
+      split at hsd
+      · exact absurd hsd (by simp)
+      · next hn => exact (hdis _ hk).mpr hn
+  · rintro (h | ⟨h2, hm, hd, hf, ht1⟩)
+    · have hk := List.mem_of_mem_drop h
+      refine ⟨⟨hsub.subset hk, Or.inr (Or.inl hk)⟩, ?_⟩
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook hk, if_neg ((hdis _ hk).mp h)]
+    · refine ⟨⟨hm, Or.inr (Or.inr hf)⟩, ?_⟩
+      rw [sw_ghost hpc hv0 hI hlp hTP hof hW hlook h2 hm hd]
+      obtain ⟨ht1', -⟩ := sp_ghost hpc hv0 hI hlp hTP hof hW h2 hm hd
+      rw [sw_kid hpc hv0 hI hlp hTP hof hW hlook ht1', if_neg ((hdis _ ht1').mp ht1)]
 
 end side
 
