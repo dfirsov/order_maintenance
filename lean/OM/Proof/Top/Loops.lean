@@ -71,6 +71,22 @@ theorem foldl_modify_getX {α γ : Type} [Inhabited α] (l : List γ) (idx : γ 
       | some y => simp [Array.getX_modify, hx]
       | none => simp [Array.getX_modify, hx]
 
+/-- Updates at distinct indices, folded (the index is the element). -/
+theorem foldl_modify_getX' {α : Type} [Inhabited α] (F : Nat → α → α) :
+    ∀ (l : List Nat), l.Nodup → ∀ (a : Array α) (u : Nat),
+      (l.foldl (fun b x => b.modify x (F x)) a).getX u =
+        if u ∈ l ∧ u < a.size then F u (a.getX u) else a.getX u
+  | [], _, a, u => by simp
+  | x :: t, hl, a, u => by
+    have hx := List.nodup_cons.mp hl
+    simp only [List.foldl_cons]
+    rw [foldl_modify_getX' F t hx.2, Array.size_modify', Array.getX_modify]
+    by_cases hux : u = x
+    · subst hux
+      simp [hx.1]
+    · simp only [List.mem_cons, hux, false_or, show ¬(x = u ∧ x < a.size) from fun h => hux h.1.symm,
+        if_false]
+
 theorem foldl_modify_size {α γ : Type} [Inhabited α] (l : List γ) (idx : γ → Nat) (F : γ → α → α)
     (a : Array α) : (l.foldl (fun b x => b.modify (idx x) (F x)) a).size = a.size := by
   induction l generalizing a with

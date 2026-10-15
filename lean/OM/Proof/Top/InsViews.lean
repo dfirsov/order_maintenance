@@ -139,4 +139,143 @@ theorem ins3_tag (c : Nat) :
 
 end views
 
+/-! ### The top structure after the split, copy completed -/
+
+section fin
+variable (s : Core) (x f1x i1 : Nat)
+
+/-- The new tables: entries `y`, `z` around `x` in every table holding `x`. -/
+def insNode (u : Nat) : Node :=
+  let n := s.nodes.getX u
+  let n1 := if u ∈ s.cin.getX x ∧ u < s.nodes.size then
+    setTS (aroundT n.table x s.C.size (s.C.size + 1) (insF s x u).1 (insF s x u).2)
+      (sideAround n x s.C.size (s.C.size + 1)) n else n
+  if u = s.lpar.getX x ∧ u < s.nodes.size then
+    { n1 with children := n1.children.replace1 x [s.C.size, x, s.C.size + 1] } else n1
+
+theorem ins3_getX (hnd : (s.cin.getX x).Nodup) (u : Nat) :
+    (ins3 s x f1x i1).nodes.getX u = insNode s x u := by
+  rw [ins3_nodes, Array.getX_modify, foldl_modify_size]
+  unfold insNode
+  simp only
+  have hfold : ((s.cin.getX x).foldl (fun ns T => ns.modify T (aroundF (ins2 s x f1x i1) x s.C.size (s.C.size + 1) (insF s x) T)) s.nodes).getX u =
+      if u ∈ s.cin.getX x ∧ u < s.nodes.size then
+        setTS (aroundT (s.nodes.getX u).table x s.C.size (s.C.size + 1) (insF s x u).1 (insF s x u).2)
+          (sideAround (s.nodes.getX u) x s.C.size (s.C.size + 1)) (s.nodes.getX u)
+      else s.nodes.getX u := by
+    rw [foldl_modify_getX' _ (s.cin.getX x) hnd]
+    split
+    · unfold aroundF
+      rw [(ins2_top s x f1x i1).2.2.2.2]
+    · rfl
+  rw [hfold]
+  by_cases hu : u = s.lpar.getX x ∧ u < s.nodes.size
+  · rw [if_pos ⟨hu.1.symm, by rw [← hu.1]; exact hu.2⟩, if_pos hu]
+  · rw [if_neg (fun h => hu ⟨h.1.symm, by rw [← h.1]; exact h.2⟩), if_neg hu]
+
+/-- The range pointers after the split: `y` takes over first places, `z` last places, on `x`'s path. -/
+def insFirst (u : Nat) : Nat :=
+  if cpHit (insJob s x) s.P.H (ts s) 1 u = true ∧ (s.nodes.getX u).first = x then s.C.size
+  else (s.nodes.getX u).first
+def insLast (u : Nat) : Nat :=
+  if cpHit (insJob s x) s.P.H (ts s) 1 u = true ∧ (s.nodes.getX u).last = x then s.C.size + 1
+  else (s.nodes.getX u).last
+
+/-- The views of the top structure after the split, with the copy completed. -/
+structure InsFrame (t : TS) : Prop where
+  P : t.P = s.P
+  size : t.nodes.size = s.nodes.size
+  node : ∀ u, nd t u = { insNode s x u with first := insFirst s x u, last := insLast s x u }
+  path : ∀ c i, pth t c i = if c = s.C.size ∨ c = s.C.size + 1 then
+    (if 1 ≤ i ∧ i ≤ s.P.H then pth (ts s) x i else NIL) else pth (ts s) c i
+  psize : ∀ c, (c = s.C.size ∨ c = s.C.size + 1) → (t.path.getX c).size = s.P.H + 1
+  pother : ∀ c, c ≠ s.C.size → c ≠ s.C.size + 1 → t.path.getX c = s.path.getX c
+  cin : ∀ c, cinT t c = if c = s.C.size ∨ c = s.C.size + 1 then cinT (ts s) x else cinT (ts s) c
+  lpar : ∀ c, lpr t c = if c = s.C.size ∨ c = s.C.size + 1 then lpr (ts s) x else lpr (ts s) c
+  tag : ∀ c, t.tag c = if c = s.C.size + 1 then tagZ (ins0 s x) x f1x i1
+    else if c = s.C.size then tagY (ins0 s x) x f1x i1 else (s.C.getX c).tag
+
+theorem insFin_frame (hxs : x < s.C.size) (hnd : (s.cin.getX x).Nodup)
+    (hdist : ∀ i i', 1 ≤ i → i ≤ s.P.H → 1 ≤ i' → i' ≤ s.P.H → pth (ts s) x i = pth (ts s) x i' → i = i')
+    (hex : ∀ i, 1 ≤ i → i ≤ s.P.H → pth (ts s) x i < s.nodes.size) :
+    InsFrame s x f1x i1 (insFin s x f1x i1) := by
+  set t3 := ts (ins3 s x f1x i1) with ht3
+  have hxy : x ≠ s.C.size := by omega
+  have hxz : x ≠ s.C.size + 1 := by omega
+  have hpath3 : ∀ c, t3.path.getX c = if c = s.C.size + 1 then Array.replicate (s.P.H + 1) NIL
+      else if c = s.C.size then Array.replicate (s.P.H + 1) NIL else s.path.getX c := fun c => by
+    rw [ht3, ts_path, ins3_path, Array.getX_setX, Array.getX_setX]
+  have hpx : ∀ i, pth t3 x i = pth (ts s) x i := fun i => by
+    unfold pth; rw [hpath3, if_neg hxz, if_neg hxy]; rfl
+  have hsize3 : t3.nodes.size = s.nodes.size := by
+    rw [ht3, ts_nodes, ins3_nodes, Array.size_modify', foldl_modify_size]
+  have hok : CopyOK (insJob s x) s.P.H t3 1 :=
+    ⟨by simp [insJob], by simp [insJob]; omega, by simp [insJob]; omega,
+      fun i i' h1 h2 h3 h4 e => hdist i i' h1 h2 h3 h4 (by rw [← hpx, ← hpx]; exact e),
+      by simp [insJob, hpath3], by simp [insJob, hpath3]⟩
+  have hP3 : t3.P = s.P := by rw [ht3, ts_P, ins3_P]
+  have ex : (insJob s x).x = x := rfl
+  have ey : (insJob s x).y = s.C.size := rfl
+  have ez : (insJob s x).z = s.C.size + 1 := rfl
+  obtain ⟨cP, cC, cL, cT, cS, cO, cY, cZ, cSy, cSz, cN⟩ := copyRest_views (insJob s x) s.P.H
+    (s.P.H + 1 - 1) t3 1 rfl hok (fun i h1 h2 => by rw [ex, hpx, hsize3]; exact hex i h1 h2)
+  simp only [ex, ey, ez] at cO cY cZ cSy cSz
+  have hfin : insFin s x f1x i1 = copyRest (insJob s x) s.P.H t3 1 := rfl
+  rw [hfin]
+  refine ⟨cP.trans hP3, cS.trans hsize3, fun u => ?_, fun c i => ?_, fun c hc => ?_, fun c h1 h2 => ?_,
+    fun c => ?_, fun c => ?_, fun c => ?_⟩
+  · rw [cN]
+    have hn3 : nd t3 u = insNode s x u := by rw [ht3]; exact ins3_getX s x f1x i1 hnd u
+    have hhit : cpHit (insJob s x) s.P.H t3 1 u = cpHit (insJob s x) s.P.H (ts s) 1 u := by
+      unfold cpHit; simp only [show (insJob s x).x = x from rfl, hpx]
+    have hf : (insNode s x u).first = (s.nodes.getX u).first := by
+      unfold insNode; split_ifs <;> rfl
+    have hl : (insNode s x u).last = (s.nodes.getX u).last := by
+      unfold insNode; split_ifs <;> rfl
+    unfold cpFirst cpLast insFirst insLast
+    rw [hn3, hhit, hf, hl]; rfl
+  · by_cases hc : c = s.C.size ∨ c = s.C.size + 1
+    · rw [if_pos hc]
+      rcases hc with rfl | rfl
+      · have := cY i
+        show ((copyRest (insJob s x) s.P.H t3 1).path.getX s.C.size).getX i = _
+        rw [this, hpx]
+        split
+        · rfl
+        · rw [hpath3, if_neg (by omega), if_pos rfl]
+          by_cases hi : i < s.P.H + 1
+          · simp [Array.getX, Array.getD, hi]
+          · simp [Array.getX, Array.getD, hi]
+      · have := cZ i
+        show ((copyRest (insJob s x) s.P.H t3 1).path.getX (s.C.size + 1)).getX i = _
+        rw [this, hpx]
+        split
+        · rfl
+        · rw [hpath3, if_pos rfl]
+          by_cases hi : i < s.P.H + 1
+          · simp [Array.getX, Array.getD, hi]
+          · simp [Array.getX, Array.getD, hi]
+    · rw [if_neg hc]
+      push_neg at hc
+      unfold pth; rw [cO c hc.1 hc.2, hpath3, if_neg hc.2, if_neg hc.1]; rfl
+  · rcases hc with rfl | rfl
+    · rw [cSy, hpath3, if_neg (by omega), if_pos rfl]; simp
+    · rw [cSz, hpath3, if_pos rfl]; simp
+  · rw [cO c h1 h2, hpath3, if_neg h2, if_neg h1]
+  · unfold cinT; rw [cC, ht3, ts_cin, ins3_cin, Array.getX_setX, Array.getX_setX]
+    by_cases h1 : c = s.C.size + 1
+    · simp [h1]; rfl
+    · by_cases h2 : c = s.C.size
+      · simp [h2]; rfl
+      · simp [h1, h2]; rfl
+  · unfold lpr; rw [cL, ht3, ts_lpar, ins3_lpar, Array.getX_setX, Array.getX_setX]
+    by_cases h1 : c = s.C.size + 1
+    · simp [h1]; rfl
+    · by_cases h2 : c = s.C.size
+      · simp [h2]; rfl
+      · simp [h1, h2]; rfl
+  · rw [cT, ht3, ins3_tag]
+
+end fin
+
 end OM.Proof.Top
