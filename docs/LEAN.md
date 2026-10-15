@@ -702,3 +702,23 @@ and `Step` (the copy step). The plan:
 5. the wrapper as machine code: each epoch's core in fresh arrays of its parity's slot, the handle
    maps as per-epoch arrays of capacity `nextHandle + N_cur + N'`;
 6. Theorems A, B and W at Level M.
+
+**Glue, steps 1 and 2 (done, `GlueTop.lean`).** Each place's hypotheses are exported from the
+invariant: `Shape.drain_move_hyps`, `Shape.drain_finish_hyps`, `ins_hyps` (copied from
+`top_start`'s proof), and inside `sdAgree_walk` (from `sr_hyps` and `sp_side`). The Level M side
+conditions are collected in `TopCaps κ s`: record counts plus 2 below the capacities, chunk indices
+below the node capacity, list capacities above the invariant's bounds (tables of at most 160
+entries, entries in at most two tables). Then:
+* `jobAgree`: under `TopInv`, outside a preparation, with `TopCaps`, every job step agrees at cost
+  at most `jobBound = sdBound + dsBound + 300`. The five cases are copy (`copyAgree`), walk from a
+  chunk, walk at a node (`walkAgree`: `startDrain` where a drain starts, else the funding loop's
+  sweep step), after a drain start, and funding (`dsAgree_fund`: a ghost's sweep step moves a chunk
+  or ends the drain).
+* `splitAgree_top`: under `TopInv` with no job, a split start agrees at cost at most
+  `splitBound`. Besides `TopCaps` it needs the path rows beyond the chunks to be zero (fresh memory).
+* The bounds are constants: `dsBound`, `sdBound = sdCost 160 160 2 160 160 160`, `splitBound`.
+  Every loop in these programs runs over a table, a side list, a child list or an entry's tables,
+  and the invariant bounds each of these by a constant.
+
+To use these lemmas at a state, Level M walks and Level F's walk must take the same branches.
+`walkS_agree` and `afterDS_agree` therefore take each agreement only on the branch that runs it.
