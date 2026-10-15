@@ -9,6 +9,118 @@ group drive, the chunk drive, the split starts). Here those places get Level M a
 proof is followed, and its run lemma is paired with the Level M lemma for the same branch.
 -/
 
+namespace OM.Proof
+
+open OM.Model OM.Zeroing
+
+set_option linter.deprecated false
+
+/-- The iteration step of `reservation_cost` (its proof, as a lemma). -/
+theorem resInv_step {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat} {L : List Nat}
+    {s : Core} (hTC : TopContract TI μ J cap) (hn : 1 ≤ n)
+    (hsize : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
+    (hcap : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
+    (hI5 : (s.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s.P.T) :
+    ∀ j t, ResInv TI k J n R μ L s j t → j < k →
+      (t.resJob = none → (t.pqHi = 0 ∧ (LowInv t L ∧ TI t ∧ t.count = s.count ∧ t.P = s.P ∧
+          t.resJob = none ∧ ∀ c, gval t c = 0)) ∨
+        (t.pqHi ≠ 0 ∧ ∃ c t1 t2, pqPopMax.run t = .ok c t1 ∧ (splitChunkStart c).run t1 = .ok () t2 ∧
+          ResInv TI k J n R μ L s (j + 1) t2)) ∧
+      (∀ job, t.resJob = some job → ∃ r t1, (jobStep job).run t = .ok r t1 ∧
+        ResInv TI k J n R μ L s (j + 1) { t1 with resJob := r }) := by
+    intro j t hI hj
+    obtain ⟨hL, hT, hc, hP, y, i, a, ip, js, hG, hR⟩ := hI
+    refine ⟨fun hnone => ?_, fun job hjob => ?_⟩
+    · by_cases hq0 : t.pqHi = 0
+      · exact Or.inl ⟨hq0, hL, hT, hc, hP, hnone, gval_zero_of_empty hL.pq hq0⟩
+      · right
+        refine ⟨hq0, ?_⟩
+        obtain ⟨bl, nb, hQ⟩ := hL.pq
+        obtain ⟨c, hpop, hcin, hmax⟩ := pqPopMax_ok hQ hq0
+        have hcq := hcin
+        unfold inQC at hcq; simp only [decide_eq_true_eq] at hcq
+        obtain ⟨hcL, hcQ, hθ⟩ := hcq
+        obtain ⟨A, hIA, hel⟩ := hL.inv
+        obtain ⟨e, pops, hN⟩ := hL.cnt
+        have hI4 := hL.cp.I4
+        have hd : 1 ≤ t.P.theta + 1 - cmax t.P := by omega
+        -- the chunks fit
+        have hpops : pops + 1 ≤ t.count / (t.P.theta + 1 - cmax t.P) := by
+          rw [Nat.le_div_iff_mul_le hd]
+          have hb := hN.bound
+          have hcQs : c ∈ quietSet t := mem_quietSet.mpr ⟨hcL, hcQ⟩
+          have hterm : cSz t c - e c ≤ ∑ d ∈ quietSet t, (cSz t d - e d) :=
+            Finset.single_le_sum (f := fun d => cSz t d - e d) (fun _ _ => Nat.zero_le _) hcQs
+          have he := hN.e_le c hcL hcQ
+          rw [Nat.add_mul, Nat.one_mul]; omega
+        have hsz := hN.size
+        rw [hc, hP] at hpops
+        have hcn : c - 1 < n := by have := hcL.2; omega
+        have hT5 := cSz_le_T hG (by rw [hP]; exact hI5) hcL.1 hcn ⟨hcL, hcQ⟩
+        -- start the split of `c`
+        have hD := delSt_only t c
+        have hI1 : INV (delSt t c) A := hIA.of_sameLinks hD.sameLinks (fun d => by simp only [cT, hD.C])
+        have hTI1 : TI (delSt t c) := hTC.frame _ _ hD.topSame hT
+        have hsz1 : (delSt t c).C.size = t.C.size := by rw [hD.C]
+        have hQS := hD.lowSame.qsame
+        have hcL1 : LiveC (delSt t c) c := by simp only [LiveC, hsz1]; exact hcL
+        have hcq1 : cSt (delSt t c) c = .quiet := (hQS.q c hcL).mpr hcQ
+        have hnone1 : (delSt t c).resJob = none := by rw [hD.rest.2.2.2.2.2.2.2.2.1]; exact hnone
+        obtain ⟨job, s2, hj, hμ1, hμJ, hTI2⟩ :=
+          hTC.start (delSt t c) A c hI1 hTI1 hnone1 hcL1 hcq1 (by rw [hsz1, hD.P, hP]; omega)
+        have hrun := splitChunkStart_ok (by unfold NIL; have := hcL.1; omega) hcL1.2 hj
+        have hs2 : TopRel (linkChunkPair (push2 (delSt t c)) c (delSt t c).C.size
+            ((delSt t c).C.size + 1)) s2 := by
+          have := top_insertAround c (delSt t c).C.size ((delSt t c).C.size + 1)
+            (linkChunkPair (push2 (delSt t c)) c (delSt t c).C.size ((delSt t c).C.size + 1))
+          rw [hj] at this; exact this
+        refine ⟨c, delSt t c, _, hpop, hrun, ?_⟩
+        have hGP : GParams t.P := hL.cinv.choose_spec.2.2.2
+        have hL2 := lowinv_pop hL hGP hcin hT5 hs2 hrun
+        have hcA : c ∈ A.chunks := (hI1.cAlloc c).mpr hcL1
+        have RS := resSpec_run (job := job) hI1 hcA hs2
+        obtain ⟨rE, rcnt, rhead, rP⟩ := split_rest (job := job) hs2
+        have hjm : (⟨c - 1, hcn⟩ : Fin n).val + 1 = c := by simp only; have := hcL.1; omega
+        refine ⟨hL2, hTI2, rcnt.trans (hD.rest.2.1.trans hc), rP.trans (hD.P.trans hP),
+          gvec n t, ⟨c - 1, hcn⟩, fun _ => 0, 0, 0, hG.pop ⟨c - 1, hcn⟩ (fun jj => ?_) (fun jj => ?_),
+          ?_⟩
+        · unfold gvec; rw [hjm]; exact_mod_cast gval_max hcin hmax _
+        · unfold gvec
+          have hp := gval_pop RS (jj.val + 1)
+          by_cases hjj : jj = ⟨c - 1, hcn⟩
+          · rw [if_pos hjj]; rw [if_pos (by rw [hjj, hjm])] at hp; exact_mod_cast hp
+          · rw [if_neg hjj]
+            have hne : jj.val + 1 ≠ c := by
+              intro e; apply hjj; ext; simp only; omega
+            rw [if_neg hne] at hp
+            exact_mod_cast hp
+        · show RoundAt k J (μ (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job)) (some job) 0 0 (j + 1)
+          exact ⟨by simp, by omega, hμ1⟩
+    · obtain ⟨A, hIA, hel⟩ := hL.inv
+      obtain ⟨r, t1, hj1, hTI1, hμ⟩ := hTC.step t A job hIA hT hjob
+      have hTR : TopRel t t1 := by have := top_jobStep job t; rw [hj1] at this; exact this
+      have hSafe : Safe t t1 := by have := pres_jobStep job t; rw [hj1] at this; exact this
+      have hI1 := hSafe.2 A hIA
+      have hTR' : TopRel t { t1 with resJob := r } :=
+        hTR.trans ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+      have hI1' : INV { t1 with resJob := r } A :=
+        hI1.of_sameLinks (by constructor <;> intros <;> rfl) (fun _ => rfl)
+      refine ⟨r, t1, hj1, hL.top hTR' ⟨A, hI1', hel⟩, hTI1, hTR'.rest.2.1.trans hc,
+        hTR'.rest.1.trans hP, y, i, a, ip, js + 1,
+        hG.mono (fun jj => le_of_eq (by rw [hTR'.qsame.gvec])), ?_⟩
+      unfold RoundAt at hR
+      rw [hjob] at hR
+      obtain ⟨h1, h2, h3⟩ := hR
+      show RoundAt k J (μ { t1 with resJob := r }) r ip (js + 1) (j + 1)
+      cases r with
+      | none => show ip * k ≤ J + (k - (j + 1)); omega
+      | some j' =>
+        obtain ⟨hm1, hm2⟩ := hμ j' rfl
+        exact ⟨by omega, by omega, hm1⟩
+
+end OM.Proof
+
 namespace OM.Impl
 
 open OM.Model OM.Proof
@@ -604,5 +716,99 @@ theorem driveChunkAgree {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu
   · obtain ⟨hxL, hxs, hlr⟩ := hC.covf c hcL hs
     obtain ⟨t5, hA⟩ := drive _ hxL hxs (by rcases hlr with h | h; exact Or.inl h.symm; exact Or.inr (Or.inr h.symm))
     rw [driveChunk_ovf hs] at h; exact hA.of_run h
+
+theorem ResAgree.mono {κ : Caps} {t t' : Core} {stop : Bool} {D D' : Nat} (h : ResAgree κ t t' stop D)
+    (hD : D ≤ D') : ResAgree κ t t' stop D' := fun L hdn => by
+  obtain ⟨L', n, e, h1, h2⟩ := h L hdn; exact ⟨L', n, e, h1, by omega⟩
+
+/-- **The reservation loop agrees**, from Level F's loop invariant and the agreement of each round:
+a job step at a state with a job, a split start at a state with none. -/
+theorem reservationAgreeOf {κ : Caps} {s : Core} (L : Loc) (I : Nat → Core → Prop) (Q : Core → Prop)
+    {DJ DS : Nat} (h0 : I 0 s)
+    (hstep : ∀ j t, I j t → j < s.P.K_R →
+      (t.resJob = none → (t.pqHi = 0 ∧ Q t) ∨
+        (t.pqHi ≠ 0 ∧ ∃ c t1 t2, pqPopMax.run t = .ok c t1 ∧ (splitChunkStart c).run t1 = .ok () t2 ∧
+          I (j + 1) t2)) ∧
+      (∀ job, t.resJob = some job → ∃ r t1, (jobStep job).run t = .ok r t1 ∧
+        I (j + 1) { t1 with resJob := r }))
+    (hJ : ∀ j t job, I j t → j < s.P.K_R → t.resJob = some job → JobAgree κ t job DJ)
+    (hS : ∀ j t c t1, I j t → j < s.P.K_R → t.resJob = none → t.pqHi ≠ 0 → pqPopMax.run t = .ok c t1 →
+      PQCaps κ t ∧ SplitAgree κ t1 c DS) :
+    ∃ t' L' n, (reservation s.P.K_R).run s = .ok () t' ∧ evalF κ reservationS s L = .ok t' L' n ∧
+      n ≤ 5 + s.P.K_R * (DJ + DS + 340 + 6) := by
+  refine reservationS_agree κ s L (D := DJ + DS + 340) (fun j t => I j t) h0 (fun j t hI hj => ?_)
+  obtain ⟨hn, hs⟩ := hstep j t hI hj
+  cases hjob : t.resJob with
+  | none =>
+    rcases hn hjob with ⟨hq0, -⟩ | ⟨hq0, c, t1, t2, hp, hsc, hI'⟩
+    · exact ⟨true, t, resF_empty hjob hq0, (fun h => absurd h (by decide)), (resAgree_empty hjob hq0).mono (by omega)⟩
+    · obtain ⟨hq, hA⟩ := hS j t c t1 hI hj hjob hq0 hp
+      exact ⟨false, t2, resF_split hjob hq0 hp hsc, fun _ => hI',
+        (resAgree_split hjob hq hq0 hp hA hsc).mono (by omega)⟩
+  | some job =>
+    obtain ⟨r, t1, hr, hI'⟩ := hs job hjob
+    exact ⟨false, _, resF_job hjob hr, fun _ => hI', (resAgree_job hjob (hJ j t job hI hj hjob) hr).mono (by omega)⟩
+
+/-- The cost bound of the reservation loop of one insertion, from the bounds of a job step and a
+split start. -/
+def resBound (K_R : Nat) : Nat := 5 + K_R * (jobBound + splitBound + 340 + 6)
+
+/-- **The reservation agrees** (the context of `reservation_cost`), relative to a predicate `Mc`
+on cores that gives the Level M side conditions and that the rounds keep. -/
+theorem reservationAgree_top {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap : Params → Nat}
+    {L : List Nat} {s : Core} {κ : Caps} (Lc : Loc) (hTC : TopContract TI μ J cap) (hTI : ∀ t, TI t → OM.Proof.Top.TopInv t)
+    (h0 : ResInv TI s.P.K_R J n R μ L s 0 s) (hn : 1 ≤ n)
+    (hsize : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
+    (hcap : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
+    (hI5 : (s.P.theta : ℝ) + R * (OM.Zeroing.Hn (n - 1) + 1) ≤ s.P.T)
+    (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
+    (Mc : Core → Prop) (hM0 : Mc s)
+    (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
+      ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
+    (hMpop : ∀ t c, Mc t → Mc (delSt t c))
+    (hMjob : ∀ j t job r t1, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = some job →
+      (jobStep job).run t = .ok r t1 → Mc { t1 with resJob := r })
+    (hMsplit : ∀ j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → pqPopMax.run t = .ok c t1 →
+      (splitChunkStart c).run t1 = .ok () t2 → Mc t2) :
+    ∃ t' L' m, (reservation s.P.K_R).run s = .ok () t' ∧ evalF κ reservationS s Lc = .ok t' L' m ∧
+      m ≤ resBound s.P.K_R := by
+  have hstep := resInv_step (k := s.P.K_R) (L := L) hTC hn hsize hcap hI5
+  obtain ⟨t', L', m, hrun, he, hm⟩ := reservationAgreeOf (κ := κ) (s := s) Lc
+    (fun j t => ResInv TI s.P.K_R J n R μ L s j t ∧ Mc t) (fun _ => True) (DJ := jobBound) (DS := splitBound)
+    ⟨h0, hM0⟩
+    (fun j t ⟨hI, hM⟩ hj => by
+      obtain ⟨hn', hs'⟩ := hstep j t hI hj
+      refine ⟨fun hnone => ?_, fun job hjob => ?_⟩
+      · rcases hn' hnone with ⟨h0, -⟩ | ⟨h0, c, t1, t2, hp, hsc, hI'⟩
+        · exact Or.inl ⟨h0, trivial⟩
+        · exact Or.inr ⟨h0, c, t1, t2, hp, hsc, hI', hMsplit j t c t1 t2 hI hM hp hsc⟩
+      · obtain ⟨r, t1, hr, hI'⟩ := hs' job hjob
+        exact ⟨r, t1, hr, hI', hMjob j t job r t1 hI hM hjob hr⟩)
+    (fun j t job ⟨hI, hM⟩ _ hjob => by
+      obtain ⟨hT, -, hpr, -⟩ := hMc t hM
+      obtain ⟨-, hTt, -, hPt, -⟩ := hI
+      exact jobAgree (hTI t hTt) hjob hpr (by rw [hPt]; exact hpow) hT)
+    (fun j t c t1 ⟨hI, hM⟩ _ hnone hq0 hp => by
+      obtain ⟨hL, hTt, -, -, -⟩ := hI
+      obtain ⟨-, hPQ, -⟩ := hMc t hM
+      refine ⟨hPQ, ?_⟩
+      obtain ⟨bl, nb, hQ⟩ := hL.pq
+      obtain ⟨c', hpop, hcin, -⟩ := pqPopMax_ok hQ hq0
+      rw [hpop] at hp; injection hp with e1 e2; subst e1; subst e2
+      have hcq := hcin
+      unfold inQC at hcq; simp only [decide_eq_true_eq] at hcq
+      obtain ⟨hcL, -, -⟩ := hcq
+      obtain ⟨A, hIA, -⟩ := hL.inv
+      have hD := delSt_only t c'
+      have hI1 : INV (delSt t c') A := hIA.of_sameLinks hD.sameLinks (fun d => by simp only [cT, hD.C])
+      have hT1 : TI (delSt t c') := hTC.frame _ _ hD.topSame hTt
+      have hcL1 : LiveC (delSt t c') c' := by simp only [LiveC, hD.C]; exact hcL
+      obtain ⟨hTC1, -, hpr1, hrow1⟩ := hMc _ (hMpop t c' hM)
+      obtain ⟨D, hD', hA⟩ := splitAgree_top hI1 (hTI _ hT1) (by rw [hD.rest.2.2.2.2.2.2.2.2.1]; exact hnone) hcL1
+        hpr1 hrow1 hTC1
+      exact fun t2 h => by
+        obtain ⟨L', m, e, hm⟩ := hA t2 h
+        exact ⟨L', m, e, by omega⟩)
+  exact ⟨t', L', m, hrun, he, by unfold resBound; omega⟩
 
 end OM.Impl
