@@ -320,7 +320,7 @@ assumes `q = 1/2 + 2/a + 2/(s−2) < 1`, which holds for the proof preset (`s = 
 for the default `s = 8`.
 
 Two presets: `default` (`Params.for_capacity`) and `proof` (`Params.proof`: `c_T = 3`,
-`K_R = 4`, `s = 11`, `β = 48`).
+`K_R = 4`, `s = 11`, `β = 48`). The Lean proof uses `K_R = 8` and `β = 64` (`docs/LEAN.md` §14).
 
 | Run | Result |
 |---|---|

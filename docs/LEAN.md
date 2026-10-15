@@ -1,6 +1,6 @@
 # Lean Formalization — Design
 
-Status: **v0.4** (2026-10-14); M0, M1, M2 and M3 done in `lean/` (M2: §12). This note fixes the design of the
+Status: **v0.5** (2026-10-15); M0–M5 done in `lean/` (M2: §12, M4: §13, M5: §14). This note fixes the design of the
 Lean 4 development. It supersedes `docs/SPEC.md` §9–§10 (Lean architecture and
 milestones), which assumed a shallow cost monad.
 
@@ -28,8 +28,9 @@ irrelevant, exactly as a paper proof about a RAM does not depend on the speed of
 
 ## 2. Theorems to prove
 
-Fix the proof parameters of `PROOF.md` §2.9: `G = 2L`, `T = 3L²`, `K_G = K_C = K_R = K_B = 4`,
-`a = 8`, `s = 11`, `β = 48`, `L ≥ 8`.
+Fix the proof parameters of `PROOF.md` §2.9: `G = 2L`, `T = 3L²`, `K_G = K_C = K_B = 4`,
+`a = 8`, `s = 11`, `L ≥ 8`. M5 changed three of them (§14): `β = 64` (was 48), `K_R = 8`
+(was 4), and `H = ⌊L/3⌋ + 1`.
 
 **Theorem A (correctness).** For every operation sequence `ops` whose arguments are live
 elements (`PROOF.md` §1), running the program on `ops` returns the same answers as
@@ -245,7 +246,7 @@ OM/
 | M2 ✅ | **Theorem A** at Level F (§12) | INV-S preservation, guards, FALLBACK, Invariant R | medium |
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
 | M4 ✅ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13), against the top structure's contracts | invariant reasoning | medium |
-| M5 | Top-structure lemmas T0–T5, (Q) | the largest proof | **high** |
+| M5 ✅ | Top-structure lemmas T0–T5, (Q); the contracts; the parameter rule (§14) | the largest proof | **high** |
 | M6 | Level M programs and simulation; assembly; **Theorems B and W** | mechanical, but long | medium |
 
 The order is chosen so that the riskiest mathematics (M5) is attacked on a validated
@@ -494,8 +495,81 @@ room in `nxt` (`WC.nxt_room`), a quiet new `cur` after the swap, and `N' ≤ 4N`
 * `L + 6 ≤ N/2` for `N ≥ 64`;
 * `K_B ≥ 4` (an argument of `OM.init`).
 
-**Left to M5.** M5 must prove the contracts (`TopContract`, `PrepContract`) and fix `J`
-and `H`. Then it must prove I5 and the preparation budget for the parameter rule. The
-current placeholder `H := L + 2` in `proofParams` must be replaced. The budget needs
-`H(N') ≤ L(N) + 1`, while M5's `H ≈ L/3` for the WBBT.
+**Discharged in M5** (§14): the contracts, `J`, `H`, I5, the capacity conditions and the
+preparation budget all hold for `proofParams` (`costSetup`).
+
+---
+
+## 14. M5: the top structure at Level F
+
+**Status.** M5 is done. Everything lives in `lean/OM/Proof/Top/` and is part of the default
+build (`OM.lean` imports `OM.Proof.Top.Setup`). It compiles with no `sorry`. The axioms are
+the standard three.
+
+**Main statements** (`Setup.lean`).
+* `costSetup : CostSetup proofParams TopInv topPI topMu topNu topPP topJ capT nfP RfP`:
+  every assumption of the cost proof (§13) holds for the proof parameters.
+* `wrapper_cost_proof`: `wrapper_cost` (§13) with no assumptions left. The structure starts in
+  a state satisfying the cost invariant, and every valid operation keeps it.
+* `theoremA_proof`: Theorem A (§12) for `proofParams`.
+
+The two contracts:
+* `topContract' : TopContractP TopInv topMu topJ capT` (`PresStart.lean`). A job is bounded by
+  `topJ P = 13H + 2` steps; the structure holds `capT P = W_{H−1} − 1` chunks.
+* `prepContract : PrepContract TopInv topPI topNu topPP` (`PrepContract.lean`). The initial
+  chain `1 → 2 → … → H` above chunk 1 is built in `H + 1` steps.
+
+**The invariant** (`Inv.lean`). `TopInv s` holds when `TopParams s.P` holds and
+`InvJ (finS (ts s) s.resJob) cl ord dr n0 s.resJob` holds for the chunk list `cl`, some level
+orders `ord`, insertion counts `dr` and initial table sizes `n0`. It is stated for the state
+with the running job's path copy completed (`finS`). `InvJ` has five parts:
+* `Shape` (§4.5.1 of `PROOF.md`): the live tree, ghosts and targets, tables, stored paths,
+  range pointers and tags;
+* `Timing`: stored versus true weights (F1) and the drain timing of Lemma T3;
+* `Room`: label room in every table (see the deviations);
+* `JobOK`: the running job's position;
+* `cap`: nodes of height `H − 1` never drain.
+
+**Proof structure.**
+
+| Files | Content |
+|---|---|
+| `Inv`, `Shape`, `Struct`, `Views`, `Lists`, `Sorted`, `Labels`, `T0` | the invariant; consequences of the order invariant; list lemmas; label gaps; Lemma T0 |
+| `Frame`, `Step`, `Loops`, `CopyRest`, `PresCopy`, `PresWalk` | what a job step changes; the job step (`top_step`); the path copy and the upward walk |
+| `RunDrain`, `PresDrain`, `RunFinish`, `PresFinish` | funding a drain and finishing it |
+| `RunIns`, `InsViews`, `InsShape`, `InsTime`, `PresIns`, `InsStart` | a chunk split's insertion into the tree and the start of its job (`top_start`) |
+| `RunStart`, `StartViews`, `StartData`, `StartCtx`, `StartFrame`, `StartParts`, `StartCount`, `StartRoom`, `StartRun`, `StartTS`, `StartShapeT`, `StartShape`, `StartTime`, `PresStart` | a drain's start (`SDOK`): the cut, the two new nodes, their tables, and all of `InvJ` afterwards |
+| `Contract` | `TopContractP` from the pieces |
+| `PrepRun`, `PrepStage`, `PrepInv`, `PrepContract` | the initial chain: runs of `initStep`, construction stages, `TopInv` for the chain |
+| `TopParams`, `Setup` | the parameter conditions for `a = 8`, `s = 11`, `β = 64`; `CostSetup` |
+
+**Deviations from `PROOF.md`** (none weakens the bound):
+* **The job measure is state-based.** `topMu` is the number of steps left in the running job
+  (`jobLeft`), computed from the current state, not from a history.
+* **Label room is a potential argument.** Lemma T5's insertion histories are replaced by
+  `Room`. Each table `X` records its initial size `n0 X ≤ n0max` and its insertion events
+  `dr X`. Its gaps are at least `2^β/(n0 + 1)/2^dr`. The potentials `pot1` and `pot2` bound
+  `dr` through the true weights: a table at height `h ≥ 2` loses `γ_{h−1}` potential per
+  insertion event. They give `dr + 1 ≤ Dmax`, and room needs `2^Dmax·(n0max + 1) ≤ 2^β`.
+  This needs `β ≥ 62` (worst at height 3, constant from height 4), so `β = 64` (was 48).
+* **The contracts are per parameter.** `TopContractP TI μ J cap` takes `J, cap : Params → Nat`.
+  `TIat TI P` fixes the parameters of a core. `PrepContract` takes a condition `PP` on the
+  parameters (`topPP P := TopParams P ∧ 3 ≤ H`), and `CostSetup` requires `PP (mk N)`.
+* **Invariant additions.** These are not in `PROOF.md`: chain nodes `u ≤ H` have height `u`
+  (`Timing.chain`); every live node has a chunk below it (`tw1`); fresh targets weigh at least
+  `λ_h` (`wD`) and are not chain nodes (`big`); `n0 ≤ n0max` (`Room.n0le`); and `InvJ.cap`.
+* **`TopParams`** lists what the proof needs of `a`, `s`, `β`: `s ≥ 3`, `λ_h ≥ 2 + 2K_h`
+  (I6), the room condition above (our form of I7), `Π_{h−1} ≤ W_h` and `γ_h ≥ 1`.
+  `topParams_8` proves them at every height for `a = 8`, `s = 11`, `β = 64`.
+* **`K_R = 8`** (was 4). Then `R = ⌊(13H + 2)/8⌋ + 1 ≤ L`, and I5 follows for every `L ≥ 8`
+  from `H_m ≤ 1 + ln m` with `m < 2^(L−2)`. With `K_R = 4`, I5 still holds numerically, but
+  with about 5% to spare at `L = 8`.
+* **`H = ⌊L/3⌋ + 1`.** Then `2·8^(H−1) − 1` holds the chunks (`capc_proof`, using
+  `θ + 1 − c_max ≥ 8`), and the preparation budget `H(N') + 1 ≤ L(N) + 2` holds for `N' ≤ 4N`.
+* **The model's `startDrain`** computes the cut, weights, tables and sides with named pure
+  functions (`drainCut`, `drainWt`, `drainPr`, `drainEntries`, `drainSide`). The replay
+  campaign against the prototype passed 335/335 after this change.
+
+**Left to M6.** Level M programs, their simulation of Level F, and Theorems A, B and W at
+Level M.
 
