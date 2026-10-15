@@ -192,4 +192,174 @@ theorem tableInsertP_agree (κ : Caps) (σ : Core) (L : Loc) {t e w lab : Nat} {
     have : (σ.nodes.getX t).table.length = T.table.length := rfl
     omega
 
+theorem Exp.ev_bin' {κ : Caps} {σ : Core} {L : Loc} {op : BinOp} {a b : Exp} {x y : Nat}
+    (ha : a.ev κ σ L = some x) (hb : b.ev κ σ L = some y) : (Exp.bin op a b).ev κ σ L = op.eval x y := by
+  simp [Exp.ev, ha, hb]
+
+/-- The bounds around position `r` of table `t`. -/
+def boundsS : Stm :=
+  .ite "bf"
+    (.ite (0 <ₑ "r") ("lo" ::= .lrd .table true "t" ("r" - 1) + 1) ("lo" ::= 0) ;;
+     "hi" ::= .lrd .table true "t" "r")
+    ("lo" ::= .lrd .table true "t" "r" + 1 ;;
+     .ite ("r" + 1 <ₑ "n") ("hi" ::= .lrd .table true "t" ("r" + 1)) ("hi" ::= .bin .shl 1 (.prm .beta)))
+
+/-- `roomNextTo t e before` (`bf` = 1 for `before`): a free label next to `e` in table `t`. -/
+def roomP : Proc where
+  name := "roomNextTo"
+  params := ["t", "e", "bf"]
+  rets := ["l"]
+  body :=
+    (findP .table).call [.var "t", .var "e"] ["r"] ;;
+    "n" ::= .llen .table "t" ;;
+    .ite ("r" <ₑ "n") .skip .fail ;;
+    boundsS ;;
+    .ite ("hi" ≤ₑ "lo") .fail .skip ;;
+    "l" ::= ("lo" + "hi" - 1) / 2
+
+/-- The bounds `roomNextTo` takes: one above the lower neighbour's label, and the upper one. -/
+def rLo (tab : List (Nat × Nat)) (i : Nat) (before : Bool) : Nat :=
+  if before then (if 0 < i then (tab[i - 1]?.getD (0, 0)).2 + 1 else 0) else (tab[i]?.getD (0, 0)).2 + 1
+def rHi (tab : List (Nat × Nat)) (i : Nat) (before : Bool) (β : Nat) : Nat :=
+  if before then (tab[i]?.getD (0, 0)).2
+  else (if i + 1 < tab.length then (tab[i + 1]?.getD (0, 0)).2 else 1 <<< β)
+
+theorem roomNextTo_inv {σ σ' : Core} {t e lab : Nat} {before : Bool}
+    (h : (roomNextTo t e before).run σ = .ok lab σ') :
+    ∃ i, (σ.nodes.getX t).table.findIdx? (·.1 == e) = some i ∧ σ' = σ ∧
+      rLo (σ.nodes.getX t).table i before < rHi (σ.nodes.getX t).table i before σ.P.beta ∧
+      lab = (rLo (σ.nodes.getX t).table i before + rHi (σ.nodes.getX t).table i before σ.P.beta - 1) / 2 := by
+  cases hfi : (σ.nodes.getX t).table.findIdx? (·.1 == e) with
+  | none => unfold roomNextTo at h; simp [getN, getP, hfi, OM.Model.guard] at h
+  | some i =>
+    refine ⟨i, rfl, ?_⟩
+    unfold roomNextTo at h
+    cases before
+    · by_cases hn : i + 1 < (σ.nodes.getX t).table.length
+      all_goals
+        simp [getN, getP, hfi, hn] at h
+        split at h
+        · simp at h
+        · next hg =>
+          injection h with h1 h2
+          exact ⟨h2.symm, by simp only [rLo, rHi]; simp [hn] at hg ⊢; omega, by simp [rLo, rHi, hn, ← h1]⟩
+    · by_cases hp : 0 < i
+      all_goals
+        simp [getN, getP, hfi, hp] at h
+        split at h
+        · simp at h
+        · next hg =>
+          injection h with h1 h2
+          exact ⟨h2.symm, by simp only [rLo, rHi]; simp [hp] at hg ⊢; omega, by simp [rLo, rHi, hp, ← h1]⟩
+
+theorem boundsS_ok {κ : Caps} {σ : Core} {L : Loc} {t i : Nat} {before : Bool} (ht : L "t" = t) (hr : L "r" = i)
+    (hn : L "n" = (σ.nodes.getX t).table.length) (hbf : L "bf" = b2n before)
+    (hi : i < (σ.nodes.getX t).table.length) (htr : t < κ.lrec .table) :
+    ∃ L' c, evalF κ boundsS σ L = .ok σ L' c ∧ L' "lo" = rLo (σ.nodes.getX t).table i before ∧
+      L' "hi" = rHi (σ.nodes.getX t).table i before σ.P.beta ∧ c ≤ 40 ∧
+      ∀ r, r ≠ "lo" → r ≠ "hi" → L' r = L r := by
+  set tab := (σ.nodes.getX t).table
+  have rd : ∀ (Lx : Loc) (jx : Exp) (y : Nat), Lx "t" = t → jx.ev κ σ Lx = some y → y < tab.length →
+      (Exp.lrd .table true "t" jx).ev κ σ Lx = some (tab[y]?.getD (0, 0)).2 := by
+    intro Lx jx y h1 h2 h3; simp [Exp.ev, h1, h2, htr, LK.view, h3, tab, List.getD_eq_getElem?_getD]
+  cases before
+  · -- after: `lo` above `e`, `hi` the next label or the top
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "lo") (e := .lrd .table true "t" "r" + 1)
+      (v := (tab[i]?.getD (0, 0)).2 + 1) (by
+        rw [Exp.add_def, Exp.ev_bin' (rd L (.var "r") i ht (by simp [Exp.ev, hr]) hi) rfl]; rfl)
+    set L1 := OM.Machine.State.upd L "lo" ((tab[i]?.getD (0, 0)).2 + 1)
+    have hL1 : ∀ r, r ≠ "lo" → L1 r = L r := fun r h => by simp [L1, OM.Machine.State.upd, h]
+    by_cases hn1 : i + 1 < tab.length
+    · have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "hi") (e := .lrd .table true "t" ("r" + 1))
+        (v := (tab[i + 1]?.getD (0, 0)).2) (rd L1 ("r" + 1) (i + 1) (by rw [hL1 "t" (by decide), ht])
+          (by simp [Exp.ev, hL1 "r" (by decide), hr, OM.Machine.BinOp.eval]) hn1)
+      refine ⟨_, _, evalF_ite_f (by simp [Exp.ev, hbf, b2n]) (evalF_seq_ok2 a1
+        (evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, hL1 "r" (by decide), hr,
+          hL1 "n" (by decide), hn, hn1, tab]) one_ne_zero a2)), ?_, ?_, ?_, ?_⟩
+      · simp [OM.Machine.State.upd, L1, rLo]
+      · simp [OM.Machine.State.upd, rHi, hn1]
+      · simp [Exp.cost]
+      · intro r h1 h2; simp only [OM.Machine.State.upd, if_neg h2]; exact hL1 r h1
+    · have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "hi") (e := .bin .shl 1 (.prm .beta))
+        (v := 1 <<< σ.P.beta) (by simp [Exp.ev, OM.Machine.BinOp.eval, PF.get, Nat.shiftLeft_eq])
+      refine ⟨_, _, evalF_ite_f (by simp [Exp.ev, hbf, b2n]) (evalF_seq_ok2 a1
+        (evalF_ite_f (by
+          have hn1' : ¬ i + 1 < (σ.nodes.getX t).table.length := hn1
+          simp [Exp.ev, OM.Machine.BinOp.eval, hL1 "r" (by decide), hr, hL1 "n" (by decide), hn]
+          show tab.length ≤ i + 1; omega) a2)),
+        ?_, ?_, ?_, ?_⟩
+      · simp [OM.Machine.State.upd, L1, rLo]
+      · simp [OM.Machine.State.upd, rHi, hn1]
+      · simp [Exp.cost]
+      · intro r h1 h2; simp only [OM.Machine.State.upd, if_neg h2]; exact hL1 r h1
+  · -- before: `lo` above the previous label (or 0), `hi` the label of `e`
+    have hlo : ∃ c1, evalF κ (.ite (0 <ₑ "r") ("lo" ::= .lrd .table true "t" ("r" - 1) + 1) ("lo" ::= 0)) σ L =
+        .ok σ (OM.Machine.State.upd L "lo" (rLo tab i true)) c1 ∧ c1 ≤ 20 := by
+      by_cases hp : 0 < i
+      · have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "lo") (e := .lrd .table true "t" ("r" - 1) + 1)
+          (v := rLo tab i true) (by
+            rw [Exp.add_def, Exp.ev_bin' (rd L ("r" - 1) (i - 1) ht
+              (by simp [Exp.ev, hr, OM.Machine.BinOp.eval]; omega) (by omega)) rfl]
+            simp [OM.Machine.BinOp.eval, rLo, hp])
+        exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, hr, hp]) one_ne_zero a1,
+          by simp [Exp.cost]⟩
+      · have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "lo") (e := (0 : Exp)) (v := rLo tab i true)
+          (by simp [Exp.ev, rLo, hp])
+        exact ⟨_, evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, hr]; omega) a1, by simp [Exp.cost]⟩
+    obtain ⟨c1, e1, hc1⟩ := hlo
+    set L1 := OM.Machine.State.upd L "lo" (rLo tab i true)
+    have hL1 : ∀ r, r ≠ "lo" → L1 r = L r := fun r h => by simp [L1, OM.Machine.State.upd, h]
+    have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "hi") (e := .lrd .table true "t" "r")
+      (v := rHi tab i true σ.P.beta) (by
+        rw [rd L1 (.var "r") i (by rw [hL1 "t" (by decide), ht]) (by simp [Exp.ev, hL1 "r" (by decide), hr]) hi]
+        simp [rHi])
+    refine ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, hbf, b2n]) one_ne_zero (evalF_seq_ok2 e1 a2), ?_, ?_, ?_,
+      ?_⟩
+    · simp [OM.Machine.State.upd, L1]
+    · simp [OM.Machine.State.upd]
+    · simp [Exp.cost] at hc1 ⊢; omega
+    · intro r h1 h2; simp only [OM.Machine.State.upd, if_neg h2]; exact hL1 r h1
+
+/-- **`roomP` runs `roomNextTo`.** -/
+theorem roomP_agree (κ : Caps) (σ : Core) (L : Loc) {t e : Nat} {before : Bool} (ht : L "t" = t)
+    (he : L "e" = e) (hbf : L "bf" = b2n before) (htr : t < κ.lrec .table) {lab : Nat} {σ' : Core}
+    (h : (roomNextTo t e before).run σ = .ok lab σ') :
+    σ' = σ ∧ ∃ L' c, evalF κ roomP.body σ L = .ok σ L' c ∧ L' "l" = lab ∧
+      c ≤ 120 + 20 * (σ.nodes.getX t).table.length := by
+  obtain ⟨i, hfi, hs, hlt, rfl⟩ := roomNextTo_inv h
+  subst σ'
+  refine ⟨rfl, ?_⟩
+  obtain ⟨hfi1, hil⟩ := findIdx?_some_iff'.mp hfi
+  obtain ⟨Lf, cf, ef, hrf, hcf⟩ := findP_agree κ .table σ
+    (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [t, e]) (i := t) (x := e)
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) htr
+  have e1 := evalF_call_ok (q := findP .table) (args := [.var "t", .var "e"]) (ds := ["r"]) (L := L)
+    (by simp [evList, Exp.ev, ht, he]) ef
+  set L1 := OM.Machine.State.setLocs L ["r"] ((findP .table).rets.map Lf)
+  have hL1 : ∀ r, r ≠ "r" → L1 r = L r := fun r h => by
+    simp [L1, findP, OM.Machine.State.setLocs, OM.Machine.State.upd, h]
+  have hr1 : L1 "r" = i := by
+    simp [L1, findP, OM.Machine.State.setLocs, OM.Machine.State.upd, hrf, LK.view]; exact hfi1
+  have e2 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "n") (e := .llen .table "t") (v := (σ.nodes.getX t).table.length)
+    (by simp [Exp.ev, hL1 "t" (by decide), ht, htr, LK.view])
+  set L2 := OM.Machine.State.upd L1 "n" (σ.nodes.getX t).table.length
+  have e3 := evalF_ite_t (κ := κ) (s := σ) (L := L2) (c := "r" <ₑ "n") (t := .skip) (f := .fail) (v := 1)
+    (by simp [Exp.ev, OM.Machine.BinOp.eval, L2, OM.Machine.State.upd, hr1, hil]) one_ne_zero evalF_skip
+  obtain ⟨L3, c3, e4, hlo, hhi, hc3, hF3⟩ := boundsS_ok (κ := κ) (σ := σ) (L := L2) (t := t) (i := i)
+    (before := before) (by simp [L2, OM.Machine.State.upd, hL1 "t" (by decide), ht])
+    (by simp [L2, OM.Machine.State.upd, hr1]) (by simp [L2, OM.Machine.State.upd])
+    (by simp [L2, OM.Machine.State.upd, hL1 "bf" (by decide), hbf]) hil htr
+  have e5 := evalF_ite_f (κ := κ) (s := σ) (L := L3) (c := "hi" ≤ₑ "lo") (t := .fail)
+    (by simp [Exp.ev, OM.Machine.BinOp.eval, hlo, hhi]; omega) evalF_skip
+  have e6 := evalF_assign_ok (κ := κ) (s := σ) (L := L3) (x := "l") (e := ("lo" + "hi" - 1) / 2)
+    (v := (rLo (σ.nodes.getX t).table i before + rHi (σ.nodes.getX t).table i before σ.P.beta - 1) / 2)
+    (by simp [Exp.ev, OM.Machine.BinOp.eval, hlo, hhi]; rw [if_pos (by omega)]; rfl)
+  refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4 (evalF_seq_ok2 e5 e6)))),
+    by simp [OM.Machine.State.upd], ?_⟩
+  simp only [LK.view] at hcf
+  simp only [Exp.cost, costList, List.map, List.sum_cons, List.sum_nil, List.length_cons, List.length_nil,
+    Exp.add_def, Exp.sub_def, Exp.div_def, Exp.ofNat_def] at hcf hc3 ⊢
+  omega
+
 end OM.Impl
