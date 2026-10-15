@@ -737,6 +737,49 @@ theorem sh_tabsNodup : ∀ k e, Ent O' k e → (tabs S' k e).Nodup := by
       · split at ha <;> simp at ha; omega
   · rw [C.tabs_new hen]; exact C.H.tnd
 
+theorem sh_Q : ∀ k e X, Ent O' k e → X ∈ tabs S' k e →
+    X = par S' k e ∨ X = Top.srcOf S' (par S' k e) := by
+  intro k e X he hX
+  have hvlt := C.H.hv
+  obtain ⟨hl, hlh, hvL⟩ := C.up
+  rcases C.ent_cases he with he' | ⟨rfl, hen⟩
+  · have hk : k ≤ s.P.H := by
+      by_contra hk; have := C.S.ordHigh k (by show s.P.H < k; omega); rw [this] at he'; simp at he'
+    rw [C.tabs_old he' hk] at hX
+    simp only [List.mem_append, List.mem_ite_nil_right, List.mem_singleton] at hX
+    rcases hX with (hX | ⟨⟨rfl, hle⟩, rfl⟩) | ⟨⟨rfl, hre⟩, rfl⟩
+    · have hXn := ((C.S.tabsIff k e X he').mp hX).1
+      by_cases hv : k = Top.ht (ts s) v - 1 ∧ par (ts s) k e = v
+      · -- the entry's parent was `v`: the table is `v`, now the source of the new parent
+        obtain ⟨rfl, hpv⟩ := hv
+        obtain ⟨-, hp⟩ := C.par_v he' hpv
+        rcases C.S.Q _ e X he' hX with h | h
+        · right
+          rw [h.trans hpv, hp, C.srcOf]
+          split <;> simp
+        · exfalso
+          rw [hpv, show Top.srcOf (ts s) v = NIL from C.of] at h
+          exact hXn.1 h
+      · rw [C.par_keep he' hk hv]
+        have hpl := C.S.par_liveN he' (by
+          have := ((C.S.tabsIff k e X he').mp hX).2.1; have := (C.S.htN X hXn).2; omega)
+        have hpn := C.nN _ hpl.1
+        rw [C.srcOf (par (ts s) k e), if_neg (fun h => h.elim hpn.1 hpn.2)]
+        exact C.S.Q k e X he' hX
+    · exact Or.inl (C.left_par hle).symm
+    · exact Or.inl (C.right_par hre).symm
+  · rw [C.tabs_new hen] at hX
+    have hent : Ent ord (Top.ht (ts s) v) v := (C.S.ordMem _ C.h1 (C.S.htN v C.vl.1).2 v).mpr ⟨C.vl.1, rfl⟩
+    have hT : X ∈ tabs (ts s) (Top.ht (ts s) v) v := by unfold tabs; rw [if_neg (by have := C.h1; omega)]; exact hX
+    have hen' : Top.liveN S' e := (C.liveN e).mpr (Or.inr hen)
+    have hpe : par S' (Top.ht (ts s) v) e = (nd (ts s) v).livePar := by
+      rw [C.par_live' (by have := C.h1; omega) hen', C.livePar, if_neg (by omega), if_pos hen]
+    have hpv : par (ts s) (Top.ht (ts s) v) v = (nd (ts s) v).livePar := by
+      rw [par_live (Or.inr C.vl), if_neg (by have := C.h1; omega)]
+    have hLn := C.nN _ hl.1
+    rw [hpe, C.srcOf (nd (ts s) v).livePar, if_neg (fun h => h.elim hLn.1 hLn.2), ← hpv]
+    exact C.S.Q _ v X hent hT
+
 end SDCtx
 
 end OM.Proof.Top
