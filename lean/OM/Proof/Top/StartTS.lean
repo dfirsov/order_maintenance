@@ -287,6 +287,37 @@ theorem anc {c : Nat} (hc : c ∈ cl) : ∀ i, i ≤ s.P.H → Top.anc S' c i =
         refine ⟨h1', (C.S.mem_children C.vl).mpr ⟨by rw [if_neg h1']; exact ⟨hal, by omega⟩, ?_⟩⟩
         rw [par_live (Or.inr hal), if_neg (by omega), ← anc_succ c _ (by omega), hih, hav2]
 
+/-- **True weights of untouched nodes do not change.** -/
+theorem tw_old {u : Nat} (hu : Top.isN (ts s) u) (huv : u ≠ v) : tw S' cl u = tw (ts s) cl u := by
+  have hn := C.nN u hu
+  obtain ⟨-, hH⟩ := C.S.htN u hu
+  unfold tw
+  rw [C.ht, if_neg (fun h => h.elim hn.1 hn.2)]
+  congr 1
+  apply List.filter_congr
+  intro c hc
+  rw [C.anc hc _ hH]
+  split
+  · next hb =>
+    rw [hb.1, hb.2]
+    have : (if Top.anc (ts s) c (Top.ht (ts s) v - 1) ∈ (nd (ts s) v).children.take (sK (wiC s v) v)
+        then s.nodes.size else s.nodes.size + 1) ≠ u := by split <;> omega
+    simp [this, Ne.symm huv]
+  · rfl
+
+/-- The drained node serves no chunk directly any more. -/
+theorem tw_v : tw S' cl v = 0 := by
+  have hn := C.nN v C.vl.1
+  unfold tw
+  rw [C.ht, if_neg (fun h => h.elim hn.1 hn.2)]
+  apply List.length_eq_zero_iff.mpr
+  apply List.filter_eq_nil_iff.mpr
+  intro c hc
+  rw [C.anc hc _ (by have := C.hH; omega)]
+  split
+  · split <;> simp <;> omega
+  · next hb => simp only [decide_eq_true_eq]; exact fun h => hb ⟨rfl, h⟩
+
 end SDCtx
 
 end OM.Proof.Top
