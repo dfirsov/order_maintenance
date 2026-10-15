@@ -181,6 +181,28 @@ theorem Shape.rng_between (S : Shape s cl ord) {u c d e : Nat} (hu : isN s u)
     · rw [hc.2] at h1; rw [hd.2] at h2
       exact absurd h2 (h1.asymm (S.ordNodup _))
 
+/-! ### The walk's chain -/
+
+/-- Nodes up from a live node are live and at least as high. -/
+theorem Shape.upChain_mem (S : Shape s cl ord) :
+    ∀ f u x, liveN s u → x ∈ upChain s f u → liveN s x ∧ ht s u ≤ ht s x
+  | 0, _, _, _, hx => by simp [upChain] at hx
+  | f + 1, u, x, hu, hx => by
+    unfold upChain at hx
+    rw [if_neg hu.1.1] at hx
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨hu, le_rfl⟩
+    · by_cases hH : ht s u < s.P.H
+      · obtain ⟨hl, hh, -⟩ := S.up u hu hH
+        obtain ⟨h1, h2⟩ := S.upChain_mem f _ x hl hx
+        exact ⟨h1, by omega⟩
+      · have hroot : u = s.P.H := by
+          have := S.htN u hu.1
+          have hm := (S.ordMem s.P.H (by have := S.H3; omega) le_rfl u).mpr ⟨hu.1, by omega⟩
+          rw [S.root.1] at hm; simpa using hm
+        rw [hroot, S.root.2.2] at hx
+        cases f <;> simp [upChain] at hx
+
 /-! ### Paths and ancestors -/
 
 /-- The parent of the path entry at level `j - 1` is the live ancestor at level `j`. -/

@@ -127,6 +127,53 @@ theorem fdS_rest (v : Nat) (s : Core) (hno : (s.nodes.getX v).order.Nodup) :
 
 attribute [local irreducible] fdS
 
+/-! ### Released targets fit (Lemma T3) -/
+
+/-- A drain has had at most `K_h` funding jobs. -/
+theorem Timing.fund_le {s : TS} {cl : List Nat} {oj : Option Job} (Ti : Timing s cl oj)
+    (hTP : TopParams s.P) {v : Nat} (hg : ghostN s v) :
+    fundOf s cl v ≤ Kd s.P (ht s v) := by
+  have h1 := Ti.wC' v hg
+  have h2 := (Ti.wB v hg).2
+  have hs := hTP.s3
+  unfold Kd
+  have : fundOf s cl v - 1 ≤ (Wd s.P (ht s v) + 2) / (s.P.s - 2) := by
+    rw [Nat.le_div_iff_mul_le (by omega)]
+    have : (s.P.s - 2) * (fundOf s cl v - 1) ≤ (nd s v).weight := by
+      refine le_trans (Nat.mul_le_mul_left _ ?_) h1
+      split <;> omega
+    rw [Nat.mul_comm]; omega
+  omega
+
+/-- **A released target fits under the drain threshold.** -/
+theorem Timing.release {s : TS} {cl : List Nat} {ord : Nat → List Nat} {oj : Option Job}
+    (S : Shape s cl ord) (Ti : Timing s cl oj) (hTP : TopParams s.P) {v t : Nat} (hg : ghostN s v)
+    (htv : t = (nd s v).t1 ∨ t = (nd s v).t2) (htp : t ∉ pend s oj) :
+    (nd s t).weight ≤ Wd s.P (ht s v) := by
+  obtain ⟨hl1, hl2, hh1, hh2, hs1, hs2, -⟩ := S.ghost v hg
+  have h12 : (nd s v).t1 ≠ (nd s v).t2 := by
+    obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, hinf⟩ := S.ghost v hg
+    exact ((before_of_infix2 (infix3_left hinf)).trans (before_of_infix2 (infix3_right hinf))
+      (S.ordNodup _)).ne (S.ordNodup _)
+  have hv0 : v ≠ NIL := hg.1.1
+  have hb1 := Ti.big _ hl1 (by rw [hs1]; exact hv0)
+  have hb2 := Ti.big _ hl2 (by rw [hs2]; exact hv0)
+  have hd1 := Ti.wD _ hl1 hb1
+  have hd2 := Ti.wD _ hl2 hb2
+  rw [hh1] at hd1; rw [hh2] at hd2
+  have hf := Ti.fund_le hTP hg
+  have hF := Ti.wF v hg
+  have hB := (Ti.wB v hg).2
+  have hlk := hTP.lamK (ht s v) (S.htN v hg.1).1
+  have hew : ew s cl v = tw s cl (nd s v).t1 + tw s cl (nd s v).t2 := by
+    unfold ew; rw [if_pos hg.2]
+  unfold fundOf at hf
+  have hlive : liveN s t := by rcases htv with e | e <;> rw [e] <;> assumption
+  have hw := Ti.wts t hlive
+  rw [if_neg htp, Nat.add_zero] at hw
+  rw [hw]
+  rcases htv with e | e <;> subst e <;> omega
+
 /-- The order after ghost `v` (of height `h`) ends. -/
 def ordE (ord : Nat → List Nat) (h v : Nat) : Nat → List Nat :=
   fun k => if k = h then (ord k).erase v else ord k
@@ -637,5 +684,148 @@ theorem Shape.fin_shape (hemp : rng (ts s) cl v = []) :
     exact hppv hc e
 
 end fin
+
+theorem filter_erase_false {l : List Nat} {p : Nat → Bool} {v : Nat} (hv : p v = false) :
+    (l.erase v).filter p = l.filter p := by
+  induction l with
+  | nil => rfl
+  | cons x t ih =>
+    by_cases hx : x = v
+    · subst hx; rw [List.erase_cons_head, List.filter_cons, hv]; rfl
+    · rw [List.erase_cons_tail (by simpa using hx), List.filter_cons, List.filter_cons, ih]
+
+/-- **A sweep call on an empty range keeps the invariant**: the drain ends, and the walk moves
+up. -/
+theorem inv_drainFinish {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    {j : Job} {w up v k : Nat}
+    (hI : InvJ (ts s) cl ord dr n0 (some { j with pc := .fund w up v k }))
+    (hTP : TopParams s.P) (hemp : rng (ts s) cl v = []) :
+    (drainStep v).run s = .ok false (fdS v s) ∧ TopRel s (fdS v s) ∧
+      InvJ (ts (fdS v s)) cl (ordE ord (ht (ts s) v) v) dr n0 (some { j with pc := .walk (some up) }) := by
+  have S := hI.shape
+  obtain ⟨hpos, hat⟩ := hI.job _ rfl
+  simp only [JobAt] at hat
+  obtain ⟨hwl, hwa, hua, hg, hsw, hks⟩ := hat
+  obtain ⟨hv, hno, hni, hvo, hvi, h1, h2, h12, ho1, ho2, hi1, hi2, hoi, hin, hent⟩ := S.fin_facts hg
+  have hrun : (drainStep v).run s = .ok false (fdS v s) := by
+    refine drainStep_finish hg.1.2.2 ?_ hni fun T hT => (S.fin_facts hg).2.2.2.2.2.2.2.2.2.2.2.2.2.1 T hT |>.2 |> fun _ => ?_
+    · obtain ⟨hf, -⟩ := S.ends v hg.1
+      show (nd (ts s) v).first = NIL
+      rw [hf, hemp]; rfl
+    · have hvent : Ent ord (ht (ts s) v) v :=
+        (S.ordMem _ (S.htN v hg.1).1 (S.htN v hg.1).2 v).mpr ⟨hg.1, rfl⟩
+      have := S.tabsIff _ v T hvent
+      unfold tabs at this; rw [if_neg (by have := (S.htN v hg.1).1; omega)] at this
+      exact (this.mp hT).2.2
+  refine ⟨hrun, by have := top_drainStep v s; rw [hrun] at this; exact this, ?_⟩
+  have F := S.fin_frame hg
+  have SH := S.fin_shape hg F hemp
+  have hL := S.fin_live hg F
+  -- the walk node is a target of the ghost
+  have hsrc := S.src w hwl (by rw [hsw]; exact fun e => hg.1.1 e)
+  rw [hsw] at hsrc
+  obtain ⟨hl1, hl2, hh1, hh2, hs1, hs2, -, -, -, hlt, -⟩ := S.ghost v hg
+  have hwh : ht (ts s) w = ht (ts s) v := by rcases hsrc.2 with e | e <;> rw [e] <;> assumption
+  -- the walk goes on from the live parent of the target
+  obtain ⟨hupl, huph, -⟩ := S.up w hwl (by omega)
+  have hup : up = (nd (ts s) w).livePar := by
+    rw [hua]
+    have := anc_succ (s := ts s) j.y (ht (ts s) w) (S.htN w hwl.1).1
+    rw [this, ← hwa]
+  rw [← hup] at hupl huph
+  have Ti := hI.time
+  have Ro := hI.room
+  have hpend : pend (ts (fdS v s)) (some { j with pc := .walk (some up) }) =
+      pend (ts s) (some { j with pc := .fund w up v k }) := by
+    show upChain _ ((ts (fdS v s)).P.H + 1) up = upChain _ ((ts s).P.H + 1) up
+    rw [F.upChain, F.P]
+  -- other ghosts owe the same sweeps
+  have hslack : ∀ u, u ≠ v → slack (ts (fdS v s)) (some { j with pc := .walk (some up) }) u =
+      slack (ts s) (some { j with pc := .fund w up v k }) u := by
+    intro u hu
+    have hc : curH (ts (fdS v s)) { j with pc := .walk (some up) } = ht (ts s) w + 1 := by
+      unfold curH; simp only
+      rw [if_neg (fun e => by rw [e] at hupl; exact hupl.1.1 rfl), F.ht, huph]
+    have hc' : curH (ts s) { j with pc := .fund w up v k } = ht (ts s) w + 1 := rfl
+    unfold slack
+    simp only [F.anc, F.ht, F.t1, F.t2, F.P, hc, hc', if_neg (Ne.symm hu)]
+  have hfun : ∀ u, funded (ts (fdS v s)) (some { j with pc := .walk (some up) }) u ↔
+      funded (ts s) (some { j with pc := .fund w up v k }) u := by
+    intro u; unfold funded; simp only [F.anc, F.ht, F.t1, F.t2]
+  refine ⟨SH, ?_, ?_, ?_⟩
+  · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
+      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
+    · rw [hL] at hu; rw [F.weight, hpend, F.tw]; exact Ti.wts u hu
+    · rw [hL] at hu; rw [F.livePar] at hp; rw [F.weight, F.ht, F.P]
+      rw [F.srcOf] at hs
+      split at hs
+      · next hrel =>
+        have := Ti.release S hTP hg hrel.1 (fun hm => by
+          obtain ⟨-, hge⟩ := S.upChain_mem _ _ _ hupl hm
+          rw [huph, hwh] at hge
+          rcases hrel.1 with e | e <;> rw [e] at hge <;> [rw [hh1] at hge; rw [hh2] at hge] <;> omega)
+        rcases hrel.1 with e | e <;> rw [e] <;> [rw [hh1]; rw [hh2]] <;> rw [← e] <;> exact this
+      · exact Ti.wA u hu hp hs
+    · rw [F.ghostN] at hu; rw [F.weight, F.ht, F.P]; exact Ti.wB u hu.1
+    · rw [F.ghostN] at hu
+      have : ew (ts (fdS v s)) cl u = ew (ts s) cl u := by
+        unfold ew; rw [F.draining, F.t1, F.t2, F.tw, F.tw, F.tw]
+      rw [F.weight, this]; exact Ti.wF u hu.1
+    · rw [F.ghostN] at hu
+      have hew : ew (ts (fdS v s)) cl u = ew (ts s) cl u := by
+        unfold ew; rw [F.draining, F.t1, F.t2, F.tw, F.tw, F.tw]
+      unfold fundOf; rw [hew, F.weight, F.rng, hslack u hu.2, F.P]
+      exact Ti.wC u hu.1
+    · rw [F.ghostN] at hu
+      have hew : ew (ts (fdS v s)) cl u = ew (ts s) cl u := by
+        unfold ew; rw [F.draining, F.t1, F.t2, F.tw, F.tw, F.tw]
+      unfold fundOf; rw [hew, F.weight, F.P]
+      have := Ti.wC' u hu.1
+      unfold fundOf at this
+      by_cases hf : funded (ts s) (some { j with pc := .fund w up v k }) u
+      · rw [if_pos ((hfun u).mpr hf)]; rw [if_pos hf] at this; exact this
+      · rw [if_neg (fun h => hf ((hfun u).mp h))]; rw [if_neg hf] at this; exact this
+    · rw [hL] at hu; rw [F.P] at hu'; rw [F.tw, F.ht, F.P]; exact Ti.wD u hu hu'
+    · rw [hL] at hu; rw [F.srcOf] at hs; rw [F.P]
+      split at hs
+      · exact absurd rfl hs
+      · exact Ti.big u hu hs
+  · refine ⟨fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
+    · rw [F.isN] at hX
+      unfold labs; rw [F.table, F.P]
+      split
+      · exact gapsGe_assocErase v (Ro.gaps X hX.1)
+      · exact Ro.gaps X hX.1
+    · rw [F.isN] at hX; rw [F.ht] at h1'
+      have : ew (ts (fdS v s)) cl X = ew (ts s) cl X := by
+        unfold ew; rw [F.draining, F.t1, F.t2, F.tw, F.tw, F.tw]
+      rw [this, F.P]; exact Ro.pot1 X hX.1 h1'
+    · rw [F.isN] at hX; rw [F.ht] at h2'
+      have hew : ew (ts (fdS v s)) cl X = ew (ts s) cl X := by
+        unfold ew; rw [F.draining, F.t1, F.t2, F.tw, F.tw, F.tw]
+      have hvl : ¬ liveN (ts s) v := fun h => absurd hg.2 (by rw [h.2]; simp)
+      have hgr : growth (ts (fdS v s)) cl X = growth (ts s) cl X := by
+        unfold growth
+        rw [S.fin_order hg F, F.ht, F.P]
+        simp only [hL, F.tw]
+        split
+        · rw [filter_erase_false (by simp [hvl])]
+        · rfl
+      have hol : oldLive (ts (fdS v s)) X = oldLive (ts s) X := by
+        unfold oldLive
+        rw [S.fin_order hg F]
+        simp only [hL]
+        split
+        · rw [filter_erase_false (by simp [hvl])]
+        · rfl
+      rw [hew, hgr, hol, F.ht, F.P]; exact Ro.pot2 X hX.1 h2'
+  · intro j' hj'
+    cases hj'
+    refine ⟨hpos, ?_⟩
+    simp only [JobAt]
+    right
+    rw [hL, F.ht, F.anc]
+    refine ⟨hupl, ?_⟩
+    rw [huph, hwh, hua, hwh]
 
 end OM.Proof.Top
