@@ -29,17 +29,16 @@ structure TS where
   path : Array (Array Nat)
   cin : Array (List Nat)
   lpar : Array Nat
-  resJob : Option Job
   tag : Nat → Nat
 
 def ts (s : Core) : TS :=
-  ⟨s.P, s.nodes, s.path, s.cin, s.lpar, s.resJob, fun c => (s.C.getX c).tag⟩
+  ⟨s.P, s.nodes, s.path, s.cin, s.lpar, fun c => (s.C.getX c).tag⟩
 
 /-- `TopSame` keeps the top structure's part. -/
 theorem _root_.OM.Proof.TopSame.ts {s s' : Core} (h : TopSame s s') : ts s' = ts s := by
-  obtain ⟨⟨h1, h2, h3, h4, h5, -, -, -⟩, -, hl, hP⟩ := h
+  obtain ⟨⟨h1, h2, h3, h4, -, -, -, -⟩, -, hl, hP⟩ := h
   unfold OM.Proof.Top.ts
-  rw [h1, h2, h3, h4, h5, hP]
+  rw [h1, h2, h3, h4, hP]
   congr 1
   funext c; exact (hl c).2.2
 

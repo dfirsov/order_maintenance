@@ -66,9 +66,9 @@ def copyRest (j : Job) (H : Nat) (s : TS) (l : Nat) : TS :=
   if l ≤ H then copyRest j H (copyS s j l) (l + 1) else s
 termination_by H + 1 - l
 
-/-- The state with the running job's path copy completed. -/
-def finS (s : TS) : TS :=
-  match s.resJob with
+/-- The state with the path copy of the running job `oj` completed. -/
+def finS (s : TS) (oj : Option Job) : TS :=
+  match oj with
   | some j => match j.pc with
     | .copy l => copyRest j s.P.H s l
     | _ => s
@@ -204,13 +204,10 @@ structure InvJ (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat �
   room : Room s cl dr n0
   job : ∀ j, oj = some j → JobOK s cl j
 
-abbrev InvT (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat → Nat) : Prop :=
-  InvJ s cl ord dr n0 s.resJob
-
 /-- **The top structure's invariant** (M5's `TI`). -/
 def TopInv (s : Core) : Prop :=
   ∃ cl ord dr n0, LList (cN s) (cP s) s.firstChunk cl ∧ (∀ c, c ∈ cl ↔ 1 ≤ c ∧ c < s.C.size) ∧
-    InvT (finS (ts s)) cl ord dr n0
+    InvJ (finS (ts s) s.resJob) cl ord dr n0 s.resJob
 
 /-! ### The job measure -/
 
@@ -237,7 +234,8 @@ def topJ (P : Params) : Nat := (P.H + 1) + walkLeft P 1
 
 theorem _root_.OM.Proof.TopSame.topInv {s s' : Core} (h : TopSame s s') (hI : TopInv s) : TopInv s' := by
   obtain ⟨cl, ord, dr, n0, hL, hC, hI⟩ := hI
-  refine ⟨cl, ord, dr, n0, ?_, fun c => by rw [h.Csize]; exact hC c, by rw [h.ts]; exact hI⟩
+  refine ⟨cl, ord, dr, n0, ?_, fun c => by rw [h.Csize]; exact hC c,
+    by rw [h.ts, h.top.2.2.2.2.1]; exact hI⟩
   have e1 : cN s' = cN s := funext fun c => (h.links c).1
   have e2 : cP s' = cP s := funext fun c => (h.links c).2.1
   rw [e1, e2, h.top.2.2.2.2.2.2.2]; exact hL

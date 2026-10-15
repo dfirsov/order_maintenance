@@ -72,7 +72,6 @@ structure FinFrame (s s' : TS) (v : Nat) : Prop where
   path : s'.path = s.path
   lpar : s'.lpar = s.lpar
   tag : s'.tag = s.tag
-  resJob : s'.resJob = s.resJob
   node : ∀ u, nd s' u = { nd s u with
     alive := if u = v then false else (nd s u).alive,
     table := if u ∈ (nd s v).inTables then assocErase (nd s u).table v else (nd s u).table,
@@ -278,7 +277,7 @@ theorem Shape.fin_facts :
 theorem Shape.fin_frame : FinFrame (ts s) (ts (fdS v s)) v := by
   obtain ⟨hv, hno, hni, hvo, hvi, h1, h2, h12, ho1, ho2, hi1, hi2, hoi, hin, hent⟩ := S.fin_facts hg
   obtain ⟨hc, hp, hl, hP, hC, hr, hsz⟩ := fdS_rest v s hno
-  refine ⟨hP, hsz, hp, hl, by unfold ts; simp only [hC], hr, fun u => ?_, fun e => ?_⟩
+  refine ⟨hP, hsz, hp, hl, by unfold ts; simp only [hC], fun u => ?_, fun e => ?_⟩
   · show (fdS v s).nodes.getX u = _
     rw [fdS_getX v s hv hno hni hvo hvi h1 h2 h12 ho1 ho2 hi1 hi2 hoi u]
     by_cases huv : u = v
