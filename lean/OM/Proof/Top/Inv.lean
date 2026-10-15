@@ -207,8 +207,8 @@ structure InvJ (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat �
 
 /-- **The top structure's invariant** (M5's `TI`). -/
 def TopInv (s : Core) : Prop :=
-  ∃ cl ord dr n0, LList (cN s) (cP s) s.firstChunk cl ∧ (∀ c, c ∈ cl ↔ 1 ≤ c ∧ c < s.C.size) ∧
-    InvJ (finS (ts s) s.resJob) cl ord dr n0 s.resJob
+  TopParams s.P ∧ ∃ cl ord dr n0, LList (cN s) (cP s) s.firstChunk cl ∧
+    (∀ c, c ∈ cl ↔ 1 ≤ c ∧ c < s.C.size) ∧ InvJ (finS (ts s) s.resJob) cl ord dr n0 s.resJob
 
 /-! ### The job measure -/
 
@@ -234,8 +234,8 @@ def topMu (s : Core) : Nat :=
 def topJ (P : Params) : Nat := (P.H + 1) + walkLeft P 1
 
 theorem _root_.OM.Proof.TopSame.topInv {s s' : Core} (h : TopSame s s') (hI : TopInv s) : TopInv s' := by
-  obtain ⟨cl, ord, dr, n0, hL, hC, hI⟩ := hI
-  refine ⟨cl, ord, dr, n0, ?_, fun c => by rw [h.Csize]; exact hC c,
+  obtain ⟨hTP, cl, ord, dr, n0, hL, hC, hI⟩ := hI
+  refine ⟨by rw [h.P]; exact hTP, cl, ord, dr, n0, ?_, fun c => by rw [h.Csize]; exact hC c,
     by rw [h.ts, h.top.2.2.2.2.1]; exact hI⟩
   have e1 : cN s' = cN s := funext fun c => (h.links c).1
   have e2 : cP s' = cP s := funext fun c => (h.links c).2.1

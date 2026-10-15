@@ -800,17 +800,18 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
     (hL : LList (cN s) (cP s) s.firstChunk cl) (hcs : ∀ c ∈ cl, c < s.C.size)
     (hk : k < s.P.s) (hne : rng (ts s) cl v ≠ []) :
     ∃ s', (drainStep v).run s = .ok true s' ∧ TopRel s s' ∧
-      InvJ (ts s') cl ord dr n0 (some { j with pc := .fund w up v (k + 1) }) := by
+      InvJ (ts s') cl ord dr n0 (some { j with pc := .fund w up v (k + 1) }) ∧
+      ∀ u, ht (ts s') u = ht (ts s) u := by
   have S := hI.shape
   obtain ⟨hpos, hat⟩ := hI.job _ rfl
   simp only [JobAt] at hat
   obtain ⟨hwl, hwa, hua, hg, hsw, hks⟩ := hat
   obtain ⟨hrun, htag⟩ := S.drain_run hg hne hL
-  refine ⟨_, hrun, ?_, ?_⟩
-  · have := top_drainStep v s; rw [hrun] at this; exact this
   obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
   set tag := dsTag s v _ _ _ _
   have T := dsS_sameTree (tag := tag) hvt hv htz
+  refine ⟨_, hrun, ?_, ?_, T.ht⟩
+  · have := top_drainStep v s; rw [hrun] at this; exact this
   have hW : ∀ u, (nd (ts (dsS s v tag)) u).weight = (nd (ts s) u).weight :=
     dsS_weight (tag := tag) hvt hv htz
   have SH := S.drain_shape hg hne hL hcs tag htag
