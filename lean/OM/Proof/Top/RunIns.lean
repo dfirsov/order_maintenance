@@ -146,4 +146,133 @@ theorem forM_around_run (e n1 n2 : Nat) (f : Nat → Nat × Nat) (hne : n1 ≠ e
     have hne' : T' ≠ T := fun h => hT.1 (h ▸ hT')
     unfold aroundF; rw [hsame T' hne']
 
+/-! ### `insertAround` -/
+
+/-- The label `roomNextTo` picks, computed from the table. -/
+def roomL (β : Nat) (tab : List (Nat × Nat)) (e : Nat) (before : Bool) : Nat :=
+  let i := (tab.findIdx? (·.1 == e)).getD 0
+  (roomLo (tab.take i) (tab.getD i (0, 0)).2 before +
+    roomHi β (tab.drop (i + 1)) (tab.getD i (0, 0)).2 before - 1) / 2
+
+theorem roomL_eq {β : Nat} {A Bs : List (Nat × Nat)} {e le : Nat} (hA : e ∉ A.map (·.1))
+    (before : Bool) : roomL β (A ++ (e, le) :: Bs) e before =
+      (roomLo A le before + roomHi β Bs le before - 1) / 2 := by
+  unfold roomL
+  simp only [findIdx_split hA, Option.getD_some, getD_split_mid, List.take_left',
+    show A.length + 1 = (A ++ [(e, le)]).length by simp]
+  rw [show A ++ (e, le) :: Bs = (A ++ [(e, le)]) ++ Bs by simp, List.drop_left]
+
+/-- The table of `T` has room on both sides of `e`. -/
+def RoomOK (s : Core) (e T : Nat) : Prop :=
+  ∃ A le Bs, (s.nodes.getX T).table = A ++ (e, le) :: Bs ∧ e ∉ A.map (·.1) ∧
+    ((s.nodes.getX T).draining = true → (lookup (s.nodes.getX T).side e).isSome) ∧
+    roomLo A le true < roomHi s.P.beta Bs le true ∧ roomLo A le false < roomHi s.P.beta Bs le false
+
+theorem RoomOK.around {s : Core} {e T : Nat} (h : RoomOK s e T) : AroundOK s e T := by
+  obtain ⟨A, le, Bs, h1, h2, h3, -⟩ := h; exact ⟨A, le, Bs, h1, h2, h3⟩
+
+theorem roomNextTo_run' {s : Core} {e T : Nat} (h : RoomOK s e T) (before : Bool) :
+    (roomNextTo T e before).run s = .ok (roomL s.P.beta (s.nodes.getX T).table e before) s := by
+  obtain ⟨A, le, Bs, htab, hA, -, h1, h2⟩ := h
+  rw [roomNextTo_run htab hA before (by cases before <;> assumption), htab, roomL_eq hA]
+
+theorem zip_map_self {α β : Type} (l : List α) (f : α → β) : l.zip (l.map f) = l.map fun x => (x, f x) := by
+  induction l with
+  | nil => rfl
+  | cons x t ih => simp [ih]
+
+/-- **Running `insertAroundPrep`.** -/
+theorem insertAroundPrep_run {s : Core} {x f1x i1 : Nat}
+    (hroom : ∀ T ∈ s.cin.getX x, RoomOK s x T)
+    (hf1 : (s.nodes.getX ((s.path.getX x).getX 1)).lab? x = some f1x)
+    (hi1 : (s.cin.getX x).idx? ((s.path.getX x).getX 1) = some i1)
+    (htx : f1x ≤ (s.C.getX x).tag)
+    (hlp : x ∈ (s.nodes.getX (s.lpar.getX x)).children) :
+    let ly := (s.cin.getX x).map fun T => roomL s.P.beta (s.nodes.getX T).table x true
+    let lz := (s.cin.getX x).map fun T => roomL s.P.beta (s.nodes.getX T).table x false
+    (insertAroundPrep x).run s = .ok ((s.C.getX x).tag - f1x + ly.getD i1 0,
+      (s.C.getX x).tag - f1x + lz.getD i1 0, s.cin.getX x, ly, lz, s.lpar.getX x) s := by
+  intro ly lz
+  unfold insertAroundPrep
+  simp only [run_getPath_bind, run_get_bind]
+  rw [run_bind, mapM_run _ _ (fun T => roomL s.P.beta (s.nodes.getX T).table x true) s
+    (fun T hT => roomNextTo_run' (hroom T hT) true)]
+  simp only
+  rw [run_bind, mapM_run _ _ (fun T => roomL s.P.beta (s.nodes.getX T).table x false) s
+    (fun T hT => roomNextTo_run' (hroom T hT) false)]
+  simp only [run_getN_bind, hf1, hi1, run_getC_bind, if_neg (Nat.not_lt.mpr htx),
+    run_getLpar_bind]
+  have : (s.nodes.getX (s.lpar.getX x)).children.contains x = true := List.elem_iff.mpr hlp
+  simp only [this, Bool.not_true, Bool.false_eq_true, if_false, run_pure]
+  rfl
+
+/-- `joinChunk`, as a state update. -/
+def joinS (s : Core) (tabs : List Nat) (lp c : Nat) : Core :=
+  { s with path := s.path.setX c (Array.replicate (s.P.H + 1) NIL), cin := s.cin.setX c tabs, lpar := s.lpar.setX c lp }
+
+theorem joinChunk_run (s : Core) (tabs : List Nat) (lp c : Nat) :
+    (joinChunk tabs lp c).run s = .ok ⟨⟩ (joinS s tabs lp c) := by
+  unfold joinChunk setPath setInTables setLpar
+  simp only [run_getP_bind, run_modify_bind, beq_self_eq_true, if_true, run_modify]
+  rfl
+
+/-- The state after `insertAroundFinish`. -/
+def insFinS (s : Core) (x y z : Nat) (f : Nat → Nat × Nat) : Core :=
+  let tabs := s.cin.getX x
+  let lp := s.lpar.getX x
+  let s1 := { s with nodes := tabs.foldl (fun ns T => ns.modify T (aroundF s x y z f T)) s.nodes }
+  let s3 := joinS (joinS s1 tabs lp y) tabs lp z
+  { s3 with nodes := s3.nodes.modify lp fun n => { n with children := n.children.replace1 x [y, x, z] } }
+
+theorem insertAroundFinish_run {s : Core} {x y z : Nat} (g1 g2 : Nat → Nat) (hyx : y ≠ x)
+    (hnd : (s.cin.getX x).Nodup) (hok : ∀ T ∈ s.cin.getX x, AroundOK s x T) :
+    (insertAroundFinish x y z (s.cin.getX x) ((s.cin.getX x).map g1) ((s.cin.getX x).map g2)
+      (s.lpar.getX x)).run s =
+      .ok { x := x, y := y, z := z, pc := .copy 1 } (insFinS s x y z fun T => (g1 T, g2 T)) := by
+  unfold insertAroundFinish insFinS
+  have hz : ((s.cin.getX x).map g1).zip ((s.cin.getX x).map g2) =
+      (s.cin.getX x).map fun T => (g1 T, g2 T) := by
+    induction s.cin.getX x with
+    | nil => rfl
+    | cons a t ih => simp [ih]
+  rw [hz, zip_map_self, run_bind, forM_around_run x y z _ hyx _ s hnd hok]
+  simp only
+  rw [run_bind, joinChunk_run]; simp only
+  rw [run_bind, joinChunk_run]; simp only
+  rw [run_modN_bind]
+  rfl
+
+/-- The tags written by `insertAround`. -/
+def tagY (s : Core) (x f1x i1 : Nat) : Nat :=
+  (s.C.getX x).tag - f1x + ((s.cin.getX x).map fun T => roomL s.P.beta (s.nodes.getX T).table x true).getD i1 0
+def tagZ (s : Core) (x f1x i1 : Nat) : Nat :=
+  (s.C.getX x).tag - f1x + ((s.cin.getX x).map fun T => roomL s.P.beta (s.nodes.getX T).table x false).getD i1 0
+
+/-- The core after both tag writes. -/
+def tagsS (s : Core) (y z ty tz : Nat) : Core :=
+  { s with C := (s.C.modify y fun C => { C with tag := ty }).modify z fun C => { C with tag := tz } }
+
+/-- **Running `insertAround`.** -/
+theorem insertAround_run {s : Core} {x y z f1x i1 : Nat}
+    (hroom : ∀ T ∈ s.cin.getX x, RoomOK s x T) (hnd : (s.cin.getX x).Nodup) (hyx : y ≠ x)
+    (hf1 : (s.nodes.getX ((s.path.getX x).getX 1)).lab? x = some f1x)
+    (hi1 : (s.cin.getX x).idx? ((s.path.getX x).getX 1) = some i1)
+    (htx : f1x ≤ (s.C.getX x).tag)
+    (hlp : x ∈ (s.nodes.getX (s.lpar.getX x)).children)
+    (hgy : TagOK s y (tagY s x f1x i1))
+    (hgz : TagOK { s with C := s.C.modify y fun C => { C with tag := tagY s x f1x i1 } } z (tagZ s x f1x i1)) :
+    (insertAround x y z).run s = .ok { x := x, y := y, z := z, pc := .copy 1 }
+      (insFinS (tagsS s y z (tagY s x f1x i1) (tagZ s x f1x i1)) x y z
+        fun T => (roomL s.P.beta (s.nodes.getX T).table x true,
+          roomL s.P.beta (s.nodes.getX T).table x false)) := by
+  unfold insertAround
+  rw [run_bind, insertAroundPrep_run hroom hf1 hi1 htx hlp]
+  simp only
+  unfold tagY at hgy hgz; unfold tagZ at hgz
+  rw [guardedSetTag_bind hgy, guardedSetTag_bind hgz]
+  exact insertAroundFinish_run (s := tagsS s y z (tagY s x f1x i1) (tagZ s x f1x i1))
+    (fun T => roomL s.P.beta (s.nodes.getX T).table x true)
+    (fun T => roomL s.P.beta (s.nodes.getX T).table x false) hyx hnd
+    (fun T hT => (hroom T hT).around)
+
 end OM.Proof.Top
