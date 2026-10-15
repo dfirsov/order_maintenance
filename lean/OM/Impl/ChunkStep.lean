@@ -96,4 +96,133 @@ theorem removeChunkS_agree (κ : Caps) (s : Core) (L : Loc) {x : Nat} (hx : L "x
     (evalF_seq_ok2 e4 e5))), ?_⟩
   simp only [Exp.cost, Exp.cF] at hn4 hn5 ⊢; omega
 
+/-! ### The unit at an end of a chunk -/
+
+/-- The unit held in locals: `[u0]`, or `[u0, u1, u2]` when `uk = 3`. -/
+def unitOf (L : Loc) : List Nat := if L "uk" = 1 then [L "u0"] else [L "u0", L "u1", L "u2"]
+
+def unitLE : Exp := "lf" &&ₑ (.gF .l "sr" =ₑ "g0")
+def unitRE : Exp := (!ₑ "lf") &&ₑ (.gF .r "sr" =ₑ "g0")
+/-- `unitCand x (lf = 1)` into `uk, u0, u1, u2` (locals `x lf`). -/
+def unitS : Stm :=
+  .ite "lf" ("g0" ::= .cF .first "x") ("g0" ::= .cF .last "x") ;;
+  "uk" ::= 1 ;; "u0" ::= "g0" ;;
+  .ite (.gF .st "g0" =ₑ 1)
+    ("sr" ::= .gF .src "g0" ;;
+     .ite unitLE ("uk" ::= 3 ;; "u0" ::= "g0" ;; "u1" ::= "sr" ;; "u2" ::= .gF .r "sr")
+       (.ite unitRE ("uk" ::= 3 ;; "u0" ::= .gF .l "sr" ;; "u1" ::= "sr" ;; "u2" ::= "g0") .skip))
+    .skip
+
+theorem unitCand_eq (s : Core) (x : Nat) (left : Bool) :
+    unitCand s x left =
+      (let g0 := if left then (s.C.getX x).first else (s.C.getX x).last
+       let G0 := s.Gs.getX g0
+       if G0.st = .overflow then
+         (let S := s.Gs.getX G0.src
+          if left = true ∧ S.l = g0 then [g0, G0.src, S.r]
+          else if left = false ∧ S.r = g0 then [S.l, G0.src, g0] else [g0])
+       else [g0]) := by
+  unfold unitCand
+  dsimp only
+  by_cases h : (s.Gs.getX (if left = true then (s.C.getX x).first else (s.C.getX x).last)).st = St.overflow
+  · simp only [h, bne_self_eq_false, Bool.false_eq_true, if_false, if_true]
+    cases left <;> simp
+  · simp [h]
+
+theorem unitS_ok {κ : Caps} {s : Core} {L : Loc} {x : Nat} {left : Bool} (hx : L "x" = x) (hlf : L "lf" = b2n left)
+    (hxT : x < κ.tbl .C) (hg0T : (if left then (s.C.getX x).first else (s.C.getX x).last) < κ.tbl .G)
+    (hsrT : (s.Gs.getX (if left then (s.C.getX x).first else (s.C.getX x).last)).src < κ.tbl .G) :
+    ∃ L' n, evalF κ unitS s L = .ok s L' n ∧ unitOf L' = unitCand s x left ∧ (L' "uk" = 1 ∨ L' "uk" = 3) ∧
+      n ≤ 80 ∧ ∀ r, r ≠ "g0" → r ≠ "uk" → r ≠ "u0" → r ≠ "u1" → r ≠ "u2" → r ≠ "sr" → L' r = L r := by
+  set g0 := if left then (s.C.getX x).first else (s.C.getX x).last
+  set G0 := s.Gs.getX g0
+  have e1 : ∃ c1, evalF κ (.ite "lf" ("g0" ::= .cF .first "x") ("g0" ::= .cF .last "x")) s L =
+      .ok s (upd L "g0" g0) c1 ∧ c1 ≤ 6 := by
+    cases left
+    · exact ⟨_, evalF_ite_f (by simp [Exp.ev, hlf, b2n]) (evalF_assign_ok (by simp [Exp.cF, Exp.ev, hx, hxT, Fld.cap,
+        Fld.get, CF.get, g0])), by simp [Exp.cost, Exp.cF]⟩
+    · exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, hlf, b2n]) one_ne_zero (evalF_assign_ok (by simp [Exp.cF,
+        Exp.ev, hx, hxT, Fld.cap, Fld.get, CF.get, g0])), by simp [Exp.cost, Exp.cF]⟩
+  obtain ⟨c1, e1, hc1⟩ := e1
+  set L1 := upd L "g0" g0
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := L1) (x := "uk") (e := (1 : Exp)) (v := 1) rfl
+  have a3 := evalF_assign_ok (κ := κ) (s := s) (L := upd L1 "uk" 1) (x := "u0") (e := .var "g0") (v := g0)
+    (by simp [Exp.ev, L1, OM.Machine.State.upd])
+  set L3 := upd (upd L1 "uk" 1) "u0" g0
+  have h3 : ∀ r, r ≠ "g0" → r ≠ "uk" → r ≠ "u0" → L3 r = L r := fun r h1 h2 h3 => by
+    simp [L3, L1, OM.Machine.State.upd, h1, h2, h3]
+  have h3g0 : L3 "g0" = g0 := by simp [L3, L1, OM.Machine.State.upd]
+  have h3lf : L3 "lf" = b2n left := by rw [h3 "lf" (by decide) (by decide) (by decide), hlf]
+  have hc4 : (.gF .st "g0" =ₑ 1 : Exp).ev κ s L3 = some (if G0.st.toN = 1 then 1 else 0) := by
+    simp [Exp.gF, Exp.ev, OM.Machine.BinOp.eval, h3g0, hg0T, Fld.cap, Fld.get, GF.get, G0]
+  have hfr3 : ∀ L' : Loc, (∀ r, r ≠ "g0" → r ≠ "uk" → r ≠ "u0" → r ≠ "u1" → r ≠ "u2" → r ≠ "sr" → L' r = L3 r) →
+      ∀ r, r ≠ "g0" → r ≠ "uk" → r ≠ "u0" → r ≠ "u1" → r ≠ "u2" → r ≠ "sr" → L' r = L r :=
+    fun L' hL' r h1 h2 hx3 h4 h5 h6 => (hL' r h1 h2 hx3 h4 h5 h6).trans (h3 r h1 h2 hx3)
+  by_cases hov : G0.st = .overflow
+  · have hc4' : (.gF .st "g0" =ₑ 1 : Exp).ev κ s L3 = some 1 := by rw [hc4, hov]; rfl
+    set sr := G0.src
+    set S := s.Gs.getX sr
+    have a5 := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "sr") (e := .gF .src "g0") (v := sr)
+      (by simp [Exp.gF, Exp.ev, h3g0, hg0T, Fld.cap, Fld.get, GF.get, sr, G0])
+    set L5 := upd L3 "sr" sr
+    have h5 : L5 "sr" = sr := by simp [L5, OM.Machine.State.upd]
+    have h5g0 : L5 "g0" = g0 := by simp [L5, OM.Machine.State.upd, h3g0]
+    have h5lf : L5 "lf" = b2n left := by simp [L5, OM.Machine.State.upd, h3lf]
+    have hsrT' : sr < κ.tbl .G := hsrT
+    have hcL : unitLE.ev κ s L5 = some (if left = true ∧ S.l = g0 then 1 else 0) := by
+      cases left <;> by_cases e : S.l = g0 <;>
+        simp [unitLE, Exp.gF, Exp.ev, OM.Machine.BinOp.eval, h5, h5g0, h5lf, hsrT', Fld.cap, Fld.get, GF.get, b2n, e, S]
+    have hcR : unitRE.ev κ s L5 = some (if left = false ∧ S.r = g0 then 1 else 0) := by
+      cases left <;> by_cases e : S.r = g0 <;>
+        simp [unitRE, Exp.gF, Exp.ev, OM.Machine.BinOp.eval, OM.Machine.UnOp.eval, h5, h5g0, h5lf, hsrT', Fld.cap,
+          Fld.get, GF.get, b2n, e, S]
+    have hcand : unitCand s x left = if left = true ∧ S.l = g0 then [g0, sr, S.r]
+        else if left = false ∧ S.r = g0 then [S.l, sr, g0] else [g0] := by
+      rw [unitCand_eq]; exact if_pos hov
+    by_cases hL : left = true ∧ S.l = g0
+    · rw [if_pos hL] at hcL hcand
+      have b1 := evalF_assign_ok (κ := κ) (s := s) (L := L5) (x := "uk") (e := (3 : Exp)) (v := 3) rfl
+      have b2 := evalF_assign_ok (κ := κ) (s := s) (L := upd L5 "uk" 3) (x := "u0") (e := .var "g0") (v := g0)
+        (by simp [Exp.ev, OM.Machine.State.upd, h5g0])
+      have b3 := evalF_assign_ok (κ := κ) (s := s) (L := upd (upd L5 "uk" 3) "u0" g0) (x := "u1") (e := .var "sr")
+        (v := sr) (by simp [Exp.ev, OM.Machine.State.upd, h5])
+      have b4 := evalF_assign_ok (κ := κ) (s := s) (L := upd (upd (upd L5 "uk" 3) "u0" g0) "u1" sr) (x := "u2")
+        (e := .gF .r "sr") (v := S.r) (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, h5, hsrT', Fld.cap, Fld.get,
+          GF.get, S])
+      refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_seq_ok2 a3 (evalF_ite_t hc4' one_ne_zero
+        (evalF_seq_ok2 a5 (evalF_ite_t hcL one_ne_zero (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 (evalF_seq_ok2 b3 b4)))))))),
+        by rw [hcand]; simp [unitOf, OM.Machine.State.upd], by simp [OM.Machine.State.upd], ?_,
+        hfr3 _ fun r h1 h2 h3 h4 h5 h6 => by simp [L5, OM.Machine.State.upd, h2, h3, h4, h5, h6]⟩
+      simp [Exp.cost, Exp.gF, unitLE] at hc1 ⊢; omega
+    · rw [if_neg hL] at hcL hcand
+      by_cases hR : left = false ∧ S.r = g0
+      · rw [if_pos hR] at hcR hcand
+        have b1 := evalF_assign_ok (κ := κ) (s := s) (L := L5) (x := "uk") (e := (3 : Exp)) (v := 3) rfl
+        have b2 := evalF_assign_ok (κ := κ) (s := s) (L := upd L5 "uk" 3) (x := "u0") (e := .gF .l "sr") (v := S.l)
+          (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, h5, hsrT', Fld.cap, Fld.get, GF.get, S])
+        have b3 := evalF_assign_ok (κ := κ) (s := s) (L := upd (upd L5 "uk" 3) "u0" S.l) (x := "u1") (e := .var "sr")
+          (v := sr) (by simp [Exp.ev, OM.Machine.State.upd, h5])
+        have b4 := evalF_assign_ok (κ := κ) (s := s) (L := upd (upd (upd L5 "uk" 3) "u0" S.l) "u1" sr) (x := "u2")
+          (e := .var "g0") (v := g0) (by simp [Exp.ev, OM.Machine.State.upd, h5g0])
+        refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_seq_ok2 a3 (evalF_ite_t hc4' one_ne_zero
+          (evalF_seq_ok2 a5 (evalF_ite_f hcL (evalF_ite_t hcR one_ne_zero (evalF_seq_ok2 b1 (evalF_seq_ok2 b2
+          (evalF_seq_ok2 b3 b4))))))))),
+          by rw [hcand]; simp [unitOf, OM.Machine.State.upd], by simp [OM.Machine.State.upd], ?_,
+          hfr3 _ fun r h1 h2 h3 h4 h5 h6 => by simp [L5, OM.Machine.State.upd, h2, h3, h4, h5, h6]⟩
+        simp [Exp.cost, Exp.gF, unitLE, unitRE] at hc1 ⊢; omega
+      · rw [if_neg hR] at hcR hcand
+        refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_seq_ok2 a3 (evalF_ite_t hc4' one_ne_zero
+          (evalF_seq_ok2 a5 (evalF_ite_f hcL (evalF_ite_f hcR evalF_skip)))))),
+          by rw [hcand]; simp [unitOf, L5, L3, OM.Machine.State.upd], by simp [L5, L3, OM.Machine.State.upd], ?_,
+          hfr3 _ fun r h1 h2 h3 h4 h5 h6 => by simp [L5, OM.Machine.State.upd, h6]⟩
+        simp [Exp.cost, Exp.gF, unitLE, unitRE] at hc1 ⊢; omega
+  · have hc4' : (.gF .st "g0" =ₑ 1 : Exp).ev κ s L3 = some 0 := by
+      rw [hc4]; cases h : G0.st <;> simp_all [St.toN]
+    have hcand : unitCand s x left = [g0] := by
+      rw [unitCand_eq]; exact if_neg hov
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_seq_ok2 a3 (evalF_ite_f hc4' evalF_skip))),
+      by rw [hcand]; simp [unitOf, L3, OM.Machine.State.upd], by simp [L3, OM.Machine.State.upd], ?_,
+      hfr3 _ fun r _ _ _ _ _ _ => rfl⟩
+    simp [Exp.cost, Exp.gF] at hc1 ⊢; omega
+
 end OM.Impl
