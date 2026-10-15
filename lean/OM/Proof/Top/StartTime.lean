@@ -774,6 +774,12 @@ theorem job : JobOK S' cl (drainJob j v (nd (ts s) v).livePar) := by
     · exact Or.inr rfl
   · rw [C.anc C.y_mem _ (by omega), if_neg (fun h => by omega), anc_succ _ _ C.h1, ← C.vy]
 
+/-- **The invariant after a drain starts.** -/
+theorem inv : InvJ S' cl (ordSD ord (Top.ht (ts s) v) v s.nodes.size) (drSD dr (nd (ts s) v).inTables s.nodes.size)
+    (n0SD n0 s.nodes.size (sLeft (wiC s v) v side).length (sRight (wiC s v) v side).length)
+    (some (drainJob j v (nd (ts s) v).livePar)) :=
+  ⟨C.shape, C.time, C.room, fun j' hj => by cases hj; exact C.job, by rw [C.H.P]; exact C.I.cap⟩
+
 end SDCtx
 
 end OM.Proof.Top
