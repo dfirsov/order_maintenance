@@ -214,4 +214,48 @@ theorem backgroundS_agree {κ : Caps} {L : Loc} {y : Nat} {s0 s1 s2 s3 s4 s5 : C
       (evalF_seq_ok2 a4 (evalF_seq_ok2 c3 (evalF_seq_ok2 a5 (evalF_seq_ok2 a6 (evalF_seq_ok2 c4 c5))))))))), ?_⟩
     simp [Exp.cost, costList, Exp.eF, Exp.gF]; omega
 
+/-! ### `insertAfter` -/
+
+def bgP : Proc := { name := "background", params := ["y"], rets := [], body := backgroundS }
+
+/-- `y := insertAfter x h`. FALLBACK never runs on the states of the cost invariant
+(`insertAfter_cost`), so a failed guard is a `bug` here. -/
+def insertAfterP : Proc where
+  name := "insertAfter"
+  params := ["x", "h"]
+  rets := ["y"]
+  body := .catch (insertElemP.call [.var "x", .var "h"] ["y"]) .bug ;; .catch (bgP.call [.var "y"] []) .bug
+
+theorem insertAfterP_agree {κ : Caps} {s s1 s2 : Core} {L : Loc} {x hh y D : Nat} (hx : L "x" = x) (hl : L "h" = hh)
+    (hxE : x < s.E.size) (hgG : (s.E.getX x).grp < s.Gs.size)
+    (hnE : (s.E.getX x).next = 0 ∨ (s.E.getX x).next < s.E.size)
+    (hE : s.E.size < κ.tbl .E) (hG : s.Gs.size ≤ κ.tbl .G)
+    (h1 : (insertElem x hh).run s = .ok y s1) (h2 : (background y).run s1 = .ok () s2)
+    (m2 : ∃ L' n, evalF κ bgP.body s1 (OM.Machine.State.setLocs (fun _ => 0) ["y"] [y]) = .ok s2 L' n ∧ n ≤ D) :
+    (insertAfter x hh).run s = .ok y s2 ∧
+      ∃ L' n, evalF κ insertAfterP.body s L = .ok s2 L' n ∧ L' "y" = y ∧ n ≤ D + 220 := by
+  refine ⟨?_, ?_⟩
+  · unfold insertAfter
+    rw [OM.Proof.run_bind, OM.Proof.run_onGuard_ok h1]
+    dsimp only
+    rw [OM.Proof.run_bind, OM.Proof.run_onGuard_ok h2]
+    rfl
+  · obtain ⟨Li, ni, ei, hyi, hni⟩ := insertElem_agree κ s (OM.Machine.State.setLocs (fun _ => 0) ["x", "h"] [x, hh])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hxE hgG hnE hE hG h1
+    have e1 := evalF_call_ok (q := insertElemP) (args := [.var "x", .var "h"]) (ds := ["y"]) (L := L)
+      (by simp [evList, Exp.ev, hx, hl]) ei
+    set L1 := OM.Machine.State.setLocs L ["y"] (insertElemP.rets.map Li)
+    have h1y : L1 "y" = y := by simp [L1, insertElemP, OM.Machine.State.setLocs, OM.Machine.State.upd, hyi]
+    obtain ⟨Lb, nb, eb, hnb⟩ := m2
+    have e2 := evalF_call_ok (q := bgP) (args := [.var "y"]) (ds := []) (L := L1) (by simp [evList, Exp.ev, h1y]) eb
+    have c1 : evalF κ (.catch (insertElemP.call [.var "x", .var "h"] ["y"]) .bug) s L =
+        .ok s1 L1 (1 + (1 + costList [.var "x", .var "h"] + 1 + ni)) := by
+      simp only [evalF, e1]; rfl
+    have c2 : evalF κ (.catch (bgP.call [.var "y"] []) .bug) s1 L1 =
+        .ok s2 L1 (1 + (1 + costList [.var "y"] + 0 + nb)) := by
+      simp only [evalF, e2]; rfl
+    refine ⟨L1, _, evalF_seq_ok2 c1 c2, h1y, ?_⟩
+    simp [costList, Exp.cost]; omega
+
 end OM.Impl
