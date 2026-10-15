@@ -225,4 +225,170 @@ theorem unitS_ok {κ : Caps} {s : Core} {L : Loc} {x : Nat} {left : Bool} (hx : 
       hfr3 _ fun r _ _ _ _ _ _ => rfl⟩
     simp [Exp.cost, Exp.gF] at hc1 ⊢; omega
 
+/-! ### Labels for a moved unit -/
+
+theorem pushBackLabs_inv {c D B k : Nat} {prev : Option Nat} {s s' : Core} {labs : List Nat}
+    (h : (pushBackLabs c D B prev (k + 1)).run s = .ok labs s') :
+    ∃ l rest, labs = l :: rest ∧ (pushBackLabs c D B (some l) k).run s = .ok rest s' ∧
+      (prev = none → l = c) ∧ (∀ p, prev = some p → p + D < 1 <<< B ∧ p < p + D ∧ l = p + D) := by
+  unfold pushBackLabs at h
+  cases prev with
+  | none =>
+    simp only [OM.Proof.run_pure_bind] at h
+    obtain ⟨rest, s2, h2, h⟩ := run_bind_ok h
+    simp only [OM.Proof.run_pure] at h
+    injection h with h3 h4; subst h3 h4
+    exact ⟨_, _, rfl, h2, fun _ => rfl, fun _ h => absurd h (by simp)⟩
+  | some p =>
+    dsimp only at h
+    obtain ⟨l, s1, h1, h⟩ := run_bind_ok h
+    obtain ⟨rest, s2, h2, h⟩ := run_bind_ok h
+    simp only [OM.Proof.run_pure] at h
+    injection h with h3 h4; subst h3 h4
+    obtain ⟨hs, ha, hb, rfl⟩ := after_inv h1
+    subst s1
+    exact ⟨_, _, rfl, h2, fun h => absurd h (by simp), fun q hq => by
+      simp only [Option.some.injEq] at hq; subst hq; exact ⟨ha, hb, rfl⟩⟩
+
+theorem pushFrontLabs_inv {c D k : Nat} {nxt : Option Nat} {s s' : Core} {labs : List Nat}
+    (h : (pushFrontLabs c D nxt (k + 1)).run s = .ok labs s') :
+    ∃ l rest, labs = rest ++ [l] ∧ (pushFrontLabs c D (some l) k).run s = .ok rest s' ∧
+      (nxt = none → l = c) ∧ (∀ n, nxt = some n → D ≤ n ∧ D ≠ 0 ∧ l = n - D) := by
+  unfold pushFrontLabs at h
+  cases nxt with
+  | none =>
+    simp only [OM.Proof.run_pure_bind] at h
+    obtain ⟨rest, s2, h2, h⟩ := run_bind_ok h
+    simp only [OM.Proof.run_pure] at h
+    injection h with h3 h4; subst h3 h4
+    exact ⟨_, _, rfl, h2, fun _ => rfl, fun _ h => absurd h (by simp)⟩
+  | some n =>
+    dsimp only at h
+    obtain ⟨l, s1, h1, h⟩ := run_bind_ok h
+    obtain ⟨rest, s2, h2, h⟩ := run_bind_ok h
+    simp only [OM.Proof.run_pure] at h
+    injection h with h3 h4; subst h3 h4
+    obtain ⟨hs, ha, hb, rfl⟩ := before_inv h1
+    subst s1
+    exact ⟨_, _, rfl, h2, fun h => absurd h (by simp), fun q hq => by
+      simp only [Option.some.injEq] at hq; subst hq; exact ⟨ha, hb, rfl⟩⟩
+
+theorem pushBackLabs_zero {c D B : Nat} {prev : Option Nat} {s s' : Core} {labs : List Nat}
+    (h : (pushBackLabs c D B prev 0).run s = .ok labs s') : labs = [] ∧ s' = s := by
+  unfold pushBackLabs at h; simp only [OM.Proof.run_pure] at h; injection h with h1 h2; exact ⟨h1.symm, h2.symm⟩
+
+theorem pushFrontLabs_zero {c D : Nat} {nxt : Option Nat} {s s' : Core} {labs : List Nat}
+    (h : (pushFrontLabs c D nxt 0).run s = .ok labs s') : labs = [] ∧ s' = s := by
+  unfold pushFrontLabs at h; simp only [OM.Proof.run_pure] at h; injection h with h1 h2; exact ⟨h1.symm, h2.symm⟩
+
+/-- The labels held in locals: `[l0]`, or `[l0, l1, l2]` when `uk = 3`. -/
+def labsOf (L : Loc) : List Nat := if L "uk" = 1 then [L "l0"] else [L "l0", L "l1", L "l2"]
+
+def centreG : Exp := .bin .shl 1 (Exp.monus (.prm .Bg) 1)
+
+theorem centreG_ev {κ : Caps} {S0 : Core} {L : Loc} : centreG.ev κ S0 L = some (1 <<< (S0.P.B_g - 1)) := by
+  have hm := Exp.ev_monus κ S0 L (a := .prm .Bg) (b := (1 : Exp)) (x := S0.P.B_g) (y := 1) (by simp [Exp.ev, PF.get]) rfl
+  simp only [centreG, Exp.ev, Option.bind_some]
+  rw [hm]; simp [OM.Machine.BinOp.eval, Nat.shiftLeft_eq]
+
+/-- `pushBackLabs` after the last group of chunk `y` (locals `y uk`). -/
+def labLS : Stm :=
+  "D" ::= .prm .Dg ;; "B" ::= .prm .Bg ;;
+  .ite (.cF .first "y" =ₑ 0) ("l0" ::= centreG) ("a" ::= .gF .lab (.cF .last "y") ;; afterS ;; "l0" ::= "lab") ;;
+  .ite ("uk" =ₑ 3) ("a" ::= "l0" ;; afterS ;; "l1" ::= "lab" ;; "a" ::= "l1" ;; afterS ;; "l2" ::= "lab") .skip
+
+/-- `pushFrontLabs` before the first group of chunk `y` (locals `y uk`). -/
+def labRS : Stm :=
+  "D" ::= .prm .Dg ;;
+  .ite (.cF .first "y" =ₑ 0) ("m" ::= centreG) ("b" ::= .gF .lab (.cF .first "y") ;; beforeS ;; "m" ::= "lab") ;;
+  .ite ("uk" =ₑ 3) ("l2" ::= "m" ;; "b" ::= "m" ;; beforeS ;; "l1" ::= "lab" ;; "b" ::= "l1" ;; beforeS ;; "l0" ::= "lab")
+    ("l0" ::= "m")
+
+theorem labLS_ok {κ : Caps} {s : Core} {L : Loc} {y k : Nat} {labs : List Nat} (hy : L "y" = y)
+    (hk : (L "uk" = 1 ∧ k = 1) ∨ (L "uk" = 3 ∧ k = 3)) (hyT : y < κ.tbl .C) (hlT : (s.C.getX y).last < κ.tbl .G)
+    (hlabs : (pushBackLabs (1 <<< (s.P.B_g - 1)) s.P.D_g s.P.B_g (if (s.C.getX y).first = NIL then none
+      else some (s.Gs.getX (s.C.getX y).last).lab) k).run s = .ok labs s) :
+    ∃ L' n, evalF κ labLS s L = .ok s L' n ∧ labsOf L' = labs ∧ L' "uk" = L "uk" ∧ n ≤ 150 ∧
+      ∀ r, r ≠ "D" → r ≠ "B" → r ≠ "l0" → r ≠ "l1" → r ≠ "l2" → r ≠ "a" → r ≠ "v" → r ≠ "lab" → L' r = L r := by
+  set c := 1 <<< (s.P.B_g - 1)
+  set prev := if (s.C.getX y).first = NIL then none else some (s.Gs.getX (s.C.getX y).last).lab
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "D") (e := .prm .Dg) (v := s.P.D_g) (by simp [Exp.ev, PF.get])
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := upd L "D" s.P.D_g) (x := "B") (e := .prm .Bg) (v := s.P.B_g)
+    (by simp [Exp.ev, PF.get])
+  set L2 := upd (upd L "D" s.P.D_g) "B" s.P.B_g
+  have h2 : ∀ r, r ≠ "D" → r ≠ "B" → L2 r = L r := fun r h1 h2 => by simp [L2, OM.Machine.State.upd, h1, h2]
+  have h2y : L2 "y" = y := by rw [h2 "y" (by decide) (by decide), hy]
+  -- the first label
+  obtain ⟨k', rfl⟩ : ∃ k', k = k' + 1 := by rcases hk with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> exact ⟨_, rfl⟩
+  obtain ⟨l0, rest, hlabs0, hrest, hnone, hsome⟩ := pushBackLabs_inv hlabs
+  have b3 : ∃ L3 c3, evalF κ (.ite (.cF .first "y" =ₑ 0) ("l0" ::= centreG)
+      ("a" ::= .gF .lab (.cF .last "y") ;; afterS ;; "l0" ::= "lab")) s L2 = .ok s L3 c3 ∧ L3 "l0" = l0 ∧
+      (∀ r, r ≠ "l0" → r ≠ "a" → r ≠ "v" → r ≠ "lab" → L3 r = L2 r) ∧ c3 ≤ 40 := by
+    by_cases hf : (s.C.getX y).first = NIL
+    · have hl0 : l0 = c := hnone (by simp [prev, hf])
+      have hc : (.cF .first "y" =ₑ 0 : Exp).ev κ s L2 = some 1 := by
+        simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h2y, hyT, Fld.cap, Fld.get, CF.get]; simpa [NIL] using hf
+      exact ⟨_, _, evalF_ite_t hc one_ne_zero (evalF_assign_ok centreG_ev), by simp [OM.Machine.State.upd, hl0, c],
+        fun r h1 _ _ _ => by simp [OM.Machine.State.upd, h1], by simp [Exp.cost, centreG, Exp.cF]⟩
+    · obtain ⟨hpa, hpb, hl0⟩ := hsome (s.Gs.getX (s.C.getX y).last).lab (by simp [prev, hf])
+      have hc : (.cF .first "y" =ₑ 0 : Exp).ev κ s L2 = some 0 := by
+        simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h2y, hyT, Fld.cap, Fld.get, CF.get]; simpa [NIL] using hf
+      set p := (s.Gs.getX (s.C.getX y).last).lab
+      have b1 := evalF_assign_ok (κ := κ) (s := s) (L := L2) (x := "a") (e := .gF .lab (.cF .last "y")) (v := p)
+        (by simp [Exp.gF, Exp.cF, Exp.ev, h2y, hyT, hlT, Fld.cap, Fld.get, CF.get, GF.get]; rfl)
+      obtain ⟨c2, b2, hc2⟩ := afterS_ok (κ := κ) (s := s) (L := upd L2 "a" p) (a := p) (D := s.P.D_g) (B := s.P.B_g)
+        (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, L2]) (by simp [OM.Machine.State.upd, L2])
+        hpa hpb
+      have b3 := evalF_assign_ok (κ := κ) (s := s) (L := upd (upd (upd L2 "a" p) "v" (p + s.P.D_g)) "lab" (p + s.P.D_g))
+        (x := "l0") (e := .var "lab") (v := p + s.P.D_g) (by simp [Exp.ev, OM.Machine.State.upd])
+      exact ⟨_, _, evalF_ite_f hc (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 b3)), by simp [OM.Machine.State.upd, hl0],
+        fun r h1 h2 h3 h4 => by simp [OM.Machine.State.upd, h1, h2, h3, h4],
+        by simp [Exp.cost, Exp.gF, Exp.cF] at hc2 ⊢; omega⟩
+  obtain ⟨L3, c3, e3, h3l0, h3F, hc3⟩ := b3
+  have h3uk : L3 "uk" = L "uk" := by
+    rw [h3F "uk" (by decide) (by decide) (by decide) (by decide), h2 "uk" (by decide) (by decide)]
+  have h3D : L3 "D" = s.P.D_g := by
+    rw [h3F "D" (by decide) (by decide) (by decide) (by decide)]; simp [L2, OM.Machine.State.upd]
+  have h3B : L3 "B" = s.P.B_g := by
+    rw [h3F "B" (by decide) (by decide) (by decide) (by decide)]; simp [L2, OM.Machine.State.upd]
+  have hfr : ∀ L' : Loc, (∀ r, r ≠ "l0" → r ≠ "l1" → r ≠ "l2" → r ≠ "a" → r ≠ "v" → r ≠ "lab" → L' r = L3 r) →
+      ∀ r, r ≠ "D" → r ≠ "B" → r ≠ "l0" → r ≠ "l1" → r ≠ "l2" → r ≠ "a" → r ≠ "v" → r ≠ "lab" → L' r = L r :=
+    fun L' hL' r h1 h2' h3 h4 h5 h6 h7 h8 => by
+      rw [hL' r h3 h4 h5 h6 h7 h8, h3F r h3 h6 h7 h8, h2 r h1 h2']
+  rcases hk with ⟨huk, hk'⟩ | ⟨huk, hk'⟩
+  · obtain rfl : k' = 0 := by omega
+    obtain ⟨rfl, -⟩ := pushBackLabs_zero hrest
+    have hc : ("uk" =ₑ 3 : Exp).ev κ s L3 = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, h3uk, huk]
+    refine ⟨L3, _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_seq_ok2 e3 (evalF_ite_f hc evalF_skip))),
+      by simp [labsOf, h3uk, huk, h3l0, hlabs0], h3uk, by simp [Exp.cost] at hc3 ⊢; omega,
+      hfr L3 fun _ _ _ _ _ _ _ => rfl⟩
+  · obtain rfl : k' = 2 := by omega
+    obtain ⟨l1, rest2, hr1, hrest2, -, hs1⟩ := pushBackLabs_inv hrest
+    obtain ⟨hpa1, hpb1, hl1⟩ := hs1 l0 rfl
+    obtain ⟨l2, rest3, hr2, hrest3, -, hs2⟩ := pushBackLabs_inv hrest2
+    obtain ⟨hpa2, hpb2, hl2⟩ := hs2 l1 rfl
+    obtain ⟨rfl, -⟩ := pushBackLabs_zero hrest3
+    have hc : ("uk" =ₑ 3 : Exp).ev κ s L3 = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, h3uk, huk]
+    have b1 := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "a") (e := .var "l0") (v := l0) (by simp [Exp.ev, h3l0])
+    obtain ⟨c2, b2, hc2⟩ := afterS_ok (κ := κ) (s := s) (L := upd L3 "a" l0) (a := l0) (D := s.P.D_g) (B := s.P.B_g)
+      (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, h3D]) (by simp [OM.Machine.State.upd, h3B])
+      hpa1 hpb1
+    set L5 := upd (upd (upd L3 "a" l0) "v" (l0 + s.P.D_g)) "lab" (l0 + s.P.D_g)
+    have b3 := evalF_assign_ok (κ := κ) (s := s) (L := L5) (x := "l1") (e := .var "lab") (v := l1)
+      (by simp [Exp.ev, L5, OM.Machine.State.upd, hl1])
+    have b4 := evalF_assign_ok (κ := κ) (s := s) (L := upd L5 "l1" l1) (x := "a") (e := .var "l1") (v := l1)
+      (by simp [Exp.ev, OM.Machine.State.upd])
+    obtain ⟨c5, b5, hc5⟩ := afterS_ok (κ := κ) (s := s) (L := upd (upd L5 "l1" l1) "a" l1) (a := l1) (D := s.P.D_g)
+      (B := s.P.B_g) (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, L5, h3D])
+      (by simp [OM.Machine.State.upd, L5, h3B]) hpa2 hpb2
+    set L6 := upd (upd (upd (upd L5 "l1" l1) "a" l1) "v" (l1 + s.P.D_g)) "lab" (l1 + s.P.D_g)
+    have b6 := evalF_assign_ok (κ := κ) (s := s) (L := L6) (x := "l2") (e := .var "lab") (v := l2)
+      (by simp [Exp.ev, L6, OM.Machine.State.upd, hl2])
+    refine ⟨_, _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_seq_ok2 e3 (evalF_ite_t hc one_ne_zero
+      (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 (evalF_seq_ok2 b3 (evalF_seq_ok2 b4 (evalF_seq_ok2 b5 b6)))))))),
+      ?_, ?_, ?_, hfr _ fun r h3 h4 h5 h6 h7 h8 => by simp [L6, L5, OM.Machine.State.upd, h3, h4, h5, h6, h7, h8]⟩
+    · simp [labsOf, L6, L5, OM.Machine.State.upd, h3uk, huk, h3l0, hlabs0, hr1, hr2]
+    · simp [L6, L5, OM.Machine.State.upd, h3uk]
+    · simp [Exp.cost] at hc2 hc3 hc5 ⊢; omega
+
 end OM.Impl
