@@ -120,9 +120,11 @@ set_option linter.deprecated false
 /-- **What the wrapper's cost proof assumes**: the top structure's contracts (M5), the parameter
 conditions, and Lemma R's I5 (M5 fixes `J` and `H`). -/
 structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
+    (PP : Params → Prop)
     (Jf capf nf Rf : Params → Nat) : Prop where
   top : TopContractP TI μ Jf capf
-  prep : PrepContract TI PI ν
+  prep : PrepContract TI PI ν PP
+  pp : ∀ N, PP (mk N)
   core : ∀ N, CoreP (mk N)
   gp : ∀ N, GParams (mk N)
   cp : ∀ N, CParams (mk N)
@@ -138,6 +140,7 @@ structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core →
   small : ∀ N, 64 ≤ N → (mk N).L + 6 ≤ N / 2
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- A core in service: the cost invariant for its element list, which it counts. -/
@@ -151,7 +154,7 @@ theorem CoreOK.inv {c : Core} {L : List Nat} (h : CoreOK mk TI μ Jf nf Rf c L) 
     ∃ A, INV c A ∧ A.elist = L := h.cost.low.inv
 
 /-- **Insertion into a core in service**: no FALLBACK while its count stays within capacity. -/
-theorem CoreOK.insert {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+theorem CoreOK.insert {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf)
     (h : CoreOK mk TI μ Jf nf Rf c L) {x : Nat} (hx : x ∈ L) (hcap : c.count + 1 ≤ c.P.N)
     (hh : Nat) :
     ∃ c', (insertAfter x hh).run c = .ok c.E.size c' ∧
@@ -174,7 +177,7 @@ theorem CoreOK.insert {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν Jf
   rw [hcnt, h.cnt, length_insertAfterL hx]
 
 /-- **Deletion in a core in service.** -/
-theorem CoreOK.markDead {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+theorem CoreOK.markDead {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf)
     (h : CoreOK mk TI μ Jf nf Rf c L) (x : Nat) :
     ∃ c', (OM.Model.markDead x).run c = .ok () c' ∧ CoreOK mk TI μ Jf nf Rf c' L ∧
       c'.count = c.count ∧ c'.P = c.P := by
@@ -195,6 +198,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- A core whose top structure is being built: it holds the sentinel alone. -/
@@ -224,28 +228,28 @@ theorem initCore_fields {s n : Core} {lazy : Bool} (h : (initCore lazy).run s = 
   exact ⟨hR.1.count, hR.1.P⟩
 
 /-- **A lazily built fresh core.** -/
-theorem newCore_lazy (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
+theorem newCore_lazy (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) (N : Nat) :
     ∃ n, newCore (mk N) true = .ok n ∧ PrepOK mk PI n ∧ ν n ≤ (mk N).H + 1 ∧ n.P = mk N := by
   obtain ⟨n, hnew, hr⟩ := newCore_run (P := mk N) (lazy := true)
   obtain ⟨hcnt, hP⟩ := initCore_fields hr
   obtain ⟨hL, hI⟩ := lowinv_initCore (S.gp N) (S.cp N) (S.lp N) hr
-  obtain ⟨hPI, hν⟩ := S.prep.lazy _ _ hr
+  obtain ⟨hPI, hν⟩ := S.prep.lazy _ _ (S.pp N) hr
   exact ⟨n, hnew, ⟨hPI, hL, hI, hcnt, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hν, hP⟩
 
 /-- **An eagerly built fresh core** is in service. -/
-theorem newCore_eager (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
+theorem newCore_eager (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) (N : Nat) :
     ∃ n, newCore (mk N) false = .ok n ∧ CoreOK mk TI μ Jf nf Rf n initAbs.elist ∧ n.count = 1 ∧
       n.P = mk N := by
   obtain ⟨n, hnew, hr⟩ := newCore_run (P := mk N) (lazy := false)
   obtain ⟨hcnt, hP⟩ := initCore_fields hr
   obtain ⟨hL, hI⟩ := lowinv_initCore (S.gp N) (S.cp N) (S.lp N) hr
-  obtain ⟨hTI, hres⟩ := S.prep.eager _ _ hr
+  obtain ⟨hTI, hres⟩ := S.prep.eager _ _ (S.pp N) hr
   refine ⟨n, hnew, ⟨costInv_fresh hL ⟨hTI, rfl⟩ hres (by rw [hP]; exact S.n1 N) (gval_fresh hL hI),
     by rw [hcnt, initAbs_elist]; rfl, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hcnt, hP⟩
 
 /-- **A preparation step** of a core being built: it finishes (the core is in service) or it
 decreases `ν`. -/
-theorem PrepOK.step (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {n : Core}
+theorem PrepOK.step (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {n : Core}
     (h : PrepOK mk PI n) :
     ∃ b n', runCore n prepareStep = .ok (b, n') ∧ n'.count = n.count ∧ n'.P = n.P ∧
       INV n' initAbs ∧
@@ -276,6 +280,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **Lemma W's record of a rebuild in progress**: `c₀` elements and `live₀` live ones at the
@@ -319,7 +324,7 @@ theorem RebuildW.ins_le {om : OM} {n : Core} {c₀ live₀ I D : Nat}
     have := (h.serve hs).2 A hI; omega
 
 /-- **Lemma W (1)**: `cur` has room for an insertion. -/
-theorem WC.cur_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+theorem WC.cur_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf)
     (h : WC mk TI PI μ ν Jf nf Rf om Sp) : om.cur.count + 1 ≤ om.cur.P.N := by
   have hsm := S.small _ h.big
   have hmk : om.cur.P = mk om.cur.P.N := by
@@ -344,6 +349,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- The copies in `nxt` are live elements of `cur`, so at most the live count. -/
@@ -359,7 +365,7 @@ theorem WC.nxt_live_le {om : OM} {Sp : OM.Spec.State} (h : WC mk TI PI μ ν Jf 
   omega
 
 /-- **Lemma W (2)**: `nxt` has room for an insertion. -/
-theorem WC.nxt_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+theorem WC.nxt_room {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf)
     (h : WC mk TI PI μ ν Jf nf Rf om Sp) {n : Core} (hn : om.nxt = some n)
     (hset : om.cursorSet = true) : n.count + 1 ≤ n.P.N := by
   obtain ⟨c₀, live₀, I, D, hW⟩ := h.busy n hn
@@ -468,10 +474,11 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **A copy step** keeps the nxt core in service and its fill bound, and advances the cursor. -/
-theorem copy_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {n : Core} {A B : Abs}
+theorem copy_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {n : Core} {A B : Abs}
     {D : Nat} (hR : CoreR om.cur A) (hRB : CoreR n B) (hset : om.cursorSet = true)
     (hcur : om.cursor ≠ NIL) (hcurA : om.cursor ∈ A.elist)
     (hok : CoreOK mk TI μ Jf nf Rf n B.elist) (hfill : n.count ≤ 1 + (liveH n B.elist).length + D)
@@ -513,6 +520,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- The rebuild loop's cost invariant, with `budget` steps left, within the entry potential `Φe`. -/
@@ -549,6 +557,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 theorem LoopC.congr {om om' : OM} {n : Core} {A : Abs} {budget Φe live₀ I D N' : Nat}
@@ -588,11 +597,12 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **The rebuild loop** (Lemma W's length argument): every budgeted step shrinks the work left by
 one; the loop ends with the budget spent or with the swap. -/
-theorem rebuildLoop_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {Sp : OM.Spec.State}
+theorem rebuildLoop_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {Sp : OM.Spec.State}
     (hS : OM.Spec.Inv Sp) {Φe live₀ I D N' : Nat} :
     ∀ fuel budget (om : OM) (n : Core) (A : Abs), CoreR om.cur A →
       liveH om.cur A.elist = Sp.list → IdxOK om.cur A om.curIdx Sp.list → NxtR' om.cur A om n →
@@ -735,6 +745,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- Lemma W's record in the middle of an operation: this operation's insertion or deletion is
@@ -764,10 +775,11 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **The rebuild step** (Lemma W): it restores the wrapper's cost invariant. -/
-theorem rebuildStep_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+theorem rebuildStep_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
     (hW : WInv om Sp) (hlv : om.live = Sp.list.length) (hkb : 4 ≤ om.KB)
     (hbig : 64 ≤ om.cur.P.N) (hcur : ∀ A, INV om.cur A → CoreOK mk TI μ Jf nf Rf om.cur A.elist)
     (hidle : om.nxt = none → om.cur.count ≤ om.cur.P.N / 2)
@@ -904,6 +916,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 theorem countP_insertAfterL (p : Nat → Bool) {a b : Nat} {l : List Nat} (ha : a ∈ l) :
@@ -930,7 +943,7 @@ theorem liveH_length_ins {c c' : Core} {l : List Nat} {a b : Nat} (ha : a ∈ l)
   exact List.countP_congr fun e he => by rw [(hrec e he).1]
 
 /-- **Mirroring an insertion** into `nxt` keeps it in service, within its fill bound. -/
-theorem mirrorInsert_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {n : Core}
+theorem mirrorInsert_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {n : Core}
     {B : Abs} {D : Nat} {hx : Option Nat} {hy : Nat} (hn : om.nxt = some n)
     (hset : om.cursorSet = true) (hRB : CoreR n B) (hok : CoreOK mk TI μ Jf nf Rf n B.elist)
     (hfill : n.count ≤ 1 + (liveH n B.elist).length + D) (hroom : n.count + 1 ≤ n.P.N)
@@ -979,6 +992,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 theorem step_ins_length (Sp : OM.Spec.State) (hx : Option Nat) (hv : (insOp hx).Valid Sp) :
@@ -989,7 +1003,7 @@ theorem step_ins_length (Sp : OM.Spec.State) (hx : Option Nat) (hv : (insOp hx).
 
 /-- **A wrapper insertion** keeps the wrapper's cost invariant: the insertions into `cur` and
 `nxt` take no FALLBACK, and Lemma W's record advances. -/
-theorem insert_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+theorem insert_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
     (hW : WC mk TI PI μ ν Jf nf Rf om Sp) (hx : Option Nat) (hv : (insOp hx).Valid Sp) :
     ∃ om', om.insert mk hx = .ok (Sp.fresh, om') ∧
       WC mk TI PI μ ν Jf nf Rf om' (OM.Spec.step Sp (insOp hx)).1 := by
@@ -1199,10 +1213,11 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **Mirroring a deletion** into `nxt` keeps it in service; the fill bound counts the deletion. -/
-theorem mirrorDelete_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {n : Core}
+theorem mirrorDelete_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {n : Core}
     {B : Abs} {D x : Nat} (hn : om.nxt = some n) (hRB : CoreR n B)
     (hok : CoreOK mk TI μ Jf nf Rf n B.elist) (hfill : n.count ≤ 1 + (liveH n B.elist).length + D)
     (hIB : IdxOK n B om.nxtIdx (liveH n B.elist))
@@ -1239,10 +1254,11 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **A wrapper deletion** keeps the wrapper's cost invariant. -/
-theorem delete_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+theorem delete_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
     (hW : WC mk TI PI μ ν Jf nf Rf om Sp) {x : Nat} (hv : x ∈ Sp.list) :
     ∃ om', om.delete mk x = .ok om' ∧ WC mk TI PI μ ν Jf nf Rf om' (OM.Spec.step Sp (.delete x)).1 := by
   obtain ⟨hS, hf, A, hR, hL, hI, hN⟩ := hW.w
@@ -1392,10 +1408,11 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
+  {PP : Params → Prop}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **Initialization** establishes the wrapper's cost invariant. -/
-theorem init_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {KB : Nat} (hKB : 4 ≤ KB) :
+theorem init_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {KB : Nat} (hKB : 4 ≤ KB) :
     ∃ om, OM.init mk KB = .ok om ∧ WC mk TI PI μ ν Jf nf Rf om OM.Spec.State.empty := by
   obtain ⟨om, hinit, hW⟩ := init_ok S.core KB
   obtain ⟨n, hn, hok, hcnt, hP⟩ := newCore_eager S N_MIN
@@ -1411,7 +1428,7 @@ theorem init_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {KB : Nat} (hKB :
   · show n.count < n.P.N / 2; rw [hcnt, hP, S.PN]; decide
 
 /-- **Each operation** keeps the wrapper's cost invariant. -/
-theorem apply_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+theorem apply_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
     (hW : WC mk TI PI μ ν Jf nf Rf om Sp) {op : OM.Spec.Op} (hv : op.Valid Sp) :
     ∃ om', om.apply mk op = .ok ((OM.Spec.step Sp op).2, om') ∧
       WC mk TI PI μ ν Jf nf Rf om' (OM.Spec.step Sp op).1 := by
@@ -1432,7 +1449,7 @@ theorem apply_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {om : OM} {Sp : 
 state satisfying the cost invariant, and every valid operation keeps it. In every such state,
 both cores satisfy the cost invariant within their capacities, so each of their insertions takes
 no FALLBACK (`CoreOK.insert`, `insertAfter_cost`). -/
-theorem wrapper_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {KB : Nat} (hKB : 4 ≤ KB) :
+theorem wrapper_cost (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {KB : Nat} (hKB : 4 ≤ KB) :
     (∃ om, OM.init mk KB = .ok om ∧ WC mk TI PI μ ν Jf nf Rf om OM.Spec.State.empty) ∧
     ∀ om Sp op, WC mk TI PI μ ν Jf nf Rf om Sp → op.Valid Sp →
       ∃ om', om.apply mk op = .ok ((OM.Spec.step Sp op).2, om') ∧
@@ -1441,7 +1458,7 @@ theorem wrapper_cost (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {KB : Nat} (hK
 
 /-- In a state satisfying the wrapper's cost invariant, `cur` is a core in service with room for
 an insertion, and so is `nxt` once its preparation is over. -/
-theorem WC.cores {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν Jf capf nf Rf)
+theorem WC.cores {om : OM} {Sp : OM.Spec.State} (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf)
     (h : WC mk TI PI μ ν Jf nf Rf om Sp) :
     (∀ A, INV om.cur A → CoreOK mk TI μ Jf nf Rf om.cur A.elist) ∧
       om.cur.count + 1 ≤ om.cur.P.N ∧

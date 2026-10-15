@@ -285,10 +285,10 @@ theorem lowinv_initCore {s s' : Core} {lazy : Bool} (hGP : GParams s.P) (hCP : C
   exact ⟨(lowinv_initState s.P hGP hCP hLP).lowRel hR ⟨initAbs, hI, rfl⟩, hI⟩
 
 /-- **The top structure's contract for its deferred construction.** `PI` holds while it is being
-built; `ν` counts the steps left. -/
-structure PrepContract (TI PI : Core → Prop) (ν : Core → Nat) : Prop where
-  eager : ∀ s s', (initCore false).run s = .ok () s' → TI s' ∧ s'.resJob = none
-  lazy : ∀ s s', (initCore true).run s = .ok () s' → PI s' ∧ ν s' ≤ s.P.H + 1
+built; `ν` counts the steps left; `PP` is what it needs of the parameters. -/
+structure PrepContract (TI PI : Core → Prop) (ν : Core → Nat) (PP : Params → Prop) : Prop where
+  eager : ∀ s s', PP s.P → (initCore false).run s = .ok () s' → TI s' ∧ s'.resJob = none
+  lazy : ∀ s s', PP s.P → (initCore true).run s = .ok () s' → PI s' ∧ ν s' ≤ s.P.H + 1
   step : ∀ s, PI s → ∃ b s', prepareStep.run s = .ok b s' ∧
     (b = true → TI s' ∧ s'.resJob = none) ∧ (b = false → PI s' ∧ ν s' < ν s)
 
