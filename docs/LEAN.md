@@ -636,6 +636,30 @@ reasoning for about 140 procedures, so M6 inserts a small language between the t
   invariant F it never runs, just like FALLBACK. The agreement lemmas hold on runs where Level F
   succeeds, so they never reach it.
 
+* Reservation (`Reserve.lean`, `Job.lean`, `Finish.lean`, `ListErase.lean`, `Reservation.lean`):
+  `insertAround` (the program computes a table's two labels right before inserting into it; the
+  tables are distinct, so the labels agree with Level F's precomputed lists), `linkChunkPair`,
+  `markSplit`, `splitChunkStart`; the job's copy step, `drainStep` (move, finish, dead),
+  `finishDrain`, the funding loop, `afterDrain`, the walk, and the job dispatcher; the reservation
+  loop (a stop flag replaces `return`). The list library gained `eraseIdxP` and `filterP`
+  (`assocErase`).
+* `chunkSize`, `background`, `insertAfter` (`Background.lean`).
+
+**Agreements as hypotheses.** A part that calls other parts is proved from *agreement
+predicates* for them (`DSAgree` for `drainStep`, `SDAgree` for `startDrain`, `JobAgree`,
+`SplitAgree`, `ResAgree`): for every successful Level F run of the callee, the Level M procedure
+reaches the same state. Each predicate is then derived from the callee's case lemmas and Level F's
+run lemma for that case. `background` is stated along Level F's trace of its five parts.
+
+**Choices.** The machine has no exponentiation: the walk computes `a^h` by a loop of `h ≤ H`
+multiplications. It has no bitwise or: a sweep step's tag fields
+`(pv <<< h·β) ||| (vb <<< (h−1)·β)` occupy disjoint bits (labels are below `2^β`), so the program
+adds them. Path rows have the fixed width `κ.pw`, so `drainStep`'s guard on the row length reads
+`h < H`; under the invariant rows have length `H + 1`. A program without `jobSet`, `jobClear`
+or `pcSet` keeps `resJob` (`NoJob.lean`, one syntactic lemma for all programs). In
+`insertAfter` the guard handlers are `bug`: on the states of the cost invariant FALLBACK never runs
+(`insertAfter_cost`).
+
 **Kernel timeouts.** Rewriting or splitting the status `match` inside a hypothesis about
 `driveGroup` times out the kernel. The fix: goal-side lemmas per status
 (`driveGroup_split/ovf/quiet/dead`, proved by `unfold; rw`), then `rw [lemma] at h`.
@@ -651,6 +675,6 @@ tests are recomputed from `v`'s lists.
 **Also in M5.** `TabLen` in `InvJ`: every table and side list has at most 160 entries
 (`TopParams.tab`, proved for `a = 8`). The Level M loops rely on this for their constant cost.
 
-**Next.** Reservation (`splitChunkStart`: `insertAround`, `linkChunkPair`, `markSplit`; the job
-steps), `background`, `insertAfter`, initialisation, the wrapper, the capacities, and Theorems A, B
-and W at Level M.
+**Next.** Initialisation (`initCore`, `prepareStep`), the wrapper, the capacities; then the glue:
+Level F's invariants give the hypotheses of the agreement lemmas; then Theorems A, B and W at
+Level M.
