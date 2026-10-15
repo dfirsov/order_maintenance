@@ -556,8 +556,8 @@ with the running job's path copy completed (`finS`). `InvJ` has five parts:
   `TIat TI P` fixes the parameters of a core. `PrepContract` takes a condition `PP` on the
   parameters (`topPP P := TopParams P ∧ 3 ≤ H`), and `CostSetup` requires `PP (mk N)`.
 * **Invariant additions.** These are not in `PROOF.md`: chain nodes `u ≤ H` have height `u`
-  (`Timing.chain`); every live node has a chunk below it (`tw1`); fresh targets weigh at least
-  `λ_h` (`wD`) and are not chain nodes (`big`); `n0 ≤ n0max` (`Room.n0le`); and `InvJ.cap`.
+  (`Timing.chain`); every live node has a chunk below it (`tw1`); `n0 ≤ n0max` (`Room.n0le`);
+  and `InvJ.cap`.
 * **`TopParams`** lists what the proof needs of `a`, `s`, `β`: `s ≥ 3`, `λ_h ≥ 2 + 2K_h`
   (I6), the room condition above (our form of I7), `Π_{h−1} ≤ W_h` and `γ_h ≥ 1`.
   `topParams_8` proves them at every height for `a = 8`, `s = 11`, `β = 64`.
