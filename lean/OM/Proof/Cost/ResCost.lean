@@ -16,22 +16,22 @@ set_option linter.deprecated false
 
 /-- Round accounting at the start of an insertion's reservation, with `ip` insertions in the
 round (this one included), `js` job steps so far, and `j` iterations of this reservation done. -/
-def RoundAt (k J : Nat) (μ : Job → Nat) (r : Option Job) (ip js j : Nat) : Prop :=
+def RoundAt (k J m : Nat) (r : Option Job) (ip js j : Nat) : Prop :=
   match r with
-  | some job => ip * k ≤ js + (k - j) ∧ js + μ job ≤ J ∧ 1 ≤ μ job
+  | some _ => ip * k ≤ js + (k - j) ∧ js + m ≤ J ∧ 1 ≤ m
   | none => ip * k ≤ J + (k - j)
 
 /-- Round accounting between insertions. -/
-def RoundOK (k J : Nat) (μ : Job → Nat) (s : Core) (ip js : Nat) : Prop :=
+def RoundOK (k J : Nat) (μ : Core → Nat) (s : Core) (ip js : Nat) : Prop :=
   match s.resJob with
-  | some job => ip * k ≤ js ∧ js + μ job ≤ J ∧ 1 ≤ μ job
+  | some _ => ip * k ≤ js ∧ js + μ s ≤ J ∧ 1 ≤ μ s
   | none => (∀ c, gval s c = 0) ∨ ip * k ≤ J
 
 /-- The reservation's iteration invariant. -/
-def ResInv (TI : Core → Prop) (k J n R : Nat) (μ : Job → Nat) (L : List Nat) (s : Core) (j : Nat)
+def ResInv (TI : Core → Prop) (k J n R : Nat) (μ : Core → Nat) (L : List Nat) (s : Core) (j : Nat)
     (t : Core) : Prop :=
   LowInv t L ∧ TI t ∧ t.count = s.count ∧ t.P = s.P ∧
-    ∃ y i a ip js, GameInv n R t y i a ip ∧ RoundAt k J μ t.resJob ip js j
+    ∃ y i a ip js, GameInv n R t y i a ip ∧ RoundAt k J (μ t) t.resJob ip js j
 
 /-- The quiet sizes are within `T`, by Lemma R. -/
 theorem cSz_le_T {n R : Nat} {t : Core} {y : Fin n → ℝ} {i : Fin n} {a : Fin n → ℝ} {ip : Nat}
@@ -60,7 +60,7 @@ set_option linter.deprecated false
 
 /-- **The reservation of one insertion** succeeds, keeps the lower invariants and the top
 structure's invariant, and carries the zeroing game and its round accounting. -/
-theorem reservation_cost {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : Nat} {L : List Nat}
+theorem reservation_cost {TI : Core → Prop} {μ : Core → Nat} {J cap k n R : Nat} {L : List Nat}
     {s : Core} (hTC : TopContract TI μ J cap) (h0 : ResInv TI k J n R μ L s 0 s) (hn : 1 ≤ n)
     (hsize : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
     (hcap : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ cap)
@@ -136,7 +136,7 @@ theorem reservation_cost {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : 
               intro e; apply hjj; ext; simp only; omega
             rw [if_neg hne] at hp
             exact_mod_cast hp
-        · show RoundAt k J μ (some job) 0 0 (j + 1)
+        · show RoundAt k J (μ (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job)) (some job) 0 0 (j + 1)
           exact ⟨by simp, by omega, hμ1⟩
     · obtain ⟨A, hIA, hel⟩ := hL.inv
       obtain ⟨r, t1, hj1, hTI1, hμ⟩ := hTC.step t A job hIA hT hjob
@@ -154,7 +154,7 @@ theorem reservation_cost {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : 
       unfold RoundAt at hR
       rw [hjob] at hR
       obtain ⟨h1, h2, h3⟩ := hR
-      show RoundAt k J μ r ip (js + 1) (j + 1)
+      show RoundAt k J (μ { t1 with resJob := r }) r ip (js + 1) (j + 1)
       cases r with
       | none => show ip * k ≤ J + (k - (j + 1)); omega
       | some j' =>

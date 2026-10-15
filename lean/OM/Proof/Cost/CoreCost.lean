@@ -16,7 +16,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 /-- **The cost invariant** of a core. -/
-structure CostInv (TI : Core → Prop) (μ : Job → Nat) (J n R : Nat) (L : List Nat) (s : Core) :
+structure CostInv (TI : Core → Prop) (μ : Core → Nat) (J n R : Nat) (L : List Nat) (s : Core) :
     Prop where
   low : LowInv s L
   ti : TI s
@@ -29,7 +29,7 @@ theorem run_onGuard_ok {α : Type} {act handler : CM α} {s s' : Core} {a : α}
 /-- **Insertion without FALLBACK** (Lemma K1 for insertions). From the cost invariant, inserting
 after a listed element runs exactly the element link and the background work, never FALLBACK, and
 restores the cost invariant. -/
-theorem insertAfter_cost {TI : Core → Prop} {μ : Job → Nat} {J cap n R : Nat} {L : List Nat}
+theorem insertAfter_cost {TI : Core → Prop} {μ : Core → Nat} {J cap n R : Nat} {L : List Nat}
     {s : Core} {x : Nat} (hTC : TopContract TI μ J cap) (hC : CostInv TI μ J n R L s)
     (hx : x ∈ L) (hk : 1 ≤ s.P.K_R) (hR : J / s.P.K_R + 1 ≤ R) (hn : 1 ≤ n)
     (hsize : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
@@ -70,7 +70,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 /-- **Deletion** (a tombstone) keeps the cost invariant. -/
-theorem markDead_cost {TI : Core → Prop} {μ : Job → Nat} {J cap n R : Nat} {L : List Nat}
+theorem markDead_cost {TI : Core → Prop} {μ : Core → Nat} {J cap n R : Nat} {L : List Nat}
     {s : Core} (hTC : TopContract TI μ J cap) (hC : CostInv TI μ J n R L s) (x : Nat) :
     ∃ s', (markDead x).run s = .ok () s' ∧ CostInv TI μ J n R L s' := by
   refine ⟨_, markDead_run s x, ?_⟩
@@ -97,7 +97,8 @@ theorem markDead_cost {TI : Core → Prop} {μ : Job → Nat} {J cap n R : Nat} 
     hTC.frame _ _ hTS hC.ti, ?_⟩
   swap
   · obtain ⟨y, i, a, ip, js, hGm, hRO⟩ := hC.game
-    exact ⟨y, i, a, ip, js, hGm.mono (fun j => le_of_eq (by rw [hQS.gvec])), hRO⟩
+    refine ⟨y, i, a, ip, js, hGm.mono (fun j => le_of_eq (by rw [hQS.gvec])), ?_⟩
+    unfold RoundOK at hRO ⊢; rw [hTC.mframe _ _ hTS]; exact hRO
   refine hCi.transfer hCS (fun c => ?_) (fun c => rfl) hCi.δu (fun g hg => hCi.gchk g hg)
   unfold celts; congr 1; funext z; rw [(hE z).1]
 

@@ -42,7 +42,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 /-- **The background work of one insertion** succeeds and restores the cost invariant. -/
-theorem background_ok {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : Nat} {L : List Nat}
+theorem background_ok {TI : Core → Prop} {μ : Core → Nat} {J cap k n R : Nat} {L : List Nat}
     {s0 s1 s2 : Core} {y g c : Nat} (hTC : TopContract TI μ J cap)
     (hPost : InsPost TI k J n R μ L s0 g c s2) (hy : y ∈ L) (heg1 : eG s1 y = g)
     (hgc1 : gC s1 g = c) (hchunk : (chunkSize c true).run s1 = .ok () s2)
@@ -112,7 +112,7 @@ theorem background_ok {TI : Core → Prop} {μ : Job → Nat} {J cap k n R : Nat
     refine ⟨⟨hCP4.inv, hCP4.ginv, ⟨s₀, hCP4.cinv, hCP4.lx⟩, hPost.pq.dframe hD, hCP4.cnt,
       by rw [hP4, ← hP2]; exact hPost.cp⟩, hTC.frame _ _ hD.topSame hPost.ti, rfl, rfl,
       yg, ig, ag, ipg, jsg, hGm.mono (fun j => le_of_eq (by rw [hD.gvec])), ?_⟩
-    rw [hD.top.2.2.2.2.1]; exact hRA
+    rw [hD.top.2.2.2.2.1, hTC.mframe _ _ hD.topSame]; exact hRA
   obtain ⟨s', hres, hL', hTI', hc', hPs', hgame'⟩ := reservation_cost hTC h0 hn
     (by rw [hD.count, hP4]; exact hsize) (by rw [hD.count, hP4]; exact hcap)
     (by rw [hP4]; exact hI5)

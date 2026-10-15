@@ -293,7 +293,7 @@ structure PrepContract (TI PI : Core → Prop) (ν : Core → Nat) : Prop where
     (b = true → TI s' ∧ s'.resJob = none) ∧ (b = false → PI s' ∧ ν s' < ν s)
 
 /-- A ready fresh core satisfies the cost invariant: all game values are 0 and no job runs. -/
-theorem costInv_fresh {TI : Core → Prop} {μ : Job → Nat} {J n R : Nat} {s : Core}
+theorem costInv_fresh {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {s : Core}
     (hL : LowInv s initAbs.elist) (hTI : TI s) (hres : s.resJob = none) (hn : 1 ≤ n)
     (hz : ∀ c, gval s c = 0) : CostInv TI μ J n R initAbs.elist s := by
   have hz' : ∀ j : Fin n, gvec n s j = 0 := fun j => by unfold gvec; rw [hz]; simp

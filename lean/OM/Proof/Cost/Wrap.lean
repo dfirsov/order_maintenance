@@ -119,7 +119,7 @@ set_option linter.deprecated false
 
 /-- **What the wrapper's cost proof assumes**: the top structure's contracts (M5), the parameter
 conditions, and Lemma R's I5 (M5 fixes `J` and `H`). -/
-structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf capf nf Rf : Params → Nat) : Prop where
   top : ∀ N, TopContract TI μ (Jf (mk N)) (capf (mk N))
   prep : PrepContract TI PI ν
@@ -137,11 +137,11 @@ structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → 
   prepB : ∀ N N', N' ≤ 4 * N → (mk N').H + 1 ≤ (mk N).L + 2
   small : ∀ N, 64 ≤ N → (mk N).L + 6 ≤ N / 2
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- A core in service: the cost invariant for its element list, which it counts. -/
-structure CoreOK (mk : Nat → Params) (TI : Core → Prop) (μ : Job → Nat)
+structure CoreOK (mk : Nat → Params) (TI : Core → Prop) (μ : Core → Nat)
     (Jf nf Rf : Params → Nat) (c : Core) (L : List Nat) : Prop where
   cost : CostInv TI μ (Jf c.P) (nf c.P) (Rf c.P) L c
   cnt : c.count = L.length
@@ -194,7 +194,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- A core whose top structure is being built: it holds the sentinel alone. -/
@@ -275,13 +275,13 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **Lemma W's record of a rebuild in progress**: `c₀` elements and `live₀` live ones at the
 trigger, `I` insertions and `D` deletions since. The work left (preparation steps, then the
 elements not yet scanned) shrinks by `K_B − 1` per insertion's worth of operations. -/
-structure RebuildW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+structure RebuildW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (c₀ live₀ I D : Nat) : Prop where
   c0 : c₀ ≤ om.cur.P.N / 2
   nP : n.P = mk (4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16)
@@ -297,7 +297,7 @@ structure RebuildW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → N
       om.cur.P.L + 2 + c₀
 
 /-- **The wrapper's cost invariant**: Invariant R, both cores' cost invariants, and Lemma W. -/
-structure WC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+structure WC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf nf Rf : Params → Nat) (om : OM) (Sp : OM.Spec.State) : Prop where
   w : WInv om Sp
   live : om.live = Sp.list.length
@@ -343,7 +343,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- The copies in `nxt` are live elements of `cur`, so at most the live count. -/
@@ -467,7 +467,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **A copy step** keeps the nxt core in service and its fill bound, and advances the cursor. -/
@@ -512,11 +512,11 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- The rebuild loop's cost invariant, with `budget` steps left, within the entry potential `Φe`. -/
-structure LoopC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+structure LoopC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (A : Abs) (budget Φe live₀ I D N' : Nat) :
     Prop where
   curok : CoreOK mk TI μ Jf nf Rf om.cur A.elist
@@ -532,7 +532,7 @@ structure LoopC (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat)
 
 /-- What the rebuild loop leaves: the rebuild goes on, having spent the whole budget, or `nxt`
 replaced `cur`. -/
-def LoopOut (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+def LoopOut (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf nf Rf : Params → Nat) (om om' : OM) (A : Abs) (Φe live₀ I D N' : Nat) : Prop :=
   (∃ n', om'.nxt = some n' ∧ om'.cur = om.cur ∧ om'.KB = om.KB ∧
       LoopC mk TI PI μ ν Jf nf Rf om' n' A 0 Φe live₀ I D N') ∨
@@ -548,7 +548,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 theorem LoopC.congr {om om' : OM} {n : Core} {A : Abs} {budget Φe live₀ I D N' : Nat}
@@ -587,7 +587,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **The rebuild loop** (Lemma W's length argument): every budgeted step shrinks the work left by
@@ -734,12 +734,12 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- Lemma W's record in the middle of an operation: this operation's insertion or deletion is
 counted, and its `K_B` rebuild steps are still to come. -/
-structure MidW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Job → Nat) (ν : Core → Nat)
+structure MidW (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf nf Rf : Params → Nat) (om : OM) (n : Core) (c₀ live₀ I D : Nat) : Prop where
   c0 : c₀ ≤ om.cur.P.N / 2
   nP : n.P = mk (4 * max (live₀ + ((c₀ + (om.cur.P.L + 2)) / (om.KB - 1) + 1)) 16)
@@ -763,7 +763,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **The rebuild step** (Lemma W): it restores the wrapper's cost invariant. -/
@@ -903,7 +903,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 theorem countP_insertAfterL (p : Nat → Bool) {a b : Nat} {l : List Nat} (ha : a ∈ l) :
@@ -978,7 +978,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 theorem step_ins_length (Sp : OM.Spec.State) (hx : Option Nat) (hv : (insOp hx).Valid Sp) :
@@ -1198,7 +1198,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **Mirroring a deletion** into `nxt` keeps it in service; the fill bound counts the deletion. -/
@@ -1238,7 +1238,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **A wrapper deletion** keeps the wrapper's cost invariant. -/
@@ -1391,7 +1391,7 @@ open OM.Model OM.Zeroing
 
 set_option linter.deprecated false
 
-variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Job → Nat} {ν : Core → Nat}
+variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν : Core → Nat}
   {Jf capf nf Rf : Params → Nat}
 
 /-- **Initialization** establishes the wrapper's cost invariant. -/

@@ -52,17 +52,20 @@ theorem topSame_ins {s s2 : Core} {x lab hh : Nat}
   split <;> simp
 
 /-- **The top structure's contract.** `TI` is its invariant (it may require INV-S), `μ` measures
-the work left in a job, and the job of a chunk split needs at most `J` steps. The structure has
-room for chunks below `cap`. -/
-structure TopContract (TI : Core → Prop) (μ : Job → Nat) (J cap : Nat) : Prop where
+the work left in the running job, and the job of a chunk split needs at most `J` steps. Both
+depend only on what `TopSame` keeps. The structure has room for chunks below `cap`. -/
+structure TopContract (TI : Core → Prop) (μ : Core → Nat) (J cap : Nat) : Prop where
   frame : ∀ s s', TopSame s s' → TI s → TI s'
+  mframe : ∀ s s', TopSame s s' → μ s' = μ s
   start : ∀ s A x, INV s A → TI s → s.resJob = none → LiveC s x → cSt s x = .quiet →
     s.C.size + 2 ≤ cap →
     ∃ job s2, (insertAround x s.C.size (s.C.size + 1)).run
         (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) = .ok job s2 ∧
-      1 ≤ μ job ∧ μ job ≤ J ∧ TI (markState s2 x s.C.size (s.C.size + 1) job)
+      1 ≤ μ (markState s2 x s.C.size (s.C.size + 1) job) ∧
+      μ (markState s2 x s.C.size (s.C.size + 1) job) ≤ J ∧
+      TI (markState s2 x s.C.size (s.C.size + 1) job)
   step : ∀ s A job, INV s A → TI s → s.resJob = some job →
     ∃ r s', (jobStep job).run s = .ok r s' ∧ TI { s' with resJob := r } ∧
-      ∀ j', r = some j' → 1 ≤ μ j' ∧ μ j' < μ job
+      ∀ j', r = some j' → 1 ≤ μ { s' with resJob := r } ∧ μ { s' with resJob := r } < μ s
 
 end OM.Proof
