@@ -115,6 +115,22 @@ theorem Pres.forIn_list {γ : Type} (l : List γ) (b : β) {f : γ → β → CM
     | done b' => exact Pres.pure b'
     | yield b' => exact ih b'
 
+theorem Pres.mapM_list {γ δ : Type} (l : List γ) {f : γ → CM δ} (hf : ∀ x, Pres R (f x)) :
+    Pres R (l.mapM f) := by
+  induction l with
+  | nil => exact Pres.pure _
+  | cons x t ih =>
+    simp only [List.mapM_cons]
+    exact Pres.bind (hf x) fun _ => Pres.bind ih fun _ => Pres.pure _
+
+theorem Pres.forM_list {γ : Type} (l : List γ) {f : γ → CM PUnit} (hf : ∀ x, Pres R (f x)) :
+    Pres R (l.forM f) := by
+  induction l with
+  | nil => exact Pres.pure _
+  | cons x t ih =>
+    show Pres R (do f x; t.forM f)
+    exact Pres.bind (hf x) fun _ => ih
+
 theorem Pres.forIn_array {γ : Type} (a : Array γ) (b : β) {f : γ → β → CM (ForInStep β)}
     (hf : ∀ x b, Pres R (f x b)) : Pres R (forIn a b f) := by
   rw [← Array.forIn_toList]
@@ -145,6 +161,8 @@ macro_rules
       | with_reducible refine Pres.bind ?_ fun _ => ?_
       | with_reducible refine Pres.forIn_list _ _ fun _ _ => ?_
       | with_reducible refine Pres.forIn_array _ _ fun _ _ => ?_
+      | with_reducible refine Pres.mapM_list _ fun _ => ?_
+      | with_reducible refine Pres.forM_list _ fun _ => ?_
       | with_reducible refine Pres.ite ?_ ?_
       | with_reducible refine Pres.modify ?_
       | with_reducible refine Pres.modifyGet ?_

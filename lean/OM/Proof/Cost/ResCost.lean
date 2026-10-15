@@ -60,10 +60,10 @@ set_option linter.deprecated false
 
 /-- **The reservation of one insertion** succeeds, keeps the lower invariants and the top
 structure's invariant, and carries the zeroing game and its round accounting. -/
-theorem reservation_cost {TI : Core → Prop} {μ : Core → Nat} {J cap k n R : Nat} {L : List Nat}
+theorem reservation_cost {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat} {L : List Nat}
     {s : Core} (hTC : TopContract TI μ J cap) (h0 : ResInv TI k J n R μ L s 0 s) (hn : 1 ≤ n)
     (hsize : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
-    (hcap : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ cap)
+    (hcap : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
     (hI5 : (s.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s.P.T) :
     ∃ t', (reservation k).run s = .ok () t' ∧ LowInv t' L ∧ TI t' ∧ t'.count = s.count ∧
       t'.P = s.P ∧ ∃ y i a ip js, GameInv n R t' y i a ip ∧ RoundOK k J μ t' ip js := by
@@ -109,7 +109,7 @@ theorem reservation_cost {TI : Core → Prop} {μ : Core → Nat} {J cap k n R :
         have hcq1 : cSt (delSt t c) c = .quiet := (hQS.q c hcL).mpr hcQ
         have hnone1 : (delSt t c).resJob = none := by rw [hD.rest.2.2.2.2.2.2.2.2.1]; exact hnone
         obtain ⟨job, s2, hj, hμ1, hμJ, hTI2⟩ :=
-          hTC.start (delSt t c) A c hI1 hTI1 hnone1 hcL1 hcq1 (by rw [hsz1]; omega)
+          hTC.start (delSt t c) A c hI1 hTI1 hnone1 hcL1 hcq1 (by rw [hsz1, hD.P, hP]; omega)
         have hrun := splitChunkStart_ok (by unfold NIL; have := hcL.1; omega) hcL1.2 hj
         have hs2 : TopRel (linkChunkPair (push2 (delSt t c)) c (delSt t c).C.size
             ((delSt t c).C.size + 1)) s2 := by

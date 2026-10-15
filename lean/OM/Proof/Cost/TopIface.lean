@@ -53,12 +53,12 @@ theorem topSame_ins {s s2 : Core} {x lab hh : Nat}
 
 /-- **The top structure's contract.** `TI` is its invariant (it may require INV-S), `μ` measures
 the work left in the running job, and the job of a chunk split needs at most `J` steps. Both
-depend only on what `TopSame` keeps. The structure has room for chunks below `cap`. -/
-structure TopContract (TI : Core → Prop) (μ : Core → Nat) (J cap : Nat) : Prop where
+depend only on what `TopSame` keeps. The structure has room for chunks below `cap P`. -/
+structure TopContract (TI : Core → Prop) (μ : Core → Nat) (J : Nat) (cap : Params → Nat) : Prop where
   frame : ∀ s s', TopSame s s' → TI s → TI s'
   mframe : ∀ s s', TopSame s s' → μ s' = μ s
   start : ∀ s A x, INV s A → TI s → s.resJob = none → LiveC s x → cSt s x = .quiet →
-    s.C.size + 2 ≤ cap →
+    s.C.size + 2 ≤ cap s.P →
     ∃ job s2, (insertAround x s.C.size (s.C.size + 1)).run
         (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) = .ok job s2 ∧
       1 ≤ μ (markState s2 x s.C.size (s.C.size + 1) job) ∧

@@ -42,13 +42,13 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 /-- **The background work of one insertion** succeeds and restores the cost invariant. -/
-theorem background_ok {TI : Core → Prop} {μ : Core → Nat} {J cap k n R : Nat} {L : List Nat}
+theorem background_ok {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat} {L : List Nat}
     {s0 s1 s2 : Core} {y g c : Nat} (hTC : TopContract TI μ J cap)
     (hPost : InsPost TI k J n R μ L s0 g c s2) (hy : y ∈ L) (heg1 : eG s1 y = g)
     (hgc1 : gC s1 g = c) (hchunk : (chunkSize c true).run s1 = .ok () s2)
     (hE12 : s2.E = s1.E) (hP1 : s1.P = s0.P) (hkP : s0.P.K_R = k) (hn : 1 ≤ n)
     (hsize : 2 + 2 * (s2.count / (s0.P.theta + 1 - cmax s0.P)) ≤ n + 1)
-    (hcap : 2 + 2 * (s2.count / (s0.P.theta + 1 - cmax s0.P)) ≤ cap)
+    (hcap : 2 + 2 * (s2.count / (s0.P.theta + 1 - cmax s0.P)) ≤ cap s0.P)
     (hI5 : (s0.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s0.P.T) :
     ∃ s', (background y).run s1 = .ok () s' ∧ LowInv s' L ∧ TI s' ∧ s'.count = s2.count ∧
       s'.P = s0.P ∧ ∃ y' i a ip js, GameInv n R s' y' i a ip ∧ RoundOK k J μ s' ip js := by

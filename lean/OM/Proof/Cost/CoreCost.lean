@@ -29,11 +29,11 @@ theorem run_onGuard_ok {α : Type} {act handler : CM α} {s s' : Core} {a : α}
 /-- **Insertion without FALLBACK** (Lemma K1 for insertions). From the cost invariant, inserting
 after a listed element runs exactly the element link and the background work, never FALLBACK, and
 restores the cost invariant. -/
-theorem insertAfter_cost {TI : Core → Prop} {μ : Core → Nat} {J cap n R : Nat} {L : List Nat}
+theorem insertAfter_cost {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap : Params → Nat} {L : List Nat}
     {s : Core} {x : Nat} (hTC : TopContract TI μ J cap) (hC : CostInv TI μ J n R L s)
     (hx : x ∈ L) (hk : 1 ≤ s.P.K_R) (hR : J / s.P.K_R + 1 ≤ R) (hn : 1 ≤ n)
     (hsize : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
-    (hcap : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ cap)
+    (hcap : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
     (hI5 : (s.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat) :
     ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧
       (do let y ← insertElem x hh; background y; pure y).run s = .ok s.E.size s' ∧
@@ -70,7 +70,7 @@ open OM.Model OM.Zeroing
 set_option linter.deprecated false
 
 /-- **Deletion** (a tombstone) keeps the cost invariant. -/
-theorem markDead_cost {TI : Core → Prop} {μ : Core → Nat} {J cap n R : Nat} {L : List Nat}
+theorem markDead_cost {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap : Params → Nat} {L : List Nat}
     {s : Core} (hTC : TopContract TI μ J cap) (hC : CostInv TI μ J n R L s) (x : Nat) :
     ∃ s', (markDead x).run s = .ok () s' ∧ CostInv TI μ J n R L s' := by
   refine ⟨_, markDead_run s x, ?_⟩

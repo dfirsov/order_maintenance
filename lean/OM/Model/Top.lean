@@ -195,10 +195,59 @@ def relabelAll : CM Unit := do
 
 /-! ### Drains -/
 
-def sameDrain (a b : Nat) : CM Bool := do
-  let A ← getN a
-  let B ← getN b
-  return A.overflowOf != NIL && A.overflowOf == B.overflowOf
+/-- Are `a` and `b` the two targets of one running drain? -/
+def sameDrainN (ns : Array Node) (a b : Nat) : Bool :=
+  (ns.getX a).overflowOf != NIL && (ns.getX a).overflowOf == (ns.getX b).overflowOf
+
+def sameDrain (a b : Nat) : CM Bool := return sameDrainN (← get).nodes a b
+
+/-- `startDrain`'s greedy cut: the length of the longest prefix of `ws` with sum at most `budget`. -/
+def cutLen : List Nat → Nat → Nat
+  | [], _ => 0
+  | w :: ws, budget => if w ≤ budget then cutLen ws (budget - w) + 1 else 0
+
+/-- Move the cut `k` right while children `k - 1, k` form a pair (`pr k`), at most `f` times. -/
+def shiftR (pr : Nat → Bool) (n : Nat) : Nat → Nat → Nat
+  | 0, k => k
+  | f + 1, k => if 0 < k && k < n then (if pr k then shiftR pr n f (k + 1) else k) else k
+
+/-- Move the cut `k` left while children `k - 1, k` form a pair, at most `f` times. -/
+def shiftL (pr : Nat → Bool) : Nat → Nat → Nat
+  | 0, k => k
+  | f + 1, k => if k > 0 then (if pr k then shiftL pr f (k - 1) else k) else k
+
+/-- The side of every entry of `order`: `left` before `boundary`, `right` from it on. -/
+def sidesOf (order : List Nat) (boundary : Nat) : List (Nat × Side) :=
+  (order.foldl (fun (acc : List (Nat × Side) × Side) e =>
+    let sd := if e == boundary then Side.right else acc.2
+    (assocSet acc.1 e sd, sd)) ([], .left)).1
+
+/-- A ghost entry takes the side of its first target; `none` if that target has no side. -/
+def fixSides (ns : Array Node) : List Nat → List (Nat × Side) → Option (List (Nat × Side))
+  | [], side => some side
+  | e :: es, side =>
+    if (ns.getX e).draining then
+      match lookup side (ns.getX e).t1 with
+      | some st => fixSides ns es (assocSet side e st)
+      | none => none
+    else fixSides ns es side
+
+/-- A fresh table: the entries `part` with evenly spaced labels. -/
+def evenTable (beta : Nat) (part : List Nat) : List (Nat × Nat) :=
+  (List.range part.length).zip part |>.map fun (i, e) => (e, (i + 1) * ((1 <<< beta) / (part.length + 1)))
+
+/-- Add table `t` to the tables of entry `e` (height `h`). -/
+def addTable (h t e : Nat) : CM Unit := do
+  setInTables e h ((← inTablesOf e h) ++ [t])
+
+/-- Insert `v1` right before and `v2` right after `v` in table `T`, with labels `a`, `b`. -/
+def insertAroundIn (v v1 v2 : Nat) (q : Nat × Nat × Nat) : CM Unit := do
+  tableInsert q.1 v v1 true q.2.1
+  tableInsert q.1 v v2 false q.2.2
+
+/-- Make `w` the live parent of entry `e` (height `h - 1`). -/
+def setParent (h w e : Nat) : CM Unit :=
+  if h == 1 then setLpar e w else modN e fun n => { n with livePar := w }
 
 def startDrain (v : Nat) : CM Unit := do
   let P ← getP
@@ -210,79 +259,42 @@ def startDrain (v : Nat) : CM Unit := do
   let wt (e : Nat) : Nat := if h == 1 then 1 else (s0.nodes.getX e).weight
   let total := (kids.toList.map wt).sum
   -- partition the live children by weight
-  let mut acc := 0
-  let mut k := 0
-  for i in List.range (kids.size - 1) do
-    if acc + wt kids[i]! ≤ total / 2 then
-      acc := acc + wt kids[i]!
-      k := i + 1
-    else break
-  k := max k 1
-  if h > 1 then
-    -- never separate the two targets of a still-active drain
-    for _ in List.range (kids.size) do
-      if 0 < k && k < kids.size then
-        if ← sameDrain kids[k - 1]! kids[k]! then k := k + 1 else break
-      else break
-    if k ≥ kids.size then
-      k := kids.size - 1
-      for _ in List.range (kids.size) do
-        if k > 0 then
-          if ← sameDrain kids[k - 1]! kids[k]! then k := k - 1 else break
-        else break
-    if k == 0 then return
+  let k0 := max (cutLen ((kids.toList.map wt).take (kids.size - 1)) (total / 2)) 1
+  -- never separate the two targets of a still-active drain
+  let pr (k : Nat) : Bool := sameDrainN s0.nodes kids[k - 1]! kids[k]!
+  let k1 := if h > 1 then shiftR pr kids.size kids.size k0 else k0
+  let k := if h > 1 && k1 ≥ kids.size then shiftL pr kids.size (kids.size - 1) else k1
+  if h > 1 && k == 0 then return
   let boundary := kids[k]!
   let order := V.order
   let entries := order.filter fun e =>
     h == 1 || kids.contains e || (s0.nodes.getX e).first != NIL
-  let mut side : List (Nat × Side) := []
-  let mut sd := Side.left
-  for e in order do
-    if e == boundary then sd := .right
-    side := assocSet side e sd
-  if h > 1 then
-    for e in entries do
-      let E := s0.nodes.getX e
-      if E.draining then
-        let some st := lookup side E.t1 | guard "start_drain: target has no side"
-        side := assocSet side e st
+  let side0 := sidesOf order boundary
+  let some side := (if h > 1 then fixSides s0.nodes entries side0 else some side0)
+    | guard "start_drain: target has no side"
   let sideOf (e : Nat) : Option Side := lookup side e
   let left := entries.filter (sideOf · == some .left)
   let right := entries.filter (sideOf · == some .right)
   -- labels for v1 / v2 in every table holding v (guards first)
-  let mut l1 : List Nat := []
-  let mut l2 : List Nat := []
-  for T in V.inTables do
-    l1 := l1 ++ [← roomNextTo T v true]
-  for T in V.inTables do
-    l2 := l2 ++ [← roomNextTo T v false]
+  let l1 ← V.inTables.mapM (roomNextTo · v true)
+  let l2 ← V.inTables.mapM (roomNextTo · v false)
   -- mutate
   let v1 ← newNode h
   let v2 ← newNode h
-  for (T, a, b) in V.inTables.zip (l1.zip l2) do
-    tableInsert T v v1 true a
-    tableInsert T v v2 false b
-  for (w, part) in [(v1, left), (v2, right)] do
-    let gap := (1 <<< P.beta) / (part.length + 1)
-    let table := (List.range part.length).zip part |>.map fun (i, e) => (e, (i + 1) * gap)
-    modN w fun n => { n with inTables := V.inTables, table := table }
-  for e in left do
-    setInTables e (h - 1) ((← inTablesOf e (h - 1)) ++ [v1])
-  for e in right do
-    setInTables e (h - 1) ((← inTablesOf e (h - 1)) ++ [v2])
-  for (w, sdw) in [(v1, Side.left), (v2, Side.right)] do
-    let mut ch : List Nat := []
-    for e in kids do
-      match sideOf e with
-      | some x => if x == sdw then ch := ch ++ [e]
-      | none => guard "start_drain: child has no side"
-    for e in ch do
-      if h == 1 then setLpar e w
-      else modN e fun n => { n with livePar := w }
-    let weight := (ch.map wt).sum
-    modN w fun n => { n with
-      children := ch, weight := weight, livePar := V.livePar,
-      overflowOf := v }
+  (V.inTables.zip (l1.zip l2)).forM (insertAroundIn v v1 v2)
+  modN v1 fun n => { n with inTables := V.inTables, table := evenTable P.beta left }
+  modN v2 fun n => { n with inTables := V.inTables, table := evenTable P.beta right }
+  left.forM (addTable (h - 1) v1)
+  right.forM (addTable (h - 1) v2)
+  if !kids.toList.all (fun e => (sideOf e).isSome) then guard "start_drain: child has no side"
+  let ch1 := kids.toList.filter (sideOf · == some .left)
+  let ch2 := kids.toList.filter (sideOf · == some .right)
+  ch1.forM (setParent h v1)
+  modN v1 fun n => { n with
+    children := ch1, weight := (ch1.map wt).sum, livePar := V.livePar, overflowOf := v }
+  ch2.forM (setParent h v2)
+  modN v2 fun n => { n with
+    children := ch2, weight := (ch2.map wt).sum, livePar := V.livePar, overflowOf := v }
   let par ← getN V.livePar
   if !par.children.contains v then guard "start_drain: not a child of its parent"
   modN V.livePar fun n => { n with children := n.children.replace1 v [v1, v2] }
@@ -290,19 +302,33 @@ def startDrain (v : Nat) : CM Unit := do
     draining := true, t1 := v1, t2 := v2, side := side,
     livePar := NIL, children := [] }
 
+/-- Remove ghost `v` from the tables of entry `e` (height `h`). -/
+def dropTable (h v e : Nat) : CM Unit := do
+  let tabs ← inTablesOf e h
+  if tabs.contains v then setInTables e h (tabs.erase v)
+
+/-- Remove ghost `v` from table `T`. -/
+def dropEntry (v T : Nat) : CM Unit := do
+  let Tn ← getN T
+  if !(Tn.order.contains v) then guard "finish_drain: ghost missing from a table"
+  modN T fun n => { n with table := assocErase n.table v, side := assocErase n.side v }
+
+/-- Release target `t` of ghost `v`. -/
+def release (v t : Nat) : CM Unit := do
+  if (← getN t).overflowOf == v then modN t fun n => { n with overflowOf := NIL }
+
 def finishDrain (v : Nat) : CM Unit := do
   let V ← getN v
   let h := V.height
-  for e in V.order do
-    let tabs ← inTablesOf e (h - 1)
-    if tabs.contains v then setInTables e (h - 1) (tabs.erase v)
-  for T in V.inTables do
-    let Tn ← getN T
-    if !(Tn.order.contains v) then guard "finish_drain: ghost missing from a table"
-    modN T fun n => { n with table := assocErase n.table v, side := assocErase n.side v }
-  for t in [V.t1, V.t2] do
-    if (← getN t).overflowOf == v then modN t fun n => { n with overflowOf := NIL }
+  V.order.forM (dropTable (h - 1) v)
+  V.inTables.forM (dropEntry v)
+  release v V.t1
+  release v V.t2
   modN v fun n => { n with alive := false, inTables := [] }
+
+/-- The entry below chunk `y` in a table of height `h`. -/
+def belowOf (h y : Nat) : CM Nat := do
+  if h == 1 then return y else return (← getPath y).getX (h - 1)
 
 /-- Move one chunk off ghost `v`. Returns `false` when `v` is fully drained. -/
 def drainStep (v : Nat) : CM Bool := do
@@ -313,14 +339,12 @@ def drainStep (v : Nat) : CM Bool := do
   if V.first == NIL then
     finishDrain v
     return false
-  let belowOf (y : Nat) : CM Nat := do
-    if h == 1 then return y else return (← getPath y).getX (h - 1)
   let y0 := V.first
-  let b0 ← belowOf y0
+  let b0 ← belowOf h y0
   let some sd0 := lookup V.side b0 | guard "drain_step: no side"
   let (t, left, y, below) ← if sd0 == .left then pure (V.t1, true, y0, b0) else do
     let y := V.last
-    let b ← belowOf y
+    let b ← belowOf h y
     let some sd := lookup V.side b | guard "drain_step: no side"
     if sd != .right then guard "top: drain sides out of order"
     pure (V.t2, false, y, b)
@@ -357,12 +381,8 @@ def drainStep (v : Nat) : CM Bool := do
 def insertAroundPrep (x : Nat) : CM (Nat × Nat × List Nat × List Nat × List Nat × Nat) := do
   let px ← getPath x
   let tabs := (← get).cin.getX x
-  let mut ly : List Nat := []
-  let mut lz : List Nat := []
-  for T in tabs do
-    ly := ly ++ [← roomNextTo T x true]
-  for T in tabs do
-    lz := lz ++ [← roomNextTo T x false]
+  let ly ← tabs.mapM (roomNextTo · x true)
+  let lz ← tabs.mapM (roomNextTo · x false)
   let p1 := px.getX 1
   let some f1x := (← getN p1).lab? x | guard "insert_around: x missing from its parent table"
   let some i1 := tabs.idx? p1 | guard "insert_around: parent not among x's tables"
@@ -372,16 +392,18 @@ def insertAroundPrep (x : Nat) : CM (Nat × Nat × List Nat × List Nat × List 
   if !(← getN lp).children.contains x then guard "insert_around: x not a child of its parent"
   return (tx - f1x + ly.getD i1 0, tx - f1x + lz.getD i1 0, tabs, ly, lz, lp)
 
+/-- A new chunk `c` joins the tables `tabs` and the live parent `lp`; its path is copied later. -/
+def joinChunk (tabs : List Nat) (lp c : Nat) : CM Unit := do
+  let P ← getP
+  setPath c (Array.replicate (P.H + 1) NIL)
+  setInTables c 0 tabs
+  setLpar c lp
+
 /-- The rest of `insertAround`, in the top structure only: table entries, paths, children. -/
 def insertAroundFinish (x y z : Nat) (tabs ly lz : List Nat) (lp : Nat) : CM Job := do
-  let P ← getP
-  for (T, a, b) in tabs.zip (ly.zip lz) do
-    tableInsert T x y true a
-    tableInsert T x z false b
-  for c in [y, z] do
-    setPath c (Array.replicate (P.H + 1) NIL)
-    setInTables c 0 tabs
-    setLpar c lp
+  (tabs.zip (ly.zip lz)).forM (insertAroundIn x y z)
+  joinChunk tabs lp y
+  joinChunk tabs lp z
   modN lp fun n => { n with children := n.children.replace1 x [y, x, z] }
   return { x := x, y := y, z := z, pc := .copy 1 }
 

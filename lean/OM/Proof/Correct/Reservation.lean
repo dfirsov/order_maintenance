@@ -34,8 +34,8 @@ theorem pres_insertAroundPrep (x : Nat) : Pres Unchanged (insertAroundPrep x) :=
 
 theorem pres_insertAroundFinish (x y z : Nat) (tabs ly lz : List Nat) (lp : Nat) :
     Pres Same (insertAroundFinish x y z tabs ly lz lp) := by
-  unfold insertAroundFinish
-  pres [pres_getP, pres_tableInsert _ _ _ _ _, pres_setPath _ _, pres_setInTables _ _ _,
+  unfold insertAroundFinish joinChunk
+  pres [pres_getP, pres_insertAroundIn _ _ _ _, pres_setPath _ _, pres_setInTables _ _ _,
     pres_setLpar _ _, pres_modN _ _]
 
 end OM.Proof

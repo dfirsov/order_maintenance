@@ -121,7 +121,7 @@ set_option linter.deprecated false
 conditions, and Lemma R's I5 (M5 fixes `J` and `H`). -/
 structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf capf nf Rf : Params → Nat) : Prop where
-  top : ∀ N, TopContract TI μ (Jf (mk N)) (capf (mk N))
+  top : ∀ N, TopContract TI μ (Jf (mk N)) capf
   prep : PrepContract TI PI ν
   core : ∀ N, CoreP (mk N)
   gp : ∀ N, GParams (mk N)
@@ -165,7 +165,7 @@ theorem CoreOK.insert {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν Jf
   have hs := S.size N
   have hc := S.capc N
   rw [← hmk] at hs hc
-  have hTC : TopContract TI μ (Jf c.P) (capf c.P) := by rw [hmk]; exact S.top N
+  have hTC : TopContract TI μ (Jf c.P) capf := by rw [hmk]; exact S.top N
   obtain ⟨c', hr, hnf, hC', hcnt, hP⟩ := insertAfter_cost hTC
     h.cost hx (by rw [hmk]; exact S.kR N) (by rw [hmk]; exact S.R N) (by rw [hmk]; exact S.n1 N)
     (by omega) (by omega) (by rw [hmk]; exact S.I5 N) hh
@@ -179,7 +179,7 @@ theorem CoreOK.markDead {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν 
     ∃ c', (OM.Model.markDead x).run c = .ok () c' ∧ CoreOK mk TI μ Jf nf Rf c' L ∧
       c'.count = c.count ∧ c'.P = c.P := by
   have hmk := h.pmk
-  have hTC : TopContract TI μ (Jf c.P) (capf c.P) := by rw [hmk]; exact S.top c.P.N
+  have hTC : TopContract TI μ (Jf c.P) capf := by rw [hmk]; exact S.top c.P.N
   obtain ⟨c', hr, hC'⟩ := markDead_cost hTC h.cost x
   have he : c' = { c with E := c.E.modify x fun e => { e with live := false } } := by
     rw [markDead_run] at hr; cases hr; rfl

@@ -88,19 +88,31 @@ theorem top_tableInsert (t e new : Nat) (b : Bool) (lab : Nat) :
     Pres TopRel (tableInsert t e new b lab) := by
   unfold tableInsert; pres [pres_getN _, top_modN _ _]
 theorem top_sameDrain (a b : Nat) : Pres TopRel (sameDrain a b) := by
-  unfold sameDrain; pres [pres_getN _]
+  unfold sameDrain; pres
+theorem top_addTable (h t e : Nat) : Pres TopRel (addTable h t e) := by
+  unfold addTable; pres [top_inTablesOf _ _, top_setInTables _ _ _]
+theorem top_insertAroundIn (v v1 v2 : Nat) (q : Nat × Nat × Nat) :
+    Pres TopRel (insertAroundIn v v1 v2 q) := by
+  unfold insertAroundIn; pres [top_tableInsert _ _ _ _ _]
+theorem top_setParent (h w e : Nat) : Pres TopRel (setParent h w e) := by
+  unfold setParent; pres [top_setLpar _ _, top_modN _ _]
 theorem top_startDrain (v : Nat) : Pres TopRel (startDrain v) := by
   unfold startDrain
-  pres [pres_getP, pres_getN _, top_sameDrain _ _, top_roomNextTo _ _ _, top_newNode _,
-    top_tableInsert _ _ _ _ _, top_modN _ _, top_inTablesOf _ _, top_setInTables _ _ _,
-    top_setLpar _ _]
+  pres [pres_getP, pres_getN _, top_roomNextTo _ _ _, top_newNode _, top_insertAroundIn _ _ _ _,
+    top_modN _ _, top_addTable _ _ _, top_setParent _ _ _]
+theorem top_dropTable (h v e : Nat) : Pres TopRel (dropTable h v e) := by
+  unfold dropTable; pres [top_inTablesOf _ _, top_setInTables _ _ _]
+theorem top_dropEntry (v T : Nat) : Pres TopRel (dropEntry v T) := by
+  unfold dropEntry; pres [pres_getN _, top_modN _ _]
+theorem top_release (v t : Nat) : Pres TopRel (release v t) := by
+  unfold release; pres [pres_getN _, top_modN _ _]
 theorem top_finishDrain (v : Nat) : Pres TopRel (finishDrain v) := by
   unfold finishDrain
-  pres [pres_getN _, top_inTablesOf _ _, top_setInTables _ _ _, top_modN _ _]
+  pres [pres_getN _, top_dropTable _ _ _, top_dropEntry _ _, top_release _ _, top_modN _ _]
 theorem top_drainStep (v : Nat) : Pres TopRel (drainStep v) := by
   unfold drainStep
   pres [pres_getP, pres_getN _, top_finishDrain _, pres_getPath _, pres_getC _,
-    top_guardedSetTag _ _, top_setPathAt _ _ _, top_modN _ _]
+    top_guardedSetTag _ _, top_setPathAt _ _ _, top_modN _ _, pres_belowOf _ _]
 theorem top_fundLoop (j : Job) (v up src k : Nat) : Pres TopRel (fundLoop j v up src k) := by
   unfold fundLoop; pres [pres_getP, top_drainStep _]
 theorem top_afterDrain (j : Job) (v up : Nat) : Pres TopRel (afterDrain j v up) := by
@@ -116,8 +128,8 @@ theorem top_insertAroundPrep (x : Nat) : Pres TopRel (insertAroundPrep x) := by
   pres [pres_getPath _, top_roomNextTo _ _ _, pres_getN _, pres_getC _, pres_getLpar _]
 theorem top_insertAroundFinish (x y z : Nat) (tabs ly lz : List Nat) (lp : Nat) :
     Pres TopRel (insertAroundFinish x y z tabs ly lz lp) := by
-  unfold insertAroundFinish
-  pres [pres_getP, top_tableInsert _ _ _ _ _, top_setPath _ _, top_setInTables _ _ _,
+  unfold insertAroundFinish joinChunk
+  pres [pres_getP, top_insertAroundIn _ _ _ _, top_setPath _ _, top_setInTables _ _ _,
     top_setLpar _ _, top_modN _ _]
 theorem top_insertAround (x y z : Nat) : Pres TopRel (insertAround x y z) := by
   unfold insertAround

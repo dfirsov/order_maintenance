@@ -97,15 +97,27 @@ theorem pres_tableInsert (t e new : Nat) (b : Bool) (lab : Nat) :
     Pres Same (tableInsert t e new b lab) := by
   unfold tableInsert; pres [pres_getN _, pres_modN _ _]
 theorem pres_sameDrain (a b : Nat) : Pres Same (sameDrain a b) := by
-  unfold sameDrain; pres [pres_getN _]
+  unfold sameDrain; pres
+theorem pres_addTable (h t e : Nat) : Pres Same (addTable h t e) := by
+  unfold addTable; pres [pres_inTablesOf _ _, pres_setInTables _ _ _]
+theorem pres_insertAroundIn (v v1 v2 : Nat) (q : Nat × Nat × Nat) :
+    Pres Same (insertAroundIn v v1 v2 q) := by
+  unfold insertAroundIn; pres [pres_tableInsert _ _ _ _ _]
+theorem pres_setParent (h w e : Nat) : Pres Same (setParent h w e) := by
+  unfold setParent; pres [pres_setLpar _ _, pres_modN _ _]
 theorem pres_startDrain (v : Nat) : Pres Same (startDrain v) := by
   unfold startDrain
-  pres [pres_getP, pres_getN _, pres_sameDrain _ _, pres_roomNextTo _ _ _, pres_newNode _,
-    pres_tableInsert _ _ _ _ _, pres_modN _ _, pres_inTablesOf _ _, pres_setInTables _ _ _,
-    pres_setLpar _ _]
+  pres [pres_getP, pres_getN _, pres_roomNextTo _ _ _, pres_newNode _,
+    pres_insertAroundIn _ _ _ _, pres_modN _ _, pres_addTable _ _ _, pres_setParent _ _ _]
+theorem pres_dropTable (h v e : Nat) : Pres Same (dropTable h v e) := by
+  unfold dropTable; pres [pres_inTablesOf _ _, pres_setInTables _ _ _]
+theorem pres_dropEntry (v T : Nat) : Pres Same (dropEntry v T) := by
+  unfold dropEntry; pres [pres_getN _, pres_modN _ _]
+theorem pres_release (v t : Nat) : Pres Same (release v t) := by
+  unfold release; pres [pres_getN _, pres_modN _ _]
 theorem pres_finishDrain (v : Nat) : Pres Same (finishDrain v) := by
   unfold finishDrain
-  pres [pres_getN _, pres_inTablesOf _ _, pres_setInTables _ _ _, pres_modN _ _]
+  pres [pres_getN _, pres_dropTable _ _ _, pres_dropEntry _ _, pres_release _ _, pres_modN _ _]
 
 /-! ### Priority queue, sizes and states -/
 
@@ -215,9 +227,13 @@ theorem pres_guardedSetTag (c t : Nat) : Pres Safe (guardedSetTag c t) := by
 
 /-! ### The top structure's jobs -/
 
+theorem pres_belowOf {R : Core → Core → Prop} [IsPre R] (h y : Nat) : Pres R (belowOf h y) := by
+  unfold belowOf; pres [pres_getPath _]
+
 theorem pres_drainStep (v : Nat) : Pres Safe (drainStep v) := by
   unfold drainStep
   pres [pres_getP, pres_getN _, pres_getC _, pres_getPath _, (pres_finishDrain _).same_safe,
+    pres_belowOf _ _,
     pres_guardedSetTag _ _, (pres_setPathAt _ _ _).same_safe, (pres_modN _ _).same_safe]
 
 theorem pres_fundLoop (j : Job) (v up src k : Nat) : Pres Safe (fundLoop j v up src k) := by

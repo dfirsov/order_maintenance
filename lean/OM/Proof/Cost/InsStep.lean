@@ -202,7 +202,7 @@ theorem sizeState_cT (t : Core) (c d : Nat) : cT (sizeState t c) d = cT t d := b
 
 /-- **The insertion step**: the element link and the size update succeed; all invariants hold
 with one undriven insertion. -/
-theorem insert_step {TI : Core → Prop} {μ : Core → Nat} {J cap k n R : Nat} {L : List Nat}
+theorem insert_step {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat} {L : List Nat}
     {s : Core} {y : Fin n → ℝ} {i : Fin n} {a : Fin n → ℝ} {ip js x : Nat}
     (hTC : TopContract TI μ J cap) (hL : LowInv s L) (hTI : TI s) (hG : GameInv n R s y i a ip)
     (hRO : RoundOK k J μ s ip js) (hx : x ∈ L) (hk : 1 ≤ k) (hR : J / k + 1 ≤ R) (hn : 1 ≤ n)
