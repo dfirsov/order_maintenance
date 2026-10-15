@@ -270,6 +270,26 @@ theorem sh_kids : ∀ u, Top.liveN S' u → (nd S' u).children.Nodup ∧
         have hen := C.nN e ((hkk e hek).2 (by omega)).1
         rw [C.livePar, if_neg hev, if_neg (fun h => h.elim hen.1 hen.2), if_pos ⟨h1, he⟩]⟩)
 
+theorem sh_src : ∀ t, Top.liveN S' t → Top.srcOf S' t ≠ NIL →
+    Top.ghostN S' (Top.srcOf S' t) ∧ (t = (nd S' (Top.srcOf S' t)).t1 ∨ t = (nd S' (Top.srcOf S' t)).t2) := by
+  intro t ht hs
+  have hvlt := C.H.hv
+  rw [C.liveN] at ht
+  rcases ht with ⟨htl, htv⟩ | rfl | rfl
+  · have htn := C.nN t htl.1
+    have htnn : ¬(t = s.nodes.size ∨ t = s.nodes.size + 1) := fun h => h.elim htn.1 htn.2
+    rw [C.srcOf t, if_neg htnn] at hs ⊢
+    obtain ⟨hg, htg⟩ := C.S.src t htl hs
+    have hgv : Top.srcOf (ts s) t ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+    refine ⟨(C.ghostN _).mpr (Or.inl hg), ?_⟩
+    rw [C.H.t1, C.H.t2, if_neg hgv, if_neg hgv, if_neg (fun h => h.elim (C.nN _ hg.1).1 (C.nN _ hg.1).2),
+      if_neg (fun h => h.elim (C.nN _ hg.1).1 (C.nN _ hg.1).2)]
+    exact htg
+  · rw [C.srcOf _, if_pos (Or.inl rfl)]
+    exact ⟨(C.ghostN v).mpr (Or.inr rfl), Or.inl (by rw [C.H.t1, if_pos rfl])⟩
+  · rw [C.srcOf _, if_pos (Or.inr rfl)]
+    exact ⟨(C.ghostN v).mpr (Or.inr rfl), Or.inr (by rw [C.H.t2, if_pos rfl])⟩
+
 end SDCtx
 
 end OM.Proof.Top
