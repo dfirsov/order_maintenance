@@ -972,4 +972,135 @@ theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (
         (evalF_seq_ok2 e6 (evalF_ite_f hcv (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 e8)))))),
         by simp [Exp.cost, walkC] at hc6 ⊢; omega⟩
 
+/-! ### The job step -/
+
+def jobRdS : Stm :=
+  "jx" ::= .opt .jobX ;; "jy" ::= .opt .jobY ;; "jz" ::= .opt .jobZ ;; "jt" ::= .opt .jobT ;;
+  "ja" ::= .opt .jobA ;; "jb" ::= .opt .jobB ;; "jc" ::= .opt .jobC ;; "jd" ::= .opt .jobD
+
+/-- One resumption of the running job; the job's record is updated (or cleared). -/
+def jobStepS : Stm :=
+  jobRdS ;;
+  .ite ("jt" =ₑ 0) jcopyS
+  (.ite ("jt" =ₑ 1) ("wv" ::= .rd (.a .lpar) "jy" ;; walkS)
+  (.ite ("jt" =ₑ 2) ("wv" ::= .var "ja" ;; walkS)
+  (.ite ("jt" =ₑ 3) ("av" ::= .var "ja" ;; "au" ::= .var "jb" ;; afterDS) fundS)))
+
+theorem jobRdS_ok {κ : Caps} {s : Core} {L : Loc} {j : Job} (hjob : s.resJob = some j) :
+    ∃ L', evalF κ jobRdS s L = .ok s L' 24 ∧ L' "jx" = j.x ∧ L' "jy" = j.y ∧ L' "jz" = j.z ∧
+      L' "jt" = (pcEnc j.pc).1 ∧ L' "ja" = (pcEnc j.pc).2.1 ∧ L' "jb" = (pcEnc j.pc).2.2.1 ∧
+      L' "jc" = (pcEnc j.pc).2.2.2.1 ∧ L' "jd" = (pcEnc j.pc).2.2.2.2 := by
+  refine ⟨upd (upd (upd (upd (upd (upd (upd (upd L "jx" j.x) "jy" j.y) "jz" j.z) "jt" (pcEnc j.pc).1) "ja"
+    (pcEnc j.pc).2.1) "jb" (pcEnc j.pc).2.2.1) "jc" (pcEnc j.pc).2.2.2.1) "jd" (pcEnc j.pc).2.2.2.2, ?_, ?_⟩
+  · simp only [jobRdS]
+    refine evalF_seq_ok2 (evalF_assign_ok (v := j.x) (by simp [Exp.ev, OF.get, hjob])) (evalF_seq_ok2
+      (evalF_assign_ok (v := j.y) (by simp [Exp.ev, OF.get, hjob])) (evalF_seq_ok2
+      (evalF_assign_ok (v := j.z) (by simp [Exp.ev, OF.get, hjob])) (evalF_seq_ok2
+      (evalF_assign_ok (v := (pcEnc j.pc).1) (by simp [Exp.ev, OF.get, hjob])) (evalF_seq_ok2
+      (evalF_assign_ok (v := (pcEnc j.pc).2.1) (by simp [Exp.ev, OF.get, hjob])) (evalF_seq_ok2
+      (evalF_assign_ok (v := (pcEnc j.pc).2.2.1) (by simp [Exp.ev, OF.get, hjob])) (evalF_seq_ok2
+      (evalF_assign_ok (v := (pcEnc j.pc).2.2.2.1) (by simp [Exp.ev, OF.get, hjob]))
+      (evalF_assign_ok (v := (pcEnc j.pc).2.2.2.2) (by simp [Exp.ev, OF.get, hjob]))))))))
+  · simp [OM.Machine.State.upd]
+
+theorem jobStep_walkNone {s : Core} {j : Job} (hpc : j.pc = .walk none) :
+    (jobStep j).run s = (walkBody j (s.lpar.getX j.y)).run s := by
+  unfold jobStep; rw [hpc]; simp only [OM.Proof.run_getP_bind, run_getLpar_bind]
+
+theorem jobStep_walkSome {s : Core} {j : Job} {v : Nat} (hpc : j.pc = .walk (some v)) :
+    (jobStep j).run s = (walkBody j v).run s := by
+  unfold jobStep; rw [hpc]; simp only [OM.Proof.run_getP_bind]
+
+theorem jobStep_after {s : Core} {j : Job} {v up : Nat} (hpc : j.pc = .afterDrain v up) :
+    (jobStep j).run s = (afterDrain j v up).run s := by
+  unfold jobStep; rw [hpc]; simp only [OM.Proof.run_getP_bind]
+
+theorem jobStep_fund {s : Core} {j : Job} {v up src k : Nat} (hpc : j.pc = .fund v up src k) :
+    (jobStep j).run s = (fundLoop j v up src k).run s := by
+  unfold jobStep; rw [hpc]; simp only [OM.Proof.run_getP_bind]
+
+theorem jobStepS_copy {κ : Caps} {s : Core} {L : Loc} {j : Job} {l : Nat} (hjob : s.resJob = some j)
+    (hpc : j.pc = .copy l) (hx0 : j.x ≠ NIL) (hyz : j.y ≠ j.z)
+    (hnx : notPrep s j.x) (hny : notPrep s j.y) (hnz : notPrep s j.z)
+    (hxC : j.x < κ.tbl .C) (hyC : j.y < κ.tbl .C) (hzC : j.z < κ.tbl .C) (hlw : l < κ.pw)
+    (hvN : (s.path.getX j.x).getX l < κ.tbl .N) :
+    ∃ L' c, evalF κ jobStepS s L = .ok { copyC s j l with resJob := some (copyNext s.P j l) } L' c ∧ c ≤ 140 := by
+  obtain ⟨Lr, er, hx, hy, hz, ht, ha, -, -, -⟩ := jobRdS_ok (κ := κ) (L := L) hjob
+  rw [hpc] at ht ha
+  obtain ⟨L1, c1, e1, hc1, -⟩ := jcopyS_ok (κ := κ) (L := Lr) hjob hx hy hz ha hx0 hyz hnx hny hnz hxC hyC hzC hlw hvN
+  refine ⟨_, _, evalF_seq_ok2 er (evalF_ite_t (v := 1) (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval]) one_ne_zero
+    e1), by simp [Exp.cost]; omega⟩
+
+theorem jobStepS_walkNone {κ : Caps} {s : Core} {L : Loc} {j : Job} {D1 D2 : Nat} (hjob : s.resJob = some j)
+    (hpc : j.pc = .walk none) (hya : j.y < κ.arr .lpar)
+    (hvs : s.lpar.getX j.y ≠ 0 → s.lpar.getX j.y < s.nodes.size)
+    (hvN : s.lpar.getX j.y ≠ 0 → s.lpar.getX j.y < κ.tbl .N)
+    (hsd : SDAgree κ (wiC s (s.lpar.getX j.y)) (s.lpar.getX j.y) D1)
+    (hds : DSAgree κ (wiC s (s.lpar.getX j.y)) (s.nodes.getX (s.lpar.getX j.y)).overflowOf D2)
+    {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
+    ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧
+      c ≤ D1 + D2 + 300 + 7 * (s.nodes.getX (s.lpar.getX j.y)).height := by
+  obtain ⟨Lr, er, -, hy, -, ht, -, -, -, -⟩ := jobRdS_ok (κ := κ) (L := L) hjob
+  rw [hpc] at ht
+  rw [jobStep_walkNone hpc] at h
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := Lr) (x := "wv") (e := .rd (.a .lpar) "jy") (v := s.lpar.getX j.y)
+    (by simp [Exp.ev, hy, hya, Fld.cap, Fld.get, AF.get])
+  obtain ⟨L2, c2, e2, hc2⟩ := walkS_agree (κ := κ) (S := s) (L := upd Lr "wv" (s.lpar.getX j.y)) (j := j) hjob
+    (by simp [OM.Machine.State.upd]) hvs hvN hsd hds h
+  refine ⟨_, _, evalF_seq_ok2 er (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_t (v := 1) (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval]) one_ne_zero (evalF_seq_ok2 a1 e2))), ?_⟩
+  simp [Exp.cost]; omega
+
+theorem jobStepS_walkSome {κ : Caps} {s : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (hjob : s.resJob = some j)
+    (hpc : j.pc = .walk (some v)) (hvs : v ≠ 0 → v < s.nodes.size) (hvN : v ≠ 0 → v < κ.tbl .N)
+    (hsd : SDAgree κ (wiC s v) v D1) (hds : DSAgree κ (wiC s v) (s.nodes.getX v).overflowOf D2)
+    {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
+    ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧
+      c ≤ D1 + D2 + 300 + 7 * (s.nodes.getX v).height := by
+  obtain ⟨Lr, er, -, -, -, ht, ha, -, -, -⟩ := jobRdS_ok (κ := κ) (L := L) hjob
+  rw [hpc] at ht ha
+  rw [jobStep_walkSome hpc] at h
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := Lr) (x := "wv") (e := .var "ja") (v := v)
+    (by simp [Exp.ev, ha, pcEnc])
+  obtain ⟨L2, c2, e2, hc2⟩ := walkS_agree (κ := κ) (S := s) (L := upd Lr "wv" v) (j := j) hjob
+    (by simp [OM.Machine.State.upd]) hvs hvN hsd hds h
+  refine ⟨_, _, evalF_seq_ok2 er (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_t (v := 1) (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval]) one_ne_zero (evalF_seq_ok2 a1 e2)))), ?_⟩
+  simp [Exp.cost]; omega
+
+theorem jobStepS_after {κ : Caps} {s : Core} {L : Loc} {j : Job} {v up D : Nat} (hjob : s.resJob = some j)
+    (hpc : j.pc = .afterDrain v up) (hvN : v < κ.tbl .N) (hds : DSAgree κ s (s.nodes.getX v).overflowOf D)
+    {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
+    ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧ c ≤ D + 200 := by
+  obtain ⟨Lr, er, -, -, -, ht, ha, hb, -, -⟩ := jobRdS_ok (κ := κ) (L := L) hjob
+  rw [hpc] at ht ha hb
+  rw [jobStep_after hpc] at h
+  have b1 := evalF_assign_ok (κ := κ) (s := s) (L := Lr) (x := "av") (e := .var "ja") (v := v)
+    (by simp [Exp.ev, ha, pcEnc])
+  have b2 := evalF_assign_ok (κ := κ) (s := s) (L := upd Lr "av" v) (x := "au") (e := .var "jb") (v := up)
+    (by simp [Exp.ev, OM.Machine.State.upd, hb, pcEnc])
+  obtain ⟨L2, c2, e2, hc2⟩ := afterDS_agree (κ := κ) (S := s) (L := upd (upd Lr "av" v) "au" up) (j := j) hjob
+    (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd]) hvN hds h
+  refine ⟨_, _, evalF_seq_ok2 er (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_t (v := 1) (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval]) one_ne_zero
+      (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 e2)))))), ?_⟩
+  simp [Exp.cost]; omega
+
+theorem jobStepS_fund {κ : Caps} {s : Core} {L : Loc} {j : Job} {v up src k D : Nat} (hjob : s.resJob = some j)
+    (hpc : j.pc = .fund v up src k) (hds : DSAgree κ s src D)
+    {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
+    ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧ c ≤ D + 150 := by
+  obtain ⟨Lr, er, -, -, -, ht, ha, hb, hc, hd⟩ := jobRdS_ok (κ := κ) (L := L) hjob
+  rw [hpc] at ht ha hb hc hd
+  rw [jobStep_fund hpc] at h
+  obtain ⟨L2, c2, e2, hc2⟩ := fundS_agree (κ := κ) (S := s) (L := Lr) (j := j) hjob ha hb hc hd hds h
+  refine ⟨_, _, evalF_seq_ok2 er (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval])
+    (evalF_ite_f (by simp [Exp.ev, ht, pcEnc, OM.Machine.BinOp.eval]) e2)))), ?_⟩
+  simp [Exp.cost]; omega
+
 end OM.Impl
