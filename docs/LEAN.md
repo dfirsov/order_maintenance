@@ -684,6 +684,21 @@ tests are recomputed from `v`'s lists.
 **Also in M5.** `TabLen` in `InvJ`: every table and side list has at most 160 entries
 (`TopParams.tab`, proved for `a = 8`). The Level M loops rely on this for their constant cost.
 
-**Next.** Initialisation (`initCore`, `prepareStep`), the wrapper, the capacities; then the glue:
-Level F's invariants give the hypotheses of the agreement lemmas; then Theorems A, B and W at
-Level M.
+* Construction (`Init.lean`): a new core in fresh memory (`freshC P`, every array empty) is pushed
+  and written into `initState P`; `initStep` (first, middle and last steps), the eager loop, lazy
+  and eager `initCore`, and `prepareStep`. The agreement for `initStep` follows from Level F's
+  `Stage` invariant.
+
+**The glue (next).** The agreement lemmas take the hypotheses of Level F's run lemmas. Level F's
+proofs establish exactly those hypotheses at five places: `PresDrain` (`drainStep_move`),
+`PresFinish` (`drainStep_finish`), `StartRun` (`startDrain_run`), `InsStart` (`insertAround_run`)
+and `Step` (the copy step). The plan:
+1. export the hypotheses at each place as a lemma from the top invariant;
+2. a Level M contract `TopContractM`, `TopContract` plus the Level M agreements (`SplitAgree`
+   at a split start, `JobAgree` at every job step), proved from the top invariant;
+3. the same for the core's parts (`chunkSize`, group and chunk splits, the queue), from the cost
+   invariant `CostInv`;
+4. capacities (`Caps`) as functions of `N`, and their invariants;
+5. the wrapper as machine code: each epoch's core in fresh arrays of its parity's slot, the handle
+   maps as per-epoch arrays of capacity `nextHandle + N_cur + N'`;
+6. Theorems A, B and W at Level M.
