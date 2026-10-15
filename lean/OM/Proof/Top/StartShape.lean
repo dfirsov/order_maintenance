@@ -12,6 +12,12 @@ set_option linter.deprecated false
 
 theorem par_zero' (t : TS) (e : Nat) : par t 0 e = lpr t e := by unfold par; rw [if_pos rfl]
 
+theorem infix_filter {T l : List Nat} {p : Nat → Bool} (h : T <:+: l) (hp : ∀ x ∈ T, p x = true) :
+    T <:+: l.filter p := by
+  obtain ⟨u, w, rfl⟩ := h
+  rw [List.filter_append, List.filter_append, List.filter_eq_self.mpr hp]
+  exact ⟨u.filter p, w.filter p, rfl⟩
+
 namespace SDCtx
 
 variable {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat} {j : Job} {v : Nat}
@@ -420,6 +426,113 @@ theorem sh_ghost : ∀ g, Top.ghostN S' g →
       by rw [C.ht v, if_neg hvnn, hP']; exact C.hH, by rw [lN, lN1], ?_, ?_⟩
     · rw [lN, hkL]; exact ⟨P, Q, by simp⟩
     · rw [C.ht v, if_neg hvnn, h']; exact ⟨A, B, by simp⟩
+
+/-- **The parent of an entry that `v` held**: `v1` or `v2`, as its child goes. -/
+theorem par_v {e : Nat} (he : Ent ord (Top.ht (ts s) v - 1) e) (hp : par (ts s) (Top.ht (ts s) v - 1) e = v) :
+    let r := if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true then (nd (ts s) e).t1 else e
+    r ∈ (nd (ts s) v).children ∧
+      par S' (Top.ht (ts s) v - 1) e =
+        if r ∈ (nd (ts s) v).children.take (sK (wiC s v) v) then s.nodes.size else s.nodes.size + 1 := by
+  intro r
+  have hvlt := C.H.hv
+  obtain ⟨-, -, hkk⟩ := C.S.kids v C.vl
+  by_cases h1 : Top.ht (ts s) v = 1
+  · have hr : r = e := by simp only [r]; rw [if_neg (by omega)]
+    rw [h1, Nat.sub_self] at he hp ⊢
+    unfold Ent at he; rw [C.S.ord0] at he
+    rw [par_zero'] at hp
+    have hek : e ∈ (nd (ts s) v).children :=
+      (C.S.mem_children C.vl).mpr ⟨by rw [if_pos h1]; exact he, by rw [h1, Nat.sub_self, par_zero']; exact hp⟩
+    rw [hr]
+    refine ⟨hek, ?_⟩
+    rw [par_zero', C.lpr, if_pos h1]
+    rcases C.kids_split hek with ⟨a, b⟩ | ⟨a, b⟩
+    · rw [if_neg b, if_pos a, if_pos a]
+    · rw [if_pos b, if_neg a]
+  · have h2 : 2 ≤ Top.ht (ts s) v := by have := C.h1; omega
+    obtain ⟨hn, hh⟩ := (C.S.ordMem _ (by omega) (by have := C.hH; show _ ≤ s.P.H; omega) e).mp he
+    have hen := C.nN e hn
+    have hev : e ≠ v := fun h => by rw [h] at hh; omega
+    by_cases hd : (nd (ts s) e).draining = true
+    · have hr : r = (nd (ts s) e).t1 := by simp only [r]; rw [if_pos ⟨h2, hd⟩]
+      obtain ⟨g1, -, g3, -⟩ := C.S.ghost e ⟨hn, hd⟩
+      unfold par at hp; rw [if_neg (by omega), if_pos hd] at hp
+      have hk : (nd (ts s) e).t1 ∈ (nd (ts s) v).children :=
+        (C.S.mem_children C.vl).mpr ⟨by rw [if_neg h1]; exact ⟨g1, by rw [g3]; exact hh⟩,
+          by rw [par_live (Or.inr g1), if_neg (by omega)]; exact hp⟩
+      have ht1v : (nd (ts s) e).t1 ≠ v := fun h => by rw [h] at g3; omega
+      have ht1n := C.nN _ g1.1
+      rw [hr]
+      refine ⟨hk, ?_⟩
+      have hnn : ¬(e = s.nodes.size ∨ e = s.nodes.size + 1) := fun h => h.elim hen.1 hen.2
+      have hd' : (nd S' e).draining = true := by rw [C.draining', if_neg hev, if_neg hnn]; exact hd
+      have ht1' : (nd S' e).t1 = (nd (ts s) e).t1 := by rw [C.H.t1, if_neg hev, if_neg hnn]
+      unfold par
+      rw [if_neg (by omega), if_pos hd', ht1', C.livePar, if_neg ht1v,
+        if_neg (show ¬((nd (ts s) e).t1 = s.nodes.size ∨ (nd (ts s) e).t1 = s.nodes.size + 1) from
+          fun h => h.elim ht1n.1 ht1n.2)]
+      rcases C.kids_split hk with ⟨a, b⟩ | ⟨a, b⟩
+      · rw [if_neg (fun h => b h.2), if_pos ⟨h1, a⟩, if_pos a]
+      · rw [if_pos ⟨h1, b⟩, if_neg a]
+    · have hr : r = e := by simp only [r]; rw [if_neg (fun h => hd h.2)]
+      have hel : Top.liveN (ts s) e := ⟨hn, by simpa using hd⟩
+      have hk : e ∈ (nd (ts s) v).children :=
+        (C.S.mem_children C.vl).mpr ⟨by rw [if_neg h1]; exact ⟨hel, hh⟩, hp⟩
+      rw [hr]
+      refine ⟨hk, ?_⟩
+      rw [C.par_live' (by omega) ((C.liveN e).mpr (Or.inl ⟨hel, hev⟩)), C.livePar, if_neg hev,
+        if_neg (fun h => h.elim hen.1 hen.2)]
+      rcases C.kids_split hk with ⟨a, b⟩ | ⟨a, b⟩
+      · rw [if_neg (fun h => b h.2), if_pos ⟨h1, a⟩, if_pos a]
+      · rw [if_pos ⟨h1, b⟩, if_neg a]
+
+/-- **Other entries keep their parent.** -/
+theorem par_keep {k e : Nat} (he : Ent ord k e) (hk : k ≤ s.P.H)
+    (hne : ¬(k = Top.ht (ts s) v - 1 ∧ par (ts s) k e = v)) : par S' k e = par (ts s) k e := by
+  have hvlt := C.H.hv
+  by_cases hk0 : k = 0
+  · subst hk0
+    rw [par_zero', par_zero', C.lpr]
+    split
+    · next h1 =>
+      have hekn : e ∉ (nd (ts s) v).children := by
+        intro hek
+        have := ((C.S.mem_children C.vl).mp hek).2
+        rw [h1, Nat.sub_self, par_zero'] at this
+        exact hne ⟨by omega, by rw [par_zero']; exact this⟩
+      rw [if_neg (fun h => hekn (List.mem_of_mem_drop h)), if_neg (fun h => hekn (List.mem_of_mem_take h))]
+    · rfl
+  · obtain ⟨hn, hh⟩ := (C.S.ordMem k (by omega) hk e).mp he
+    have hen := C.nN e hn
+    have hnn : ¬(e = s.nodes.size ∨ e = s.nodes.size + 1) := fun h => h.elim hen.1 hen.2
+    by_cases hev : e = v
+    · rw [hev]
+      have hd' : (nd S' v).draining = true := by rw [C.draining', if_pos rfl]
+      have ht1' : (nd S' v).t1 = s.nodes.size := by rw [C.H.t1, if_pos rfl]
+      unfold par
+      rw [if_neg hk0, if_pos hd', ht1', if_neg hk0, if_neg (by rw [C.vl.2]; simp), C.livePar, if_neg (by omega),
+        if_pos (Or.inl rfl)]
+    · by_cases hd : (nd (ts s) e).draining = true
+      · obtain ⟨g1, -, g3, -⟩ := C.S.ghost e ⟨hn, hd⟩
+        have ht1v : (nd (ts s) e).t1 ≠ v := by
+          intro h; obtain ⟨-, -, -, -, h5, -⟩ := C.S.ghost e ⟨hn, hd⟩
+          rw [h] at h5; rw [show Top.srcOf (ts s) v = NIL from C.of] at h5; exact hn.1 h5.symm
+        have hd' : (nd S' e).draining = true := by rw [C.draining', if_neg hev, if_neg hnn]; exact hd
+        have ht1' : (nd S' e).t1 = (nd (ts s) e).t1 := by rw [C.H.t1, if_neg hev, if_neg hnn]
+        unfold par
+        rw [if_neg hk0, if_pos hd', ht1', if_neg hk0, if_pos hd]
+        refine C.livePar_old g1.1 ht1v (fun h1 hk' => hne ⟨?_, ?_⟩)
+        · have := ((C.S.mem_children C.vl).mp hk').1; rw [if_neg h1] at this; omega
+        · have := ((C.S.mem_children C.vl).mp hk').2
+          rw [par_live (Or.inr g1), if_neg (by have := C.h1; omega)] at this
+          unfold par; rw [if_neg hk0, if_pos hd]; exact this
+      · have hel : Top.liveN (ts s) e := ⟨hn, by simpa using hd⟩
+        rw [C.par_live' hk0 ((C.liveN e).mpr (Or.inl ⟨hel, hev⟩)), par_live (Or.inr hel), if_neg hk0]
+        refine C.livePar_old hn hev (fun h1 hk' => hne ⟨?_, ?_⟩)
+        · have := ((C.S.mem_children C.vl).mp hk').1; rw [if_neg h1] at this; omega
+        · have := ((C.S.mem_children C.vl).mp hk').2
+          rw [par_live (Or.inr hel), if_neg (by have := C.h1; omega)] at this
+          rw [par_live (Or.inr hel), if_neg hk0]; exact this
 
 end SDCtx
 
