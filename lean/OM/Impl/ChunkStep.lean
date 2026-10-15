@@ -771,4 +771,104 @@ theorem msS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (hy
     ?_, h1F⟩
   simp [Exp.cost, Exp.cF] at hc1 ⊢; omega
 
+/-! ### `chunkSplitStep` -/
+
+def cssDirE : Exp := .cF .size (.cF .l "x") ≤ₑ .cF .size (.cF .r "x")
+def cssL : Stm := "y" ::= .cF .l "x" ;; labLS ;; mgLS
+def cssR : Stm := "y" ::= .cF .r "x" ;; labRS ;; mgRS
+def cssMove : Stm := "lf" ::= cssDirE ;; unitS ;; .ite "lf" cssL cssR ;; msS
+/-- `ok := chunkSplitStep x` (local `x`): one unit moves to the lighter sibling, or the empty `x` is removed. -/
+def chunkSplitStepS : Stm :=
+  "xf" ::= .cF .first "x" ;; .ite ("xf" =ₑ 0) (removeChunkS ;; "ok" ::= 0) (cssMove ;; "ok" ::= 1)
+
+theorem moveGroupsLeft_C_size (s : Core) (x y : Nat) (u labs : List Nat) :
+    (moveGroupsLeft s x y u labs).C.size = s.C.size := by simp [moveGroupsLeft]
+
+theorem moveGroupsRight_C_size (s : Core) (x y : Nat) (u labs : List Nat) :
+    (moveGroupsRight s x y u labs).C.size = s.C.size := by simp [moveGroupsRight]
+
+open OM.Proof in
+theorem chunkSplitStepS_left (κ : Caps) (s : Core) (L : Loc) {x : Nat} {labs : List Nat} (hx : L "x" = x)
+    (hne : cF s x ≠ NIL) (hdir : cSz s (cLl s x) ≤ cSz s (cRr s x))
+    (hlabs : (pushLabsL s x (unitCand s x true).length).run s = .ok labs s)
+    (hxs : x < s.C.size) (hlS : cLl s x < s.C.size) (hrS : cRr s x < s.C.size) (hxl : x ≠ cLl s x)
+    (hC : s.C.size ≤ κ.tbl .C) (hG : s.Gs.size ≤ κ.tbl .G)
+    (hu : ∀ g ∈ unitCand s x true, g < s.Gs.size) (hg0 : cF s x < κ.tbl .G)
+    (hsr : (s.Gs.getX (cF s x)).src < κ.tbl .G) (hyl : cLs s (cLl s x) < κ.tbl .G) :
+    ∃ L' n, evalF κ chunkSplitStepS s L = .ok (cmoveLState s x (unitCand s x true) labs) L' n ∧ L' "ok" = 1 ∧
+      L' "x" = x ∧ n ≤ 700 := by
+  have hxT : x < κ.tbl .C := by omega
+  set l := cLl s x
+  set r := cRr s x
+  set u := unitCand s x true
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "xf") (e := .cF .first "x") (v := cF s x)
+    (by simp [Exp.cF, Exp.ev, hx, hxT, Fld.cap, Fld.get, CF.get, cF])
+  set L1 := upd L "xf" (cF s x)
+  have hc1 : ("xf" =ₑ 0 : Exp).ev κ s L1 = some 0 := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd]; simpa [NIL] using hne
+  have h1x : L1 "x" = x := by simp [L1, OM.Machine.State.upd, hx]
+  have hlT : (s.C.getX x).l < κ.tbl .C := (show l < κ.tbl .C by omega)
+  have hrT : (s.C.getX x).r < κ.tbl .C := (show r < κ.tbl .C by omega)
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := L1) (x := "lf") (e := cssDirE) (v := b2n true)
+    (by have hdir' : (s.C.getX (s.C.getX x).l).size ≤ (s.C.getX (s.C.getX x).r).size := hdir
+        simp [cssDirE, Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1x, hxT, Fld.cap, Fld.get, CF.get, hlT, hrT, hdir', b2n])
+  set L2 := upd L1 "lf" (b2n true)
+  obtain ⟨L3, c3, e3, hU3, hk3, hc3, hF3⟩ := unitS_ok (κ := κ) (s := s) (L := L2) (x := x) (left := true)
+    (by simp [L2, OM.Machine.State.upd, h1x]) (by simp [L2, OM.Machine.State.upd]) hxT (by simpa using hg0)
+    (by simpa using hsr)
+  have h3x : L3 "x" = x := by
+    rw [hF3 "x" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; simp [L2, OM.Machine.State.upd, h1x]
+  have h3lf : L3 "lf" = 1 := by
+    rw [hF3 "lf" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]
+    simp [L2, OM.Machine.State.upd, b2n]
+  have a4 := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "y") (e := .cF .l "x") (v := l)
+    (by simp [Exp.cF, Exp.ev, h3x, hxT, Fld.cap, Fld.get, CF.get, l, cLl])
+  set L4 := upd L3 "y" l
+  have h4uk : L4 "uk" = 1 ∨ L4 "uk" = 3 := by simpa [L4, OM.Machine.State.upd] using hk3
+  have hlen : (L4 "uk" = 1 ∧ u.length = 1) ∨ (L4 "uk" = 3 ∧ u.length = 3) := by
+    have : unitOf L4 = u := by
+      rw [show u = unitOf L3 from hU3.symm]; simp [unitOf, L4, OM.Machine.State.upd]
+    rcases h4uk with h | h
+    · left; refine ⟨h, ?_⟩; rw [← this]; simp [unitOf, h]
+    · right; refine ⟨h, ?_⟩; rw [← this]; simp [unitOf, h]
+  obtain ⟨L5, c5, e5, hlab5, huk5, hc5, hF5⟩ := labLS_ok (κ := κ) (s := s) (L := L4) (y := l) (k := u.length)
+    (labs := labs) (by simp [L4, OM.Machine.State.upd]) hlen (by omega) hyl hlabs
+  have h5 : ∀ r, r = "x" ∨ r = "y" ∨ r = "uk" ∨ r = "u0" ∨ r = "u1" ∨ r = "u2" → L5 r = L4 r := by
+    intro r hr
+    exact hF5 r (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+  have hU4 : unitOf L4 = u := by
+    rw [show u = unitOf L3 from hU3.symm]; simp [unitOf, L4, OM.Machine.State.upd]
+  have hU5 : unitOf L5 = u := by
+    rw [← hU4]; simp [unitOf, h5 "uk" (by simp), h5 "u0" (by simp), h5 "u1" (by simp), h5 "u2" (by simp)]
+  have h5x : L5 "x" = x := by rw [h5 "x" (by simp)]; simp [L4, OM.Machine.State.upd, h3x]
+  have h5y : L5 "y" = l := by rw [h5 "y" (by simp)]; simp [L4, OM.Machine.State.upd]
+  have h5k : L5 "uk" = 1 ∨ L5 "uk" = 3 := by rw [h5 "uk" (by simp)]; exact h4uk
+  obtain ⟨L6, c6, e6, hc6, hF6⟩ := mgLS_ok (κ := κ) (s := s) (L := L5) (x := x) (y := l) h5x h5y h5k hxl hxs hlS hC
+    (by rw [hU5]; intro g hg; exact ⟨hu g hg, by have := hu g hg; omega⟩)
+  rw [hU5, hlab5] at e6
+  set S1 := moveGroupsLeft s x l u labs
+  have h6 : ∀ r, r ≠ "ul" → L6 r = L5 r := hF6
+  have hU6 : unitOf L6 = u := by
+    rw [← hU5]; simp [unitOf, h6 "uk" (by decide), h6 "u0" (by decide), h6 "u1" (by decide), h6 "u2" (by decide)]
+  obtain ⟨L7, c7, e7, hc7, hF7⟩ := msS_ok (κ := κ) (s := S1) (L := L6) (x := x) (y := l)
+    (by rw [h6 "x" (by decide), h5x]) (by rw [h6 "y" (by decide), h5y]) (by rw [h6 "uk" (by decide)]; exact h5k)
+    (by simp [S1, moveGroupsLeft_C_size, hxs]) (by simp [S1, moveGroupsLeft_C_size, hlS])
+    (by simp [S1, moveGroupsLeft_C_size, hC]) (by rw [hU6]; intro g hg; have := hu g hg; omega)
+  rw [hU6] at e7
+  have e8 := evalF_assign_ok (κ := κ) (s := cmoveSizes S1 x l u) (L := L7) (x := "ok") (e := (1 : Exp)) (v := 1) rfl
+  have hc3' : (Exp.var "lf").ev κ s L3 = some 1 := by simp [Exp.ev, h3lf]
+  refine ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f hc1 (evalF_seq_ok2 (evalF_seq_ok2 a2 (evalF_seq_ok2 e3
+    (evalF_seq_ok2 (evalF_ite_t hc3' one_ne_zero (evalF_seq_ok2 a4 (evalF_seq_ok2 e5 e6))) e7))) e8)),
+    by simp [OM.Machine.State.upd], ?_, ?_⟩
+  · simp only [OM.Machine.State.upd]; simp
+    rw [hF7 "x" (by decide), h6 "x" (by decide), h5x]
+  · simp only [Exp.cost, cssDirE, Exp.cF] at hc3 hc5 hc6 hc7 ⊢; omega
+
 end OM.Impl
