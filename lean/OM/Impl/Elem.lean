@@ -126,4 +126,49 @@ theorem insertElem_agree (κ : Caps) (σ : Core) (L : Loc) {x hh : Nat} (hx : L 
       simp [insertElemPre, hc1, hc2, evalF, Exp.ev, Res.bind, Res.addCost, Fld.get, Fld.cap, EF.get, GF.get,
         Exp.eF, Exp.gF, OM.Machine.State.upd, hx, hl, hxC, hgC, hnC, PF.get, Exp.cost]
 
+def markDeadP : Proc where
+  name := "markDead"
+  params := ["x"]
+  rets := []
+  body := .weF .dead "x" 1
+
+theorem markDead_agree (κ : Caps) (σ : Core) (L : Loc) {x : Nat} (hx : L "x" = x) (hxE : x < σ.E.size)
+    (hE : σ.E.size ≤ κ.tbl .E) {σ' : Core} (h : (markDead x).run σ = .ok () σ') :
+    ∃ L' n, evalF κ markDeadP.body σ L = .ok σ' L' n ∧ n ≤ 5 := by
+  unfold markDead modE at h
+  simp at h; subst h
+  simp [markDeadP, evalF, Exp.ev, Fld.set, Stm.weF, EF.ok, hx, hxE, Exp.cost]
+  rfl
+
+/-- The key of element `e`: its chunk's tag, its group's label, its own label. -/
+def keyS (e t g l : Reg) : Stm :=
+  g ::= .eF .grp e ;;
+  l ::= .eF .lab e ;;
+  t ::= .cF .tag (.gF .chk g) ;;
+  g ::= .gF .lab g
+
+def orderP : Proc where
+  name := "order"
+  params := ["x", "y"]
+  rets := ["r"]
+  body :=
+    keyS "x" "ta" "ga" "ea" ;;
+    keyS "y" "tb" "gb" "eb" ;;
+    "r" ::= (("ta" <ₑ "tb") ||ₑ (("ta" =ₑ "tb") &&ₑ (("ga" <ₑ "gb") ||ₑ (("ga" =ₑ "gb") &&ₑ ("ea" <ₑ "eb")))))
+
+theorem order_agree (κ : Caps) (σ : Core) (L : Loc) {x y : Nat} (hx : L "x" = x) (hy : L "y" = y)
+    (hxE : x < κ.tbl .E) (hyE : y < κ.tbl .E) (hxG : (σ.E.getX x).grp < κ.tbl .G)
+    (hyG : (σ.E.getX y).grp < κ.tbl .G) (hxC : (σ.Gs.getX (σ.E.getX x).grp).chk < κ.tbl .C)
+    (hyC : (σ.Gs.getX (σ.E.getX y).grp).chk < κ.tbl .C) {b : Bool} {σ' : Core}
+    (h : (OM.Model.order x y).run σ = .ok b σ') :
+    ∃ L' n, evalF κ orderP.body σ L = .ok σ' L' n ∧ L' "r" = b2n b ∧ n ≤ 80 := by
+  unfold OM.Model.order key at h
+  simp [getE, getG, getC] at h
+  obtain ⟨rfl, rfl⟩ := h
+  simp [orderP, keyS, evalF, Exp.ev, Res.bind, Res.addCost, Fld.get, Fld.cap, EF.get, GF.get, CF.get, Exp.eF,
+    Exp.gF, Exp.cF, OM.Machine.State.upd, hx, hy, hxE, hyE, hxG, hyG, hxC, hyC, Exp.cost, keyLt, b2n]
+  congr 1
+  apply propext
+  omega
+
 end OM.Impl
