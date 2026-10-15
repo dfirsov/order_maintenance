@@ -28,6 +28,13 @@ theorem replace1_split {A B : List Nat} {x : Nat} (ys : List Nat) (hA : x ∉ A)
 def ordIns (ord : Nat → List Nat) (cl : List Nat) (x y z : Nat) : Nat → List Nat :=
   fun k => if k = 0 then clIns cl x y z else ord k
 
+theorem ins_pp_ht {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    (hI : InvJ (ts s) cl ord dr n0 none) {c : Nat} (hc : c ∈ cl) {i : Nat} (h1 : 1 ≤ i)
+    (hi : i ≤ s.P.H) : isN (ts s) (pp (ts s) c i) ∧ ht (ts s) (pp (ts s) c i) = i :=
+  (hI.shape.ordMem i h1 hi _).mp (hI.shape.pathEnt c hc i hi)
+
+theorem tagUp_one (u : TS) (c : Nat) : tagUp u c 1 = digit u c 1 := by simp [tagUp]
+
 section shape
 variable {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
   (hI : InvJ (ts s) cl ord dr n0 none) (hTP : TopParams s.P)
@@ -102,15 +109,19 @@ theorem ins_table (hTP : TopParams s.P) {T : Nat} (hT : T ∈ s.cin.getX x) :
       GapsGe s.P.beta (gapB s.P.beta (n0 T) (dr T + 1))
         ((A ++ (s.C.size, a) :: (x, le) :: (s.C.size + 1, b) :: Bs).map (·.2)) ∧
       1 ≤ gapB s.P.beta (n0 T) (dr T + 1) ∧
-      ((s.nodes.getX T).draining = true → (lookup (s.nodes.getX T).side x).isSome) := by
+      ((s.nodes.getX T).draining = true → (lookup (s.nodes.getX T).side x).isSome) ∧
+      a = roomL s.P.beta (s.nodes.getX T).table x true ∧
+      b = roomL s.P.beta (s.nodes.getX T).table x false := by
   obtain ⟨A, le, Bs, htab, hA, hside, h1, h2, hB, hg⟩ :=
     start_room hI hTP hx (T := T) hT s.C.size (s.C.size + 1)
   simp only [ts_P] at hB hg h1 h2
+  have htab0 : (s.nodes.getX T).table = A ++ (x, le) :: Bs := htab
   have hTs : T < s.nodes.size := by
     have hent : Ent ord 0 x := by unfold Ent; rw [hI.shape.ord0]; exact hx
     have hT' : T ∈ tabs (ts s) 0 x := by unfold tabs; rw [if_pos rfl]; exact hT
     exact ((hI.shape.tabsIff 0 x T hent).mp hT').1.2.1
-  refine ⟨A, le, Bs, _, _, htab, hA, ?_, by rw [gapB_succ]; exact hg, by rw [gapB_succ]; omega, hside⟩
+  refine ⟨A, le, Bs, _, _, htab, hA, ?_, by rw [gapB_succ]; exact hg, by rw [gapB_succ]; omega, hside,
+    by rw [htab0, roomL_eq hA], by rw [htab0, roomL_eq hA]⟩
   · rw [F.table, if_pos ⟨hT, hTs⟩]
     show aroundT (nd (ts s) T).table x _ _ _ _ = _
     rw [htab, aroundT_eq hA]
@@ -254,8 +265,115 @@ theorem ins_order_mem (hTP : TopParams s.P) {X : Nat} (hX : X ∈ s.cin.getX x) 
   simp only [List.map_append, List.map_cons, List.mem_append, List.mem_cons]
   tauto
 
+/-! ### Digits and tags after the split -/
+
+theorem ins_digit_hi {c : Nat} (hc : c ∈ cl) (c' : Nat)
+    (hpc : ∀ j, 1 ≤ j → j ≤ s.P.H → pp t c' j = pp (ts s) c j) {i : Nat} (h2 : 2 ≤ i)
+    (hi : i ≤ s.P.H) : digit t c' i = digit (ts s) c i := by
+  unfold digit
+  rw [hpc i (by omega) hi, hpc (i - 1) (by omega) (by omega)]
+  have hn := ins_pp_ht hI hc (i := i) (by omega) hi
+  have hX : pp (ts s) c i ∉ s.cin.getX x := fun h => by
+    have := (ins_cinX hI hcs hx h).2.1; omega
+  unfold Node.lab?; rw [F.table, if_neg (fun h => hX h.1)]; rfl
+
+theorem ins_digit_one_old (hTP : TopParams s.P) {c : Nat} (hc : c ∈ cl) :
+    digit t c 1 = digit (ts s) c 1 := by
+  obtain ⟨hy, hz⟩ := ins_fresh hI hcs hx
+  have hcy : c ≠ s.C.size := fun e => hy (e ▸ hc)
+  have hcz : c ≠ s.C.size + 1 := fun e => hz (e ▸ hc)
+  unfold digit
+  rw [F.pp_old c hcy hcz 1, F.pp_old c hcy hcz 0]
+  by_cases hX : pp (ts s) c 1 ∈ s.cin.getX x
+  · obtain ⟨A', le, Bs, a, b, htab, -, htab', -⟩ := ins_table hI hcs hx F hTP hX
+    unfold Node.lab?; rw [htab']
+    show _ = ((lookup (s.nodes.getX (pp (ts s) c 1)).table _).getD 0)
+    rw [htab]
+    have e0 : pp (ts s) c (1 - 1) = c := rfl
+    rw [e0, lookup_around _ _ hcy hcz]
+  · unfold Node.lab?; rw [F.table, if_neg (fun h => hX h.1)]; rfl
+
+theorem ins_digit_one_new (hTP : TopParams s.P) (c : Nat) (hcn : c = s.C.size ∨ c = s.C.size + 1) :
+    digit t c 1 = roomL s.P.beta (s.nodes.getX (pp (ts s) x 1)).table x (decide (c = s.C.size)) := by
+  obtain ⟨hy, hz⟩ := ins_fresh hI hcs hx
+  have h3 : 3 ≤ s.P.H := hI.shape.H3
+  have hT := ins_pp1 hI hcs hx
+  obtain ⟨A', le, Bs, a, b, htab, -, htab', -, -, -, ha, hb⟩ := ins_table hI hcs hx F hTP hT
+  obtain ⟨-, hT1, -⟩ := ins_cinX hI hcs hx hT
+  have hkeys : ∀ k ∈ A'.map (·.1), k ∈ cl := by
+    intro k hk
+    have hk' : k ∈ order (ts s) (pp (ts s) x 1) := by
+      unfold order Node.order; rw [show (nd (ts s) (pp (ts s) x 1)).table = A' ++ (x, le) :: Bs from htab]
+      simp only [List.map_append, List.mem_append]; exact Or.inl hk
+    have := (hI.shape.O1 _ (ins_cinX hI hcs hx hT).1).subset hk'
+    rwa [hT1, Nat.sub_self, hI.shape.ord0] at this
+  unfold digit
+  rw [F.pp_new c hcn 1 le_rfl (by omega)]
+  have e0 : pp t c (1 - 1) = c := rfl
+  rw [e0]
+  unfold Node.lab?; rw [htab']
+  rcases hcn with rfl | rfl
+  · rw [lookup_append_cons_self (fun h => hy (hkeys _ h)), ha]; simp
+  · have hxs := (hcs x).mp hx
+    rw [show A' ++ (s.C.size, a) :: (x, le) :: (s.C.size + 1, b) :: Bs =
+      (A' ++ [(s.C.size, a), (x, le)]) ++ (s.C.size + 1, b) :: Bs by simp]
+    rw [lookup_append_cons_self, hb]
+    · simp
+    · simp only [List.map_append, List.map_cons, List.map_nil, List.mem_append, List.mem_cons,
+        List.not_mem_nil, or_false, not_or]
+      exact ⟨fun h => hz (hkeys _ h), by omega, by omega⟩
+
+/-- **The tags after the split** are the tags the paths spell. -/
+theorem ins_tags (hTP : TopParams s.P) (hf1 : f1x = digit (ts s) x 1)
+    (hi1 : (s.cin.getX x).idx? (pp (ts s) x 1) = some i1) :
+    ∀ c ∈ clIns cl x s.C.size (s.C.size + 1), t.tag c = tagF t c := by
+  have S := hI.shape
+  have h3 := S.H3
+  have eP : (ts s).P = s.P := rfl
+  rw [eP] at h3
+  obtain ⟨A, B, hcl, hA, hB, hcl'⟩ := ins_cl hI hcs hx
+  have hxs := (hcs x).mp hx
+  have hβ : t.P.beta = (ts s).P.beta := by rw [F.P]; rfl
+  intro c hc
+  unfold tagF; rw [F.P, F.tag]
+  have hmem : c ∈ cl ∨ c = s.C.size ∨ c = s.C.size + 1 := by
+    rw [hcl', hcl] at *; simp only [List.mem_append, List.mem_cons] at hc ⊢; tauto
+  by_cases hcn : c = s.C.size ∨ c = s.C.size + 1
+  · have hpc : ∀ j, 1 ≤ j → j ≤ s.P.H → pp t c j = pp (ts s) x j := fun j h1 h2 =>
+      F.pp_new c hcn j h1 h2
+    have hhi := tagUp_high (s := ts s) (s' := t) (c := x) (c' := c) hβ 1 s.P.H (by omega)
+      (fun i h1 h2 => ins_digit_hi hI hcs hx F hx c hpc (by omega) h2)
+    rw [tagUp_one, tagUp_one] at hhi
+    have hmono : digit (ts s) x 1 ≤ tagUp (ts s) x s.P.H := by
+      rw [← tagUp_one]; exact tagUp_mono _ _ _ _ (by omega)
+    have htx : (s.C.getX x).tag = tagUp (ts s) x s.P.H := S.tags x hx
+    have hd := ins_digit_one_new hI hcs hx F hTP c hcn
+    obtain ⟨n1, n2, n3, n4, n5, -⟩ := ins0_top s x
+    rcases hcn with rfl | rfl
+    · rw [if_neg (by omega), if_pos rfl]
+      unfold tagY
+      rw [ins0_tag s x hxs.2, n3, n5, n1, hf1, htx, idx?_getD_map hi1]
+      simp only [decide_true] at hd
+      rw [← hd]; omega
+    · rw [if_pos rfl]
+      unfold tagZ
+      rw [ins0_tag s x hxs.2, n3, n5, n1, hf1, htx, idx?_getD_map hi1]
+      simp only [show ¬(s.C.size + 1 = s.C.size) by omega, decide_false] at hd
+      rw [← hd]; omega
+  · have hc0 : c ∈ cl := by tauto
+    push Not at hcn
+    rw [if_neg hcn.2, if_neg hcn.1]
+    have hpc : ∀ j, 1 ≤ j → j ≤ s.P.H → pp t c j = pp (ts s) c j := fun j _ _ =>
+      F.pp_old c hcn.1 hcn.2 j
+    rw [tagUp_congr hβ s.P.H (fun i h1 h2 => by
+      rcases Nat.lt_or_ge i 2 with hi | hi
+      · rw [show i = 1 by omega]; exact ins_digit_one_old hI hcs hx F hTP hc0
+      · exact ins_digit_hi hI hcs hx F hc0 c hpc hi h2)]
+    exact S.tags c hc0
+
 /-- **The order invariant after the split.** -/
-theorem ins_shape (hTP : TopParams s.P) :
+theorem ins_shape (hTP : TopParams s.P) (hf1 : f1x = digit (ts s) x 1)
+    (hi1 : (s.cin.getX x).idx? (pp (ts s) x 1) = some i1) :
     Shape t (clIns cl x s.C.size (s.C.size + 1)) (ordIns ord cl x s.C.size (s.C.size + 1)) := by
   have S := hI.shape
   have ST := ins_shapeT hI hcs hx F hTP
@@ -712,7 +830,7 @@ theorem ins_shape (hTP : TopParams s.P) :
         by_cases hL : LA ++ LB = []
         · rw [hL] at e; exact hx0 e.symm
         · exact hnx (e ▸ getLastD_mem hL _)
-  all_goals sorry
+  · exact ins_tags hI hcs hx F hTP hf1 hi1
 
 end shape
 

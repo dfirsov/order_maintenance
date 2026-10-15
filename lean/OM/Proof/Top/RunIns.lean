@@ -56,6 +56,32 @@ theorem lookup_assocSet_eq {β : Type} (l : List (Nat × β)) (k : Nat) (v : β)
       simpa using h x hx
     simp [List.find?_append, hn]
 
+theorem lookup_append_cons_self {β : Type} {A R : List (Nat × β)} {k : Nat} {v : β}
+    (hA : k ∉ A.map (·.1)) : lookup (A ++ (k, v) :: R) k = some v := by
+  unfold lookup
+  have hn : List.find? (fun p => p.1 == k) A = none := by
+    rw [List.find?_eq_none]; intro p hp
+    have : p.1 ≠ k := fun e => hA (List.mem_map.mpr ⟨p, hp, e⟩)
+    simpa using this
+  simp [List.find?_append, hn]
+
+theorem lookup_around {β : Type} (A B : List (Nat × β)) {k y z x : Nat} {a le b : β}
+    (hy : k ≠ y) (hz : k ≠ z) :
+    lookup (A ++ (y, a) :: (x, le) :: (z, b) :: B) k = lookup (A ++ (x, le) :: B) k := by
+  unfold lookup
+  have h1 : (y == k) = false := by simpa using Ne.symm hy
+  have h2 : (z == k) = false := by simpa using Ne.symm hz
+  simp only [List.find?_append, List.find?_cons, h1, h2]
+
+theorem idx?_getD_map {l : List Nat} {a i : Nat} (h : l.idx? a = some i) (g : Nat → Nat) :
+    (l.map g).getD i 0 = g a := by
+  unfold List.idx? at h
+  rw [List.findIdx?_eq_some_iff_getElem] at h
+  obtain ⟨hi, hp, -⟩ := h
+  have ha : l[i] = a := by simpa using hp
+  rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_eq_getElem hi]
+  simp [ha]
+
 theorem lookup_assocSet_ne {β : Type} (l : List (Nat × β)) (k k' : Nat) (v : β) (h : k' ≠ k) :
     lookup (assocSet l k v) k' = lookup l k' := by
   unfold assocSet lookup

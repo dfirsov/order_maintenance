@@ -89,6 +89,11 @@ theorem ins0_top : (ins0 s x).nodes = s.nodes ∧ (ins0 s x).path = s.path ∧ (
   rw [(linkChunkPair_rest (s := push2 s) (x := x) (y := s.C.size) (z := s.C.size + 1)).2.2.2.2.2.2.1]
   simp [push2]
 
+theorem ins0_tag {c : Nat} (hc : c < s.C.size) : ((ins0 s x).C.getX c).tag = (s.C.getX c).tag := by
+  have := linkChunkPair_cT (s := push2 s) (x := x) (y := s.C.size) (z := s.C.size + 1) c
+  unfold cT at this; unfold ins0; rw [this]
+  simp [push2, Array.getX_push, Nat.ne_of_lt hc, show c ≠ s.C.size + 1 by omega]
+
 /-- The core right before `insertAroundFinish`: both tags written. -/
 abbrev ins2 : Core :=
   tagsS (ins0 s x) s.C.size (s.C.size + 1) (tagY (ins0 s x) x f1x i1) (tagZ (ins0 s x) x f1x i1)
