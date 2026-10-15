@@ -1170,6 +1170,67 @@ theorem sh_tags : ∀ c ∈ cl, (ts (sdS (wiC s v) v side)).tag c = tagF S' c :=
     rw [lookup_around _ _ (by omega) (by omega)]
   · rfl
 
+/-- **Entries going left come before entries going right.** -/
+theorem left_before_right {e e' : Nat} (he : Ent ord (Top.ht (ts s) v - 1) e)
+    (he' : Ent ord (Top.ht (ts s) v - 1) e') (hp : par (ts s) (Top.ht (ts s) v - 1) e = v)
+    (hp' : par (ts s) (Top.ht (ts s) v - 1) e' = v)
+    (hr : (if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true then (nd (ts s) e).t1 else e) ∈
+      (nd (ts s) v).children.take (sK (wiC s v) v))
+    (hr' : (if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e').draining = true then (nd (ts s) e').t1 else e') ∉
+      (nd (ts s) v).children.take (sK (wiC s v) v)) :
+    Before (ord (Top.ht (ts s) v - 1)) e e' := by
+  have hnd := C.S.ordNodup (Top.ht (ts s) v - 1)
+  obtain ⟨hknd, hksub, hkk⟩ := C.S.kids v C.vl
+  obtain ⟨hrk, -⟩ := C.par_v he hp
+  obtain ⟨hrk', -⟩ := C.par_v he' hp'
+  -- a child on each side
+  have hsplit : (nd (ts s) v).children = (nd (ts s) v).children.take (sK (wiC s v) v) ++
+      (nd (ts s) v).children.drop (sK (wiC s v) v) := (List.take_append_drop _ _).symm
+  have hcross : ∀ a b, a ∈ (nd (ts s) v).children.take (sK (wiC s v) v) →
+      b ∈ (nd (ts s) v).children → b ∉ (nd (ts s) v).children.take (sK (wiC s v) v) →
+      Before (ord (Top.ht (ts s) v - 1)) a b := by
+    intro a b ha hb hb'
+    have hbd : b ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+      rcases C.kids_split hb with ⟨h, -⟩ | ⟨-, h⟩
+      · exact absurd h hb'
+      · exact h
+    have : Before (nd (ts s) v).children a b := by rw [hsplit]; exact before_append_mem ha hbd
+    exact this.mono hksub
+  -- the ghosts' extent
+  have hgh : ∀ x, Ent ord (Top.ht (ts s) v - 1) x → par (ts s) (Top.ht (ts s) v - 1) x = v →
+      2 ≤ Top.ht (ts s) v → (nd (ts s) x).draining = true →
+      [(nd (ts s) x).t1, x, (nd (ts s) x).t2] <:+: ord (Top.ht (ts s) v - 1) ∧
+        [(nd (ts s) x).t1, (nd (ts s) x).t2] <:+: (nd (ts s) v).children := by
+    intro x hx hpx h2 hd
+    obtain ⟨hn, hh⟩ := (C.S.ordMem _ (by omega) (by have := C.hHt; omega) x).mp hx
+    obtain ⟨g1, -, g3, -, -, -, -, -, -, -, -, g12, g13⟩ := C.S.ghost x ⟨hn, hd⟩
+    unfold par at hpx; rw [if_neg (by omega), if_pos hd] at hpx
+    rw [hpx] at g12; rw [hh] at g13
+    exact ⟨g13, g12⟩
+  by_cases hd : 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true
+  · rw [if_pos hd] at hr
+    obtain ⟨hinf, hinf2⟩ := hgh e he hp hd.1 hd.2
+    obtain ⟨hn, -⟩ := (C.S.ordMem _ (by omega) (by have := C.hHt; omega) e).mp he
+    obtain ⟨-, -, -, -, h5, h6, -⟩ := C.S.ghost e ⟨hn, hd.2⟩
+    have hns := sw_nosep' C.pc C.v0 C.I C.lp C.TP C.of C.W C.look hd.1 hinf2 hn.1 h5 h6
+    have ht2 := hns.mp hr
+    have b1 : Before (ord (Top.ht (ts s) v - 1)) e (nd (ts s) e).t2 := before_of_infix2 (infix3_right hinf)
+    by_cases hd' : 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e').draining = true
+    · rw [if_pos hd'] at hr'
+      obtain ⟨hinf', hinf2'⟩ := hgh e' he' hp' hd'.1 hd'.2
+      have b2 : Before (ord (Top.ht (ts s) v - 1)) (nd (ts s) e').t1 e' := before_of_infix2 (infix3_left hinf')
+      exact (b1.trans (hcross _ _ ht2 (hinf2'.subset (by simp)) hr') hnd).trans b2 hnd
+    · rw [if_neg hd'] at hr'
+      exact b1.trans (hcross _ _ ht2 (by simpa [if_neg hd'] using hrk') hr') hnd
+  · rw [if_neg hd] at hr
+    by_cases hd' : 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e').draining = true
+    · rw [if_pos hd'] at hr'
+      obtain ⟨hinf', hinf2'⟩ := hgh e' he' hp' hd'.1 hd'.2
+      have b2 : Before (ord (Top.ht (ts s) v - 1)) (nd (ts s) e').t1 e' := before_of_infix2 (infix3_left hinf')
+      exact (hcross _ _ hr (hinf2'.subset (by simp)) hr').trans b2 hnd
+    · rw [if_neg hd'] at hr'
+      exact hcross _ _ hr (by simpa [if_neg hd'] using hrk') hr'
+
 end SDCtx
 
 end OM.Proof.Top
