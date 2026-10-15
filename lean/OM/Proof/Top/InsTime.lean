@@ -280,6 +280,113 @@ theorem ins_time (hTP : TopParams s.P) :
     omega
   · rw [F.liveN] at hu; rw [F.srcOf] at hs; rw [F.P]; exact Ti.big u hu hs
 
+theorem ins_ew_ge {u : Nat} (hu : isN (ts s) u) :
+    ew (ts s) cl u ≤ ew t (clIns cl x s.C.size (s.C.size + 1)) u := by
+  by_cases hd : (nd (ts s) u).draining = true
+  · rw [ins_ew_ghost hI hcs hx F ⟨hu, hd⟩]; omega
+  · rw [ins_ew_live hI hcs hx F ⟨hu, by simpa using hd⟩]; omega
+
+/-- A node whose table holds `x`'s live ancestor of height `h - 1` serves 2 more after the split. -/
+theorem ins_ew_up {X h : Nat} (hX : isN (ts s) X) (hh : ht (ts s) X = h) (h1 : 1 ≤ h)
+    (hH : h ≤ s.P.H) (hm : anc (ts s) x (h - 1) ∈ order (ts s) X)
+    (hl : h = 1 ∨ liveN (ts s) (anc (ts s) x (h - 1))) :
+    ew (ts s) cl X + 2 ≤ ew t (clIns cl x s.C.size (s.C.size + 1)) X := by
+  have S := hI.shape
+  have hH' : h ≤ (ts s).P.H := hH
+  have hent : Ent ord (h - 1) (anc (ts s) x (h - 1)) := S.anc_mem hx (by omega)
+  have hT : X ∈ tabs (ts s) (h - 1) (anc (ts s) x (h - 1)) :=
+    (S.tabsIff _ _ X hent).mpr ⟨hX, by omega, hm⟩
+  have hpar : par (ts s) (h - 1) (anc (ts s) x (h - 1)) = anc (ts s) x h := by
+    rw [par_live (hl.elim (fun e => Or.inl (by omega)) Or.inr)]
+    by_cases h0 : h - 1 = 0
+    · rw [if_pos h0]; rw [show h = 1 by omega]; rfl
+    · rw [if_neg h0, ← anc_succ x _ (by omega), show h - 1 + 1 = h by omega]
+  obtain ⟨hal, hah⟩ := S.anc_live hx h h1 hH
+  rcases S.Q _ _ X hent hT with e | e <;> rw [hpar] at e
+  · subst e
+    rw [ins_ew_live hI hcs hx F hal, hah, if_pos rfl]
+  · have hsn : srcOf (ts s) (anc (ts s) x h) ≠ NIL := fun h' => hX.1 (e.trans h')
+    obtain ⟨hg, htg⟩ := S.src _ hal hsn
+    rw [← e] at hg htg
+    obtain ⟨-, -, g3, -⟩ := S.ghost X hg
+    rw [ins_ew_ghost hI hcs hx F hg, hh, if_pos]
+    rcases htg with e' | e' <;> [exact Or.inl e'; exact Or.inr e']
+
+/-- The insertion events of the split: one more in each table holding `x`. -/
+def drIns (dr : Nat → Nat) (tabs : List Nat) (T : Nat) : Nat := if T ∈ tabs then dr T + 1 else dr T
+
+/-- **The label room after the split.** -/
+theorem ins_room (hTP : TopParams s.P) :
+    Room t (clIns cl x s.C.size (s.C.size + 1)) (drIns dr (s.cin.getX x)) n0 := by
+  have S := hI.shape
+  have Ro := hI.room
+  have eP : (ts s).P = s.P := rfl
+  refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1 => ?_, fun X hX h2 => ?_⟩
+  · rw [F.isN] at hX; rw [F.P]
+    unfold drIns
+    by_cases hXc : X ∈ s.cin.getX x
+    · obtain ⟨A', le, Bs, a, b, -, -, htab', hg, -⟩ := ins_table hI hcs hx F hTP hXc
+      rw [if_pos hXc]; unfold labs; rw [htab']; exact hg
+    · rw [if_neg hXc, ins_labs_old hI hcs hx F hXc]; exact Ro.gaps X hX
+  · rw [F.isN] at hX; rw [F.ht, F.P]; exact Ro.n0le X hX
+  · rw [F.isN] at hX; rw [F.ht] at h1; rw [F.P]
+    have hp := Ro.pot1 X hX h1
+    rw [eP] at hp
+    have hge := ins_ew_ge hI hcs hx F hX
+    unfold drIns
+    by_cases hXc : X ∈ s.cin.getX x
+    · rw [if_pos hXc]
+      have hx1 : x ∈ order (ts s) X := (ins_cinX hI hcs hx hXc).2.2
+      have := ins_ew_up hI hcs hx F hX h1 le_rfl (by have : 3 ≤ s.P.H := S.H3; omega) hx1 (Or.inl rfl)
+      omega
+    · rw [if_neg hXc]; omega
+  · rw [F.isN] at hX; rw [F.ht] at h2; rw [F.P, F.ht]
+    have hXc : X ∉ s.cin.getX x := fun h => by have := (ins_cinX hI hcs hx h).2.1; omega
+    unfold drIns; rw [if_neg hXc]
+    have hp := Ro.pot2 X hX h2
+    rw [eP] at hp
+    have hge := ins_ew_ge hI hcs hx F hX
+    have hH := (S.htN X hX).2
+    -- old live entries are unchanged
+    have hold : oldLive t X = oldLive (ts s) X := by
+      unfold oldLive; rw [ins_order_old hI hcs hx F hXc]
+      congr 1; apply List.filter_congr; intro e _
+      simp only [F.liveN]
+    -- growth rises by at most what the node gains
+    set e0 := anc (ts s) x (ht (ts s) X - 1) with he0
+    have hgr : growth t (clIns cl x s.C.size (s.C.size + 1)) X ≤
+        growth (ts s) cl X + (if e0 ∈ (order (ts s) X).filter
+          (fun e => decide (liveN (ts s) e) && decide (X < e)) then 2 else 0) := by
+      unfold growth
+      rw [ins_order_old hI hcs hx F hXc, F.ht, F.P]
+      have hfl : ((order (ts s) X).filter fun e => decide (liveN t e) && decide (X < e)) =
+          (order (ts s) X).filter fun e => decide (liveN (ts s) e) && decide (X < e) := by
+        apply List.filter_congr; intro e _; simp only [F.liveN]
+      rw [hfl]
+      have hnd : ((order (ts s) X).filter fun e => decide (liveN (ts s) e) && decide (X < e)).Nodup := by
+        have := (S.ordNodup _).sublist (S.O1 X hX)
+        exact this.filter _
+      have hht : ∀ e ∈ order (ts s) X, ht (ts s) e = ht (ts s) X - 1 := fun e he => by
+        have hE := S.tabEnt X hX e he
+        exact ((S.ordMem _ (by omega) (by omega) e).mp hE).2
+      apply foldr_bump hnd
+      · intro e he hne
+        have hm := (List.mem_filter.mp he).1
+        rw [ins_tw hI hcs hx F (by rw [hht e hm]; omega), hht e hm, if_neg (fun h => hne h.symm)]
+        rw [eP]; omega
+      · have h1' : 1 ≤ ht (ts s) e0 := by
+          rw [(S.anc_live hx _ (by omega) (by omega)).2]; omega
+        rw [ins_tw hI hcs hx F h1', eP]
+        split <;> omega
+    by_cases hm : e0 ∈ (order (ts s) X).filter (fun e => decide (liveN (ts s) e) && decide (X < e))
+    · rw [if_pos hm] at hgr
+      have hm' := List.mem_filter.mp hm
+      simp only [Bool.and_eq_true, decide_eq_true_eq] at hm'
+      have := ins_ew_up hI hcs hx F hX rfl (by omega) hH hm'.1 (Or.inr hm'.2.1)
+      rw [hold]; omega
+    · rw [if_neg hm] at hgr
+      rw [hold]; omega
+
 end weights
 
 end OM.Proof.Top
