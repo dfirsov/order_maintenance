@@ -1,5 +1,6 @@
 import OM.Impl.Elem
 import OM.Impl.StartDrain
+import OM.Proof.Correct.GroupSplit
 
 /-!
 # M6: groups (`Model/Core.lean`: group splits)
@@ -750,5 +751,113 @@ theorem newGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {c : Nat} (hc : L "c" 
     refine ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd])
       (evalF_seq_ok2 a2 (evalF_seq_ok2 e3 e4))), by simp [L2, OM.Machine.State.upd],
       by simp [L2, L1, OM.Machine.State.upd, hc], by simp [Exp.cost] at hn4 ⊢; omega⟩
+
+/-! ### `startGroupSplit` -/
+
+theorem newGroup_eff {c i : Nat} {σ σ' : Core} (h : (newGroup c).run σ = .ok i σ')
+    (hfree : ∀ x ∈ σ.freeG, x < σ.Gs.size) :
+    (∀ x, σ'.Gs.getX x = if x = i then { chk := c } else σ.Gs.getX x) ∧ σ.Gs.size ≤ σ'.Gs.size ∧
+      σ'.Gs.size ≤ σ.Gs.size + 1 ∧ i < σ'.Gs.size ∧ σ'.C = σ.C ∧ σ'.P = σ.P ∧ σ'.freeG.length ≤ σ.freeG.length ∧
+      (∀ x ∈ σ'.freeG, x ∈ σ.freeG) := by
+  rw [newGroup_run] at h
+  split at h
+  case h_1 j rest hf =>
+    injection h with h1 h2; subst h1 h2
+    have hj := hfree j (by simp [hf])
+    refine ⟨fun x => ?_, by simp [Array.set!_eq_modify], by simp [Array.set!_eq_modify], by
+      simp [Array.set!_eq_modify]; exact hj, rfl, rfl, by simp [hf], fun x hx => by simp [hf, hx]⟩
+    simp only [Array.set!_eq_modify, getX_modify']
+    by_cases e : x = j <;> simp [e, hj]
+  case h_2 hf =>
+    injection h with h1 h2; subst h1 h2
+    refine ⟨fun x => ?_, by simp, by simp, by simp, rfl, rfl, le_refl _, fun x hx => hx⟩
+    simp only [OM.Proof.Top.getX_push']
+
+def labBeforeP : Proc := { name := "labBefore", params := ["g"], rets := ["lab"], body := labBeforeS }
+def labAfterP : Proc := { name := "labAfter", params := ["g"], rets := ["lab"], body := labAfterS }
+def newGroupP : Proc := { name := "newGroup", params := ["c"], rets := ["gn"], body := newGroupS }
+
+/-- `startGroupSplit g` (local `g`; the guard is Level F's, and holds on every run that succeeds). -/
+def startGroupSplitS : Stm :=
+  labBeforeP.call [.var "g"] ["labL"] ;; labAfterP.call [.var "g"] ["labR"] ;;
+  "c" ::= .gF .chk "g" ;; newGroupP.call [.var "c"] ["gl"] ;; newGroupP.call [.var "c"] ["gr"] ;;
+  linkGroupPairS
+
+theorem startGroupSplitS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g)
+    (hG2 : σ.Gs.size + 2 ≤ κ.tbl .G) (hC : σ.C.size ≤ κ.tbl .C)
+    (hpG : (σ.Gs.getX g).prev < σ.Gs.size) (hnG : (σ.Gs.getX g).next < σ.Gs.size)
+    (hcC : (σ.Gs.getX g).chk < σ.C.size) (hfree : ∀ x ∈ σ.freeG, x < σ.Gs.size)
+    (hF0 : 0 < κ.lrec .freeG) (hF : σ.freeG.length ≤ κ.lcap .freeG) {σ' : Core}
+    (h : (startGroupSplit g).run σ = .ok () σ') :
+    ∃ L' n, evalF κ startGroupSplitS σ L = .ok σ' L' n ∧ n ≤ 600 := by
+  unfold startGroupSplit at h
+  simp only [OM.Proof.run_getG_bind, OM.Proof.run_get_bind, OM.Proof.run_require_bind] at h
+  by_cases ha : (g != NIL && decide (g < σ.Gs.size) && (σ.Gs.getX g).alive) = true
+  · rw [if_pos ha] at h
+    simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, decide_eq_true_eq] at ha
+    obtain ⟨labL, s2, h2, h⟩ := run_bind_ok h
+    obtain ⟨labR, s3, h3, h⟩ := run_bind_ok h
+    simp only [OM.Proof.run_newGroup_bind, OM.Proof.run_modify] at h
+    have hgT : g < κ.tbl .G := by omega
+    have hcT : (σ.Gs.getX g).chk < κ.tbl .C := by omega
+    -- the labels
+    obtain ⟨hs2, La, ca, ea, hla, -, hca⟩ := labBeforeS_agree κ σ (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g])
+      (g := g) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hgT hcT (by omega) h2
+    subst s2
+    obtain ⟨hs3, Lb, cb, eb, hlb, -, hcb⟩ := labAfterS_agree κ σ (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g])
+      (g := g) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hgT hcT (by omega) h3
+    subst s3
+    have e1 := evalF_call_ok (q := labBeforeP) (args := [.var "g"]) (ds := ["labL"]) (L := L)
+      (by simp [evList, Exp.ev, hg]) ea
+    set L1 := OM.Machine.State.setLocs L ["labL"] (labBeforeP.rets.map La)
+    have e2 := evalF_call_ok (q := labAfterP) (args := [.var "g"]) (ds := ["labR"]) (L := L1)
+      (by simp [evList, Exp.ev, L1, labBeforeP, OM.Machine.State.setLocs, OM.Machine.State.upd, hg]) eb
+    set L2 := OM.Machine.State.setLocs L1 ["labR"] (labAfterP.rets.map Lb)
+    set c := (σ.Gs.getX g).chk
+    have e3 := evalF_assign_ok (κ := κ) (s := σ) (L := L2) (x := "c") (e := .gF .chk "g") (v := c)
+      (by simp [Exp.gF, Exp.ev, L2, L1, labBeforeP, labAfterP, OM.Machine.State.setLocs, OM.Machine.State.upd, hg,
+        Fld.cap, Fld.get, GF.get, hgT, c])
+    set L3 := upd L2 "c" c
+    -- the two new groups
+    set σ1 := (OM.Proof.allocGroup σ c).2
+    set gl := (OM.Proof.allocGroup σ c).1
+    have hn1 : (newGroup c).run σ = .ok gl σ1 := OM.Proof.run_newGroup c σ
+    obtain ⟨E1, E2, E3, E4, E5, E6, E7, E8⟩ := newGroup_eff hn1 hfree
+    obtain ⟨Lg1, cg1, eg1, hgl1, -, hcg1⟩ := newGroupS_agree κ σ (OM.Machine.State.setLocs (fun _ => 0) ["c"] [c])
+      (c := c) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hn1 (by omega) hfree hF0 hF
+    have e4 := evalF_call_ok (q := newGroupP) (args := [.var "c"]) (ds := ["gl"]) (L := L3)
+      (by simp [evList, Exp.ev, L3, OM.Machine.State.upd]) eg1
+    set L4 := OM.Machine.State.setLocs L3 ["gl"] (newGroupP.rets.map Lg1)
+    set σ2 := (OM.Proof.allocGroup σ1 c).2
+    set gr := (OM.Proof.allocGroup σ1 c).1
+    have hn2 : (newGroup c).run σ1 = .ok gr σ2 := OM.Proof.run_newGroup c σ1
+    have hfree1 : ∀ x ∈ σ1.freeG, x < σ1.Gs.size := fun x hx => by have := hfree x (E8 x hx); omega
+    obtain ⟨F1, F2, F3, F4, F5, F6, F7, F8⟩ := newGroup_eff hn2 hfree1
+    obtain ⟨Lg2, cg2, eg2, hgr2, -, hcg2⟩ := newGroupS_agree κ σ1 (OM.Machine.State.setLocs (fun _ => 0) ["c"] [c])
+      (c := c) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hn2 (by omega) hfree1 hF0 (by omega)
+    have e5 := evalF_call_ok (q := newGroupP) (args := [.var "c"]) (ds := ["gr"]) (L := L4)
+      (by simp [evList, Exp.ev, L4, L3, newGroupP, OM.Machine.State.setLocs, OM.Machine.State.upd]) eg2
+    set L5 := OM.Machine.State.setLocs L4 ["gr"] (newGroupP.rets.map Lg2)
+    -- the link
+    have hσ2g : σ2.Gs.getX g = if g = gr then { chk := c } else if g = gl then { chk := c } else σ.Gs.getX g := by
+      rw [F1, E1]
+    have hpG2 : (σ2.Gs.getX g).prev < σ2.Gs.size := by rw [hσ2g]; split_ifs <;> first | omega | (simp [NIL]; omega)
+    have hnG2 : (σ2.Gs.getX g).next < σ2.Gs.size := by rw [hσ2g]; split_ifs <;> first | omega | (simp [NIL]; omega)
+    have hcC2 : (σ2.Gs.getX g).chk < σ2.C.size := by rw [hσ2g, F5, E5]; split_ifs <;> first | omega | (simp [c]; omega) | (show c < _; omega)
+    obtain ⟨L6, c6, e6, hc6⟩ := linkGroupPairS_agree κ σ2 L5 (g := g) (gl := gl) (gr := gr) (labL := labL)
+      (labR := labR)
+      (by simp [L5, L4, L3, L2, L1, newGroupP, labAfterP, labBeforeP, OM.Machine.State.setLocs, OM.Machine.State.upd, hg])
+      (by simp [L5, L4, L3, newGroupP, OM.Machine.State.setLocs, OM.Machine.State.upd, hgl1])
+      (by simp [L5, newGroupP, OM.Machine.State.setLocs, OM.Machine.State.upd, hgr2])
+      (by simp [L5, L4, L3, L2, L1, newGroupP, labAfterP, labBeforeP, OM.Machine.State.setLocs, OM.Machine.State.upd, hla])
+      (by simp [L5, L4, L3, L2, newGroupP, labAfterP, OM.Machine.State.setLocs, OM.Machine.State.upd, hlb])
+      (by omega) (by omega) F4 hpG2 hnG2 hcC2 (by omega) (by rw [F5, E5]; exact hC)
+    injection h with _ h
+    rw [h] at e6
+    refine ⟨L6, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4 (evalF_seq_ok2 e5 e6)))), ?_⟩
+    simp only [Exp.cost, costList, Exp.gF, List.map, List.sum_cons, List.sum_nil, List.length_cons,
+      List.length_nil] at hca hcb hcg1 hcg2 hc6 ⊢
+    omega
+  · rw [if_neg ha] at h; simp [OM.Model.guard] at h
 
 end OM.Impl
