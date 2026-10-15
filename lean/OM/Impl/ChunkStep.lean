@@ -955,4 +955,221 @@ theorem chunkSplitStepS_right (κ : Caps) (s : Core) (L : Loc) {x : Nat} {labs :
     rw [hF7 "x" (by decide), h6 "x" (by decide), h5x]
   · simp only [Exp.cost, cssDirE, Exp.cF] at hc3 hc5 hc6 hc7 ⊢; omega
 
+open OM.Proof in
+theorem chunkSplitStepS_remove (κ : Caps) (s : Core) (L : Loc) {x : Nat} (hx : L "x" = x) (he : cF s x = NIL)
+    (hlr : cLl s x ≠ cRr s x) (hlx : cLl s x ≠ x) (hrx : cRr s x ≠ x) (hxs : x < s.C.size)
+    (hl : cSt s (cLl s x) = .overflow ∧ cSrc s (cLl s x) = x)
+    (hr : cSt s (cRr s x) = .overflow ∧ cSrc s (cRr s x) = x)
+    (hszl : cSz s (cLl s x) ≤ s.P.theta) (hszr : cSz s (cRr s x) ≤ s.P.theta)
+    (hlS : cLl s x < s.C.size) (hrS : cRr s x < s.C.size) (hC : s.C.size ≤ κ.tbl .C) :
+    ∃ L' n, evalF κ chunkSplitStepS s L = .ok (cremoveState s x) L' n ∧ L' "ok" = 0 ∧ n ≤ 200 := by
+  have hxT : x < κ.tbl .C := by omega
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "xf") (e := .cF .first "x") (v := cF s x)
+    (by simp [Exp.cF, Exp.ev, hx, hxT, Fld.cap, Fld.get, CF.get, cF])
+  obtain ⟨L2, c2, e2, hc2⟩ := removeChunkS_agree κ s (upd L "xf" (cF s x)) (x := x)
+    (by simp [OM.Machine.State.upd, hx]) hlr hlx hrx hxs hl hr hszl hszr hlS hrS hC
+  have hc : ("xf" =ₑ 0 : Exp).ev κ s (upd L "xf" (cF s x)) = some 1 := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, OM.Machine.State.upd]; simpa [NIL] using he
+  exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t hc one_ne_zero (evalF_seq_ok2 e2 (evalF_assign_ok (v := 0) rfl))),
+    by simp [OM.Machine.State.upd], by simp [Exp.cost, Exp.cF] at hc2 ⊢; omega⟩
+
+/-! ### The drive loop -/
+
+def chunkSplitStepP : Proc := { name := "chunkSplitStep", params := ["x"], rets := ["ok"], body := chunkSplitStepS }
+def cdriveBody : Stm :=
+  .ite ("dn" =ₑ 0) (chunkSplitStepP.call [.var "x"] ["ok"] ;; .ite ("ok" =ₑ 0) ("dn" ::= 1) .skip) .skip
+/-- `driveChunkFrom g`: up to `K_C` split steps, stopping once `g` is removed. -/
+def driveChunkFromS : Stm := "dn" ::= 0 ;; .loop "jj" (.prm .KC) cdriveBody
+
+/-- A Level M split step that agrees with a Level F one (`b` = Level F's result). -/
+def CStepAgree (κ : Caps) (p : Nat) (t t' : Core) (b : Bool) : Prop :=
+  ∀ L : Loc, L "x" = p → ∃ L' n, evalF κ chunkSplitStepS t L = .ok t' L' n ∧ L' "ok" = b2n b ∧ n ≤ 350
+
+/-- The body of Level F's drive loop. -/
+def cdriveF (p : Nat) : Nat → Option Unit × Unit → CM (ForInStep (Option Unit × Unit)) :=
+  fun _ _ => do
+    let b ← chunkSplitStep p
+    if (!b) = true then pure (ForInStep.done (some (), ())) else pure (ForInStep.yield (none, ()))
+
+theorem cdriveF_run_true {p j : Nat} {t t' : Core} {a : Option Unit × Unit} (h : (chunkSplitStep p).run t = .ok true t') :
+    (cdriveF p j a).run t = .ok (.yield (none, ())) t' := by
+  simp only [cdriveF, OM.Proof.run_bind, h]; rfl
+
+theorem cdriveF_run_false {p j : Nat} {t t' : Core} {a : Option Unit × Unit} (h : (chunkSplitStep p).run t = .ok false t') :
+    (cdriveF p j a).run t = .ok (.done (some (), ())) t' := by
+  simp only [cdriveF, OM.Proof.run_bind, h]; rfl
+
+theorem driveChunkFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "x" = p)
+    (I : Nat → Core → Prop) (h0 : I 0 s)
+    (hstep : ∀ j t, I j t → j < s.P.K_C → ∃ b t', (chunkSplitStep p).run t = .ok b t' ∧
+      (b = true → I (j + 1) t') ∧ CStepAgree κ p t t' b) :
+    ∃ t' L' n, (driveChunkFrom p).run s = .ok () t' ∧ evalF κ driveChunkFromS s L = .ok t' L' n ∧
+      n ≤ 5 + s.P.K_C * 401 := by
+  set K := s.P.K_C
+  set R := fun (l : List Nat) (t : Core) => (forIn l ((none : Option Unit), ()) (cdriveF p)).run t
+  -- Level F's loop ends
+  have hF : ∀ (n j : Nat) (t : Core), I j t → j + n = K →
+      ∃ c tF, R ((List.range K).drop j) t = .ok c tF := by
+    intro n; induction n with
+    | zero =>
+      intro j t _ hj; refine ⟨(none, ()), t, ?_⟩
+      simp only [R, show j = K by omega]; rw [List.drop_of_length_le (by simp)]; rfl
+    | succ n ih =>
+      intro j t hI hj
+      have hjK : j < K := by omega
+      rw [List.drop_eq_getElem_cons (by simpa using hjK), List.getElem_range]
+      obtain ⟨b, t', hr, hI', -⟩ := hstep j t hI hjK
+      cases b
+      · exact ⟨_, _, by simp only [R, List.forIn_cons, OM.Proof.run_bind, cdriveF_run_false hr]; rfl⟩
+      · obtain ⟨c, tF, h⟩ := ih (j + 1) t' (hI' rfl) (by omega)
+        exact ⟨c, tF, by simp only [R, List.forIn_cons, OM.Proof.run_bind, cdriveF_run_true hr]; exact h⟩
+  obtain ⟨c0, tF, hR0⟩ := hF K 0 s h0 (by omega)
+  simp only [List.drop_zero] at hR0
+  -- Level F's result
+  have hFrun : (driveChunkFrom p).run s = .ok () tF := by
+    unfold driveChunkFrom
+    rw [OM.Proof.run_getP_bind, OM.Proof.run_bind]
+    have hR0' : (forIn (List.range s.P.K_C) ((none : Option Unit), ()) (fun (_ : Nat) (_ : Option Unit × Unit) => do
+        let b ← chunkSplitStep p
+        if (!b) = true then pure (ForInStep.done (some (), ())) else pure (ForInStep.yield (none, ())))).run s =
+        .ok c0 tF := hR0
+    rw [hR0']
+    dsimp only
+    split <;> rfl
+  -- Level M's loop
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "dn") (e := (0 : Exp)) (v := 0) rfl
+  obtain ⟨S', L', c, he, hc, -, hI⟩ := evalF_loop (κ := κ) (x := "jj") (n := .prm .KC) (b := cdriveBody) (s := s)
+    (L := upd L "dn" 0) (N := K) (by simp [Exp.ev, PF.get, K])
+    (fun j S L' => L' "x" = p ∧ ((L' "dn" = 0 ∧ I j S ∧ ∃ c, R ((List.range K).drop j) S = .ok c tF) ∨
+      (L' "dn" = 1 ∧ S = tF))) 400
+    ⟨by simp [OM.Machine.State.upd, hg], Or.inl ⟨by simp [OM.Machine.State.upd], h0, c0, by simpa using hR0⟩⟩
+    (by
+      intro j hj S L1 ⟨h1x, hcase⟩
+      set L2 := upd L1 "jj" j
+      have h2x : L2 "x" = p := by simp [L2, OM.Machine.State.upd, h1x]
+      rcases hcase with ⟨hdn, hIj, c1, hR⟩ | ⟨hdn, hSF⟩
+      · have hc0 : ("dn" =ₑ 0 : Exp).ev κ S L2 = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, L2,
+          OM.Machine.State.upd, hdn]
+        obtain ⟨b, t', hr, hI', hSA⟩ := hstep j S hIj hj
+        obtain ⟨Lg, ng, eg, hok, hng⟩ := hSA (OM.Machine.State.setLocs (fun _ => 0) ["x"] [p])
+          (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+        have ec := evalF_call_ok (q := chunkSplitStepP) (args := [.var "x"]) (ds := ["ok"]) (L := L2)
+          (by simp [evList, Exp.ev, h2x]) eg
+        set L3 := OM.Machine.State.setLocs L2 ["ok"] (chunkSplitStepP.rets.map Lg)
+        have h3ok : L3 "ok" = b2n b := by simp [L3, chunkSplitStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hok]
+        have h3x : L3 "x" = p := by simp [L3, chunkSplitStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, h2x]
+        have h3dn : L3 "dn" = 0 := by simp [L3, L2, chunkSplitStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hdn]
+        rw [List.drop_eq_getElem_cons (by simpa using hj), List.getElem_range] at hR
+        cases b
+        · simp only [R, List.forIn_cons, OM.Proof.run_bind, cdriveF_run_false hr] at hR
+          injection hR with _ hT; subst hT
+          have e4 := evalF_assign_ok (κ := κ) (s := t') (L := L3) (x := "dn") (e := (1 : Exp)) (v := 1) rfl
+          refine ⟨t', _, _, evalF_ite_t hc0 one_ne_zero (evalF_seq_ok2 ec (evalF_ite_t (v := 1)
+            (by simp [Exp.ev, OM.Machine.BinOp.eval, h3ok, b2n]) one_ne_zero e4)), ?_,
+            by simp [OM.Machine.State.upd, h3x], Or.inr ⟨by simp [OM.Machine.State.upd], rfl⟩⟩
+          simp [Exp.cost, costList] at hng ⊢; omega
+        · simp only [R, List.forIn_cons, OM.Proof.run_bind, cdriveF_run_true hr] at hR
+          refine ⟨t', _, _, evalF_ite_t hc0 one_ne_zero (evalF_seq_ok2 ec (evalF_ite_f
+            (by simp [Exp.ev, OM.Machine.BinOp.eval, h3ok, b2n]) evalF_skip)), ?_, h3x,
+            Or.inl ⟨h3dn, hI' rfl, c1, hR⟩⟩
+          simp [Exp.cost, costList] at hng ⊢; omega
+      · subst hSF
+        have hc0 : ("dn" =ₑ 0 : Exp).ev κ S L2 = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, L2,
+          OM.Machine.State.upd, hdn]
+        exact ⟨S, L2, _, evalF_ite_f hc0 evalF_skip, by simp [Exp.cost], h2x,
+          Or.inr ⟨by simp [L2, OM.Machine.State.upd, hdn], rfl⟩⟩)
+  have hS' : S' = tF := by
+    rcases hI with ⟨hdn, hIK, c2, hR⟩ | ⟨hdn, h⟩
+    · rw [List.drop_of_length_le (by simp)] at hR
+      simp only [R] at hR
+      injection hR
+    · exact h
+  subst hS'
+  refine ⟨S', L', _, hFrun, evalF_seq_ok2 a1 he, ?_⟩
+  simp only [Exp.cost] at hc ⊢; omega
+
+/-! ### `driveChunk` -/
+
+def cdriveP : Proc := { name := "driveChunkFrom", params := ["x"], rets := [], body := driveChunkFromS }
+/-- `driveChunk g`: drive the split `g` belongs to, if any (local `g`). -/
+def driveChunkS : Stm :=
+  "st" ::= .cF .st "x" ;;
+  .ite ("st" =ₑ 2) (cdriveP.call [.var "x"] [])
+    (.ite ("st" =ₑ 1) (cdriveP.call [.cF .src "x"] []) .skip)
+
+/-- The drive of the split rooted at `q` agrees at Level M, ending in `t'`. -/
+def CDriveAgree (κ : Caps) (q : Nat) (s t' : Core) : Prop :=
+  (driveChunkFrom q).run s = .ok () t' ∧
+    ∀ L : Loc, L "x" = q → ∃ L' n, evalF κ driveChunkFromS s L = .ok t' L' n ∧ n ≤ 5 + s.P.K_C * 401
+
+theorem driveChunkFromS_agree' (κ : Caps) (s : Core) {p : Nat} (I : Nat → Core → Prop) (h0 : I 0 s)
+    (hstep : ∀ j t, I j t → j < s.P.K_C → ∃ b t', (chunkSplitStep p).run t = .ok b t' ∧
+      (b = true → I (j + 1) t') ∧ CStepAgree κ p t t' b) : ∃ t', CDriveAgree κ p s t' := by
+  obtain ⟨t', L1, n1, hF, -, -⟩ := driveChunkFromS_agree κ s (fun _ => p) (p := p) rfl I h0 hstep
+  refine ⟨t', hF, fun L hL => ?_⟩
+  obtain ⟨t'', L', n, hF', he, hn⟩ := driveChunkFromS_agree κ s L (p := p) hL I h0 hstep
+  rw [hF] at hF'; injection hF' with _ h; subst h; exact ⟨L', n, he, hn⟩
+
+theorem driveChunk_split {s : Core} {g : Nat} (h : (s.C.getX g).st = .splitting) :
+    (driveChunk g).run s = (driveChunkFrom g).run s := by
+  unfold driveChunk; rw [OM.Proof.run_getC_bind, h]
+
+theorem driveChunk_ovf {s : Core} {g : Nat} (h : (s.C.getX g).st = .overflow) :
+    (driveChunk g).run s = (driveChunkFrom (s.C.getX g).src).run s := by
+  unfold driveChunk; rw [OM.Proof.run_getC_bind, h]
+
+theorem driveChunk_quiet {s : Core} {g : Nat} (h : (s.C.getX g).st = .quiet) : (driveChunk g).run s = .ok () s := by
+  unfold driveChunk; rw [OM.Proof.run_getC_bind, h]; rfl
+
+theorem driveChunk_dead {s : Core} {g : Nat} (h : (s.C.getX g).st = .dead) : (driveChunk g).run s = .ok () s := by
+  unfold driveChunk; rw [OM.Proof.run_getC_bind, h]; rfl
+
+theorem driveChunkS_agree (κ : Caps) (s : Core) (L : Loc) {g : Nat} (hg : L "x" = g) (hgT : g < κ.tbl .C)
+    {σ' : Core} (h : (driveChunk g).run s = .ok () σ')
+    (hA : ∀ q, ((s.C.getX g).st = .splitting ∧ q = g ∨ (s.C.getX g).st = .overflow ∧ q = (s.C.getX g).src) →
+      CDriveAgree κ q s σ') :
+    ∃ L' n, evalF κ driveChunkS s L = .ok σ' L' n ∧ n ≤ 30 + s.P.K_C * 401 := by
+  set G := s.C.getX g
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "st") (e := .cF .st "x") (v := G.st.toN)
+    (by simp [Exp.cF, Exp.ev, hg, hgT, Fld.cap, Fld.get, CF.get, G])
+  set L1 := upd L "st" G.st.toN
+  have h1x : L1 "x" = g := by simp [L1, OM.Machine.State.upd, hg]
+  have c1 : ("st" =ₑ 2 : Exp).ev κ s L1 = some (if G.st.toN = 2 then 1 else 0) := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd]
+  have c2 : ("st" =ₑ 1 : Exp).ev κ s L1 = some (if G.st.toN = 1 then 1 else 0) := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd]
+  cases hst : G.st with
+  | splitting =>
+    rw [hst] at c1; simp only [St.toN, if_true] at c1
+    obtain ⟨-, hM⟩ := hA g (Or.inl ⟨hst, rfl⟩)
+    obtain ⟨Ld, nd, ed, hnd⟩ := hM (OM.Machine.State.setLocs (fun _ => 0) ["x"] [g])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    have ec := evalF_call_ok (q := cdriveP) (args := [.var "x"]) (ds := []) (L := L1) (by simp [evList, Exp.ev, h1x]) ed
+    exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t c1 one_ne_zero ec), by simp [Exp.cost, costList, Exp.cF] at hnd ⊢; omega⟩
+  | overflow =>
+    rw [hst] at c1 c2; simp only [St.toN, if_true] at c1 c2
+    obtain ⟨-, hM⟩ := hA G.src (Or.inr ⟨hst, rfl⟩)
+    obtain ⟨Ld, nd, ed, hnd⟩ := hM (OM.Machine.State.setLocs (fun _ => 0) ["x"] [G.src])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    have ec := evalF_call_ok (q := cdriveP) (args := [.cF .src "x"]) (ds := []) (L := L1)
+      (by simp [evList, Exp.cF, Exp.ev, h1x, hgT, Fld.cap, Fld.get, CF.get, G]) ed
+    exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f (by simpa using c1) (evalF_ite_t c2 one_ne_zero ec)),
+      by simp [Exp.cost, costList, Exp.cF] at hnd ⊢; omega⟩
+  | quiet =>
+    rw [driveChunk_quiet hst] at h
+    injection h with _ hs; subst hs
+    rw [hst] at c1 c2; simp only [St.toN] at c1 c2
+    have i2 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 1 : Exp)) (t := cdriveP.call [.cF .src "x"] []) (by simpa using c2)
+      evalF_skip
+    have i1 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 2 : Exp)) (t := cdriveP.call [.var "x"] []) (by simpa using c1) i2
+    exact ⟨_, _, evalF_seq_ok2 a1 i1, by simp [Exp.cost, Exp.cF]; omega⟩
+  | dead =>
+    rw [driveChunk_dead hst] at h
+    injection h with _ hs; subst hs
+    rw [hst] at c1 c2; simp only [St.toN] at c1 c2
+    have i2 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 1 : Exp)) (t := cdriveP.call [.cF .src "x"] []) (by simpa using c2)
+      evalF_skip
+    have i1 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 2 : Exp)) (t := cdriveP.call [.var "x"] []) (by simpa using c1) i2
+    exact ⟨_, _, evalF_seq_ok2 a1 i1, by simp [Exp.cost, Exp.cF]; omega⟩
+
 end OM.Impl
