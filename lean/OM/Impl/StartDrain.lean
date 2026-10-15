@@ -1804,4 +1804,223 @@ theorem stage8S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
   rw [hfin] at w5
   exact ⟨_, evalF_seq_ok2 w1 (evalF_seq_ok2 w2 (evalF_seq_ok2 w3 (evalF_seq_ok2 w4 w5))), by simp [Exp.cost]⟩
 
+/-! ### `startDrain` -/
+
+def sdCond : Exp := (1 <ₑ "h") &&ₑ ("k" =ₑ 0)
+def sdMain : Stm :=
+  .ite ("k" <ₑ "nk") ("b" ::= .lrd .children false "v" "k") ("b" ::= 0) ;;
+  drainSideS ;; newNodesS ;; insS ;; stage3S ;; stage4S ;; stage56S ;; stage7S ;; stage8S
+/-- **`startDrain v`** at Level M (local `v`). -/
+def startDrainS : Stm :=
+  "h" ::= .rd (.n .height) "v" ;; "nk" ::= .llen .children "v" ;;
+  .ite ("nk" <ₑ 2) .skip (drainCutS ;; .ite sdCond .skip sdMain)
+
+/-- The cost bound of `startDrain`, in the lengths of the lists it walks. -/
+def sdCost (K T I S B P : Nat) : Nat :=
+  2 * pushCost + 1000 + 300 * K + T * (280 + 20 * K + 115 * T) + I * (1001 + 400 * B) + 80 * I +
+    2 * (T * (320 + 40 * K + 40 * S)) + 80 * T + 2 * (K * (140 + 20 * S)) + 111 * P
+
+theorem sd10_size (t : Core) (v : Nat) (side : List (Nat × Side)) :
+    (sd10 t v side).nodes.size = t.nodes.size + 2 := by
+  have h1 : ∀ (l : List Nat) (hh w : Nat) (X : Core), (l.foldl (fun s e => addTableS hh w e s) X).nodes.size = X.nodes.size :=
+    fun l hh w X => fold_addTableS_size hh w l X
+  rw [sd10_eq, chRes_size, sd8_eq, chRes_size]
+  simp only [sd6, h1, sd4, Array.size_modify, ← sdJ_all, sdJ_size]
+
+theorem sd11_size (t : Core) (v : Nat) (side : List (Nat × Side)) :
+    (sd11 t v side).nodes.size = t.nodes.size + 2 := by simp [sd11, sd10_size]
+
+theorem startDrainS_ok {κ : Caps} {t : Core} {L : Loc} {v B : Nat} {side : List (Nat × Side)}
+    -- Level F (as in `startDrain_run`)
+    (hk2 : 2 ≤ (sKids t v).length) (hk0 : ¬(sH t v > 1 ∧ sK t v = 0)) (hside : sSideO t v = some side)
+    (hroom : ∀ T ∈ (t.nodes.getX v).inTables, RoomOK t v T) (hnd : (t.nodes.getX v).inTables.Nodup)
+    (hpar : v ∈ (t.nodes.getX (t.nodes.getX v).livePar).children) (hv : v < t.nodes.size)
+    -- the shape around `v`
+    (hvT : v ∉ (t.nodes.getX v).inTables) (hvk : v ∉ (t.nodes.getX v).children)
+    (hK : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size)
+    (hp : (t.nodes.getX v).livePar < t.nodes.size) (hpv : (t.nodes.getX v).livePar ≠ v)
+    (hB : ∀ T ∈ (t.nodes.getX v).inTables, (t.nodes.getX T).table.length ≤ B ∧ (t.nodes.getX T).side.length ≤ B)
+    -- capacities
+    (hLv : L "v" = v) (hcN : t.nodes.size + 2 ≤ κ.tbl .N)
+    (hcrc : t.nodes.size + 2 ≤ κ.lrec .children) (hcrs : t.nodes.size + 2 ≤ κ.lrec .side)
+    (hcrt : t.nodes.size + 2 ≤ κ.lrec .table) (hcri : t.nodes.size + 2 ≤ κ.lrec .inTab)
+    (hcrcin : t.nodes.size ≤ κ.lrec .cin) (hcl : t.nodes.size ≤ κ.arr .lpar)
+    (hcT : ∀ T ∈ (t.nodes.getX v).inTables,
+      (t.nodes.getX T).table.length + 2 ≤ κ.lcap .table ∧ (t.nodes.getX T).side.length + 2 ≤ κ.lcap .side)
+    (hcS : 2 * (t.nodes.getX v).table.length + 1 ≤ κ.lcap .side)
+    (hcTv : (t.nodes.getX v).table.length ≤ κ.lcap .table)
+    (hcI : (t.nodes.getX v).inTables.length ≤ κ.lcap .inTab)
+    (hc4 : ∀ e ∈ (t.nodes.getX v).table.map (·.1), tabsLen t (sH t v - 1) e + 2 * (t.nodes.getX v).table.length ≤
+      (if sH t v ≤ 1 then κ.lcap .cin else κ.lcap .inTab))
+    (hcC : (t.nodes.getX v).children.length ≤ κ.lcap .children)
+    (hcP : (t.nodes.getX (t.nodes.getX v).livePar).children.length + 1 ≤ κ.lcap .children) :
+    ∃ L' c, evalF κ startDrainS t L = .ok (sdS t v side) L' c ∧
+      c ≤ sdCost (t.nodes.getX v).children.length (t.nodes.getX v).table.length
+        (t.nodes.getX v).inTables.length side.length B
+        (t.nodes.getX (t.nodes.getX v).livePar).children.length := by
+  set N := t.nodes.size
+  set kids := (t.nodes.getX v).children
+  have hvN : v < κ.tbl .N := by omega
+  have hvc : v < κ.lrec .children := by omega
+  have hvs : v < κ.lrec .side := by omega
+  have hvt : v < κ.lrec .table := by omega
+  have hvi : v < κ.lrec .inTab := by omega
+  have hkN : ∀ e ∈ kids, e < κ.tbl .N := fun e he => by have := hks e he; omega
+  have hTN : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < κ.tbl .N := fun e he => by have := hK e he; omega
+  -- the prefix
+  have a1 := evalF_assign_ok (κ := κ) (s := t) (L := L) (x := "h") (e := .rd (.n .height) "v") (v := sH t v)
+    (by simp [Exp.ev, hLv, hvN, Fld.cap, Fld.get, NF.get, sH])
+  have a2 := evalF_assign_ok (κ := κ) (s := t) (L := upd L "h" (sH t v)) (x := "nk") (e := .llen .children "v")
+    (v := kids.length) (by simp [Exp.ev, OM.Machine.State.upd, hLv, hvc, LK.view, kids])
+  set L2 := upd (upd L "h" (sH t v)) "nk" kids.length
+  have hk2' : 2 ≤ kids.length := hk2
+  have e3 : ("nk" <ₑ 2 : Exp).ev κ t L2 = some 0 := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L2, OM.Machine.State.upd]; omega
+  obtain ⟨L4, c4, e4, hcc4, hk4, hF4⟩ := drainCutS_ok (κ := κ) (s := t) (L := L2) (v := v) (h := sH t v)
+    (by simp [L2, OM.Machine.State.upd, hLv]) (by simp [L2, OM.Machine.State.upd]) hvc hkN
+  have hk4' : L4 "k" = sK t v := hk4
+  have hF4' : ∀ r, r ≠ "n" → r ≠ "j" → r ≠ "e" → r ≠ "w" → r ≠ "t" → r ≠ "b" → r ≠ "c" → r ≠ "d" → r ≠ "a" →
+      r ≠ "k" → r ≠ "h" → r ≠ "nk" → L4 r = L r := by
+    intro r h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12
+    rw [hF4 r h1 h2 h3 h4 h5 h6 h7 h8 h9 h10]; simp [L2, OM.Machine.State.upd, h11, h12]
+  have h4h : L4 "h" = sH t v := by
+    rw [hF4 "h" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]; simp [L2, OM.Machine.State.upd]
+  have h4nk : L4 "nk" = kids.length := by
+    rw [hF4 "nk" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]; simp [L2, OM.Machine.State.upd]
+  have h4v : L4 "v" = v := by
+    rw [hF4' "v" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide), hLv]
+  have e5 : sdCond.ev κ t L4 = some 0 := by
+    simp only [sdCond, Exp.ev, h4h, hk4', Option.bind_some, OM.Machine.BinOp.eval, Exp.ofNat_def]
+    by_cases h1 : 1 < sH t v
+    · have : sK t v ≠ 0 := fun h => hk0 ⟨h1, h⟩
+      simp [h1, this]
+    · simp [h1]
+  -- the boundary
+  have eb : ∃ cb, evalF κ (.ite ("k" <ₑ "nk") ("b" ::= .lrd .children false "v" "k") ("b" ::= 0)) t L4 =
+      .ok t (upd L4 "b" (sB t v)) cb ∧ cb ≤ 15 := by
+    by_cases hkl : sK t v < kids.length
+    · have a := evalF_assign_ok (κ := κ) (s := t) (L := L4) (x := "b") (e := .lrd .children false "v" "k")
+        (v := sB t v) (by
+          simp [Exp.ev, h4v, hk4', hvc, LK.view, kids, hkl, sB, sKids, List.getD_eq_getElem?_getD])
+      exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, hk4', h4nk, hkl]) one_ne_zero a,
+        by simp [Exp.cost]⟩
+    · have a := evalF_assign_ok (κ := κ) (s := t) (L := L4) (x := "b") (e := (0 : Exp)) (v := sB t v) (by
+          simp [Exp.ev, sB, sKids, List.getD_eq_getElem?_getD]
+          rw [List.getElem?_eq_none (by simpa [kids] using hkl)]; rfl)
+      exact ⟨_, evalF_ite_f (by simp [Exp.ev, OM.Machine.BinOp.eval, hk4', h4nk]; omega) a, by simp [Exp.cost]⟩
+  obtain ⟨cb, eb, hcb⟩ := eb
+  set L5 := upd L4 "b" (sB t v)
+  -- the side list
+  obtain ⟨L6, c6, e6, hc6, hF6⟩ := drainSideS_ok (κ := κ) (s := t) (L := L5) (v := v) (b := sB t v) (side := side)
+    (by simp [L5, OM.Machine.State.upd, h4v]) (by simp [L5, OM.Machine.State.upd]) hv hvN hvs hvt hvc hTN hcS hside
+  rw [put_side_phi] at e6
+  have k6 : ∀ r, r = "v" ∨ r = "h" → L6 r = L4 r := by
+    rintro r (rfl | rfl) <;>
+      rw [hF6 _ (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)] <;>
+      simp [L5, OM.Machine.State.upd]
+  -- the new nodes
+  obtain ⟨L7, e7, h7v1, h7v2, hF7⟩ := newNodesS_ok (κ := κ) (t := t) (L := L6) (v := v) (side := side)
+    (by rw [k6 "h" (Or.inr rfl), h4h]) hv hcN
+  have k7 : ∀ r, r = "v" ∨ r = "h" → L7 r = L4 r := by
+    rintro r hr; rw [hF7 r (by rcases hr with rfl | rfl <;> decide) (by rcases hr with rfl | rfl <;> decide), k6 r hr]
+  -- the insertions
+  obtain ⟨L8, c8, e8, hc8, hF8⟩ := insS_ok (κ := κ) (t := t) (L := L7) (v := v) (B := B) (side := side) hv hnd hvT hroom
+    (by rw [k7 "v" (Or.inl rfl), h4v]) h7v1 h7v2 hvi
+    (fun T hT => by have := (hroom T hT).lt; exact ⟨by omega, by omega, by omega, (hcT T hT).1, (hcT T hT).2⟩) hB
+  have k8 : ∀ r, r = "v" ∨ r = "h" ∨ r = "v1" ∨ r = "v2" → L8 r = L7 r := by
+    rintro r hr
+    rcases hr with rfl | rfl | rfl | rfl <;>
+      exact hF8 _ (by decide) (by decide) (by decide) (by decide) (by decide)
+  have h8v : L8 "v" = v := by rw [k8 "v" (Or.inl rfl), k7 "v" (Or.inl rfl), h4v]
+  have h8h : L8 "h" = sH t v := by rw [k8 "h" (Or.inr (Or.inl rfl)), k7 "h" (Or.inr rfl), h4h]
+  have h8v1 : L8 "v1" = N := by rw [k8 "v1" (Or.inr (Or.inr (Or.inl rfl))), h7v1]
+  have h8v2 : L8 "v2" = N + 1 := by rw [k8 "v2" (Or.inr (Or.inr (Or.inr rfl))), h7v2]
+  -- the tables of v1, v2
+  obtain ⟨L9, c9, e9, hc9, hF9⟩ := stage3S_ok (κ := κ) (t := t) (L := L8) (v := v) (side := side) hv hvT hroom
+    h8v h8v1 h8v2 h8h hvc hvs hvt (by omega) hvi (by omega) hTN hcTv hcI
+  have k9 : ∀ r, r = "v" ∨ r = "h" ∨ r = "v1" ∨ r = "v2" → L9 r = L8 r := by
+    rintro r hr
+    rcases hr with rfl | rfl | rfl | rfl <;>
+      exact hF9 _ (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+  -- the entries
+  obtain ⟨L10, c10, e10, hc10, hF10⟩ := stage4S_ok (κ := κ) (t := t) (L := L9) (v := v) (side := side) hv hK
+    (by rw [k9 "v1" (by simp), h8v1]) (by rw [k9 "v2" (by simp), h8v2]) (by rw [k9 "h" (by simp), h8h]) (by omega)
+    (fun e he => ⟨fun _ => by have := hK e he; omega, fun _ => by have := hK e he; omega⟩) hc4
+  have k10 : ∀ r, r = "v" ∨ r = "h" ∨ r = "v1" ∨ r = "v2" → L10 r = L8 r := by
+    rintro r hr
+    rw [hF10 r (by rcases hr with rfl | rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl | rfl <;> decide), k9 r hr]
+  -- the children
+  obtain ⟨L11, c11, e11, hc11, hF11⟩ := stage56S_ok (κ := κ) (t := t) (L := L10) (v := v) (side := side) hv hvk
+    (fun e he => ⟨hks e he, by have := hks e he; omega, by have := hks e he; omega⟩)
+    (by rw [k10 "v" (by simp), h8v]) (by rw [k10 "v1" (by simp), h8v1]) (by rw [k10 "v2" (by simp), h8v2])
+    (by rw [k10 "h" (by simp), h8h]) hvc hvs (by omega) (by omega) hvN hcC
+  have k11 : ∀ r, r = "v" ∨ r = "v1" ∨ r = "v2" → L11 r = L8 r := by
+    rintro r hr
+    rw [hF11 r (by rcases hr with rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl <;> decide)
+      (by rcases hr with rfl | rfl | rfl <;> decide), k10 r (by rcases hr with rfl | rfl | rfl <;> simp)]
+  -- the parent
+  obtain ⟨L12, c12, e12, hc12, hF12⟩ := stage7S_ok (κ := κ) (t := t) (L := L11) (v := v) (side := side) hv hvk hp hpv
+    hpar (by rw [k11 "v" (by simp), h8v]) (by rw [k11 "v1" (by simp), h8v1]) (by rw [k11 "v2" (by simp), h8v2])
+    (by omega) hvN hcP
+  have k12 : ∀ r, r = "v" ∨ r = "v1" ∨ r = "v2" → L12 r = L8 r := by
+    rintro r hr
+    rw [hF12 r (by rcases hr with rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl <;> decide), k11 r hr]
+  -- v becomes a ghost
+  obtain ⟨c13, e13, hc13⟩ := stage8S_ok (κ := κ) (t := t) (L := L12) (v := v) (side := side)
+    (by rw [sd11_size]; omega) (by rw [k12 "v" (by simp), h8v]) (by rw [k12 "v1" (by simp), h8v1])
+    (by rw [k12 "v2" (by simp), h8v2]) hvN hvc
+  refine ⟨L12, _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_ite_f e3 (evalF_seq_ok2 e4 (evalF_ite_f e5
+    (evalF_seq_ok2 eb (evalF_seq_ok2 e6 (evalF_seq_ok2 e7 (evalF_seq_ok2 e8 (evalF_seq_ok2 e9 (evalF_seq_ok2 e10
+      (evalF_seq_ok2 e11 (evalF_seq_ok2 e12 e13)))))))))))), ?_⟩
+  simp only [kids, N] at hcc4 hc6 hc8 hc9 hc10 hc11 hc12 hc13 hcb ⊢
+  simp only [sdCost, Exp.cost, sdCond, Exp.ofNat_def] at hcc4 hc6 hc8 hc9 hc10 hc11 hc12 hc13 hcb ⊢
+  omega
+
+/-- **`startDrain v` when it changes nothing**: fewer than two children, or an empty cut above height 1. -/
+theorem startDrainS_noop {κ : Caps} {t : Core} {L : Loc} {v : Nat}
+    (hno : (sKids t v).length < 2 ∨ (sH t v > 1 ∧ sK t v = 0)) (hv : v < t.nodes.size)
+    (hLv : L "v" = v) (hcN : t.nodes.size ≤ κ.tbl .N) (hcrc : t.nodes.size ≤ κ.lrec .children)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, e < κ.tbl .N) :
+    ∃ L' c, evalF κ startDrainS t L = .ok t L' c ∧ c ≤ 230 + 300 * (t.nodes.getX v).children.length := by
+  set kids := (t.nodes.getX v).children
+  have hvN : v < κ.tbl .N := by omega
+  have hvc : v < κ.lrec .children := by omega
+  have a1 := evalF_assign_ok (κ := κ) (s := t) (L := L) (x := "h") (e := .rd (.n .height) "v") (v := sH t v)
+    (by simp [Exp.ev, hLv, hvN, Fld.cap, Fld.get, NF.get, sH])
+  have a2 := evalF_assign_ok (κ := κ) (s := t) (L := upd L "h" (sH t v)) (x := "nk") (e := .llen .children "v")
+    (v := kids.length) (by simp [Exp.ev, OM.Machine.State.upd, hLv, hvc, LK.view, kids])
+  set L2 := upd (upd L "h" (sH t v)) "nk" kids.length
+  by_cases h2 : kids.length < 2
+  · refine ⟨L2, _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_ite_t (v := 1)
+      (by simp [Exp.ev, OM.Machine.BinOp.eval, L2, OM.Machine.State.upd]; omega) one_ne_zero evalF_skip)), ?_⟩
+    simp [Exp.cost]; omega
+  · have hk : sH t v > 1 ∧ sK t v = 0 := by
+      rcases hno with h | h
+      · exact absurd h h2
+      · exact h
+    have e3 : ("nk" <ₑ 2 : Exp).ev κ t L2 = some 0 := by
+      simp [Exp.ev, OM.Machine.BinOp.eval, L2, OM.Machine.State.upd]; omega
+    obtain ⟨L4, c4, e4, hcc4, hk4, hF4⟩ := drainCutS_ok (κ := κ) (s := t) (L := L2) (v := v) (h := sH t v)
+      (by simp [L2, OM.Machine.State.upd, hLv]) (by simp [L2, OM.Machine.State.upd]) hvc hks
+    have hk4' : L4 "k" = sK t v := hk4
+    have h4h : L4 "h" = sH t v := by
+      rw [hF4 "h" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide)]; simp [L2, OM.Machine.State.upd]
+    have e5 : sdCond.ev κ t L4 = some 1 := by
+      simp [sdCond, Exp.ev, h4h, hk4', OM.Machine.BinOp.eval, hk.1, hk.2]
+    refine ⟨L4, _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_ite_f e3 (evalF_seq_ok2 e4
+      (evalF_ite_t e5 one_ne_zero evalF_skip)))), ?_⟩
+    simp only [kids] at hcc4 ⊢
+    simp only [Exp.cost, sdCond, Exp.ofNat_def] at hcc4 ⊢
+    omega
+
 end OM.Impl
