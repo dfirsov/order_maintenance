@@ -507,4 +507,88 @@ theorem driveGroupFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L
   refine ⟨S', L', _, hFrun, evalF_seq_ok2 a1 he, ?_⟩
   simp only [Exp.cost] at hc ⊢; omega
 
+/-! ### `driveGroup` -/
+
+def driveP : Proc := { name := "driveGroupFrom", params := ["g"], rets := [], body := driveGroupFromS }
+/-- `driveGroup g`: drive the split `g` belongs to, if any (local `g`). -/
+def driveGroupS : Stm :=
+  "st" ::= .gF .st "g" ;;
+  .ite ("st" =ₑ 2) (driveP.call [.var "g"] [])
+    (.ite ("st" =ₑ 1) (driveP.call [.gF .src "g"] []) .skip)
+
+/-- The drive of the split rooted at `q` agrees at Level M, ending in `t'`. -/
+def DriveAgree (κ : Caps) (q : Nat) (s t' : Core) : Prop :=
+  (driveGroupFrom q).run s = .ok () t' ∧
+    ∀ L : Loc, L "g" = q → ∃ L' n, evalF κ driveGroupFromS s L = .ok t' L' n ∧ n ≤ 5 + s.P.K_G * 401
+
+theorem driveGroupFromS_agree' (κ : Caps) (s : Core) {p : Nat} (I : Nat → Core → Prop) (h0 : I 0 s)
+    (hstep : ∀ j t, I j t → j < s.P.K_G → ∃ b t', (groupSplitStep p).run t = .ok b t' ∧
+      (b = true → I (j + 1) t') ∧ StepAgree κ p t t' b) : ∃ t', DriveAgree κ p s t' := by
+  obtain ⟨t', L1, n1, hF, -, -⟩ := driveGroupFromS_agree κ s (fun _ => p) (p := p) rfl I h0 hstep
+  refine ⟨t', hF, fun L hL => ?_⟩
+  obtain ⟨t'', L', n, hF', he, hn⟩ := driveGroupFromS_agree κ s L (p := p) hL I h0 hstep
+  rw [hF] at hF'; injection hF' with _ h; subst h; exact ⟨L', n, he, hn⟩
+
+theorem driveGroup_split {s : Core} {g : Nat} (h : (s.Gs.getX g).st = .splitting) :
+    (driveGroup g).run s = (driveGroupFrom g).run s := by
+  unfold driveGroup; rw [OM.Proof.run_getG_bind, h]
+
+theorem driveGroup_ovf {s : Core} {g : Nat} (h : (s.Gs.getX g).st = .overflow) :
+    (driveGroup g).run s = (driveGroupFrom (s.Gs.getX g).src).run s := by
+  unfold driveGroup; rw [OM.Proof.run_getG_bind, h]
+
+theorem driveGroup_quiet {s : Core} {g : Nat} (h : (s.Gs.getX g).st = .quiet) : (driveGroup g).run s = .ok () s := by
+  unfold driveGroup; rw [OM.Proof.run_getG_bind, h]; rfl
+
+theorem driveGroup_dead {s : Core} {g : Nat} (h : (s.Gs.getX g).st = .dead) : (driveGroup g).run s = .ok () s := by
+  unfold driveGroup; rw [OM.Proof.run_getG_bind, h]; rfl
+
+theorem driveGroupS_agree (κ : Caps) (s : Core) (L : Loc) {g : Nat} (hg : L "g" = g) (hgT : g < κ.tbl .G)
+    {σ' : Core} (h : (driveGroup g).run s = .ok () σ')
+    (hA : ∀ q, ((s.Gs.getX g).st = .splitting ∧ q = g ∨ (s.Gs.getX g).st = .overflow ∧ q = (s.Gs.getX g).src) →
+      DriveAgree κ q s σ') :
+    ∃ L' n, evalF κ driveGroupS s L = .ok σ' L' n ∧ n ≤ 30 + s.P.K_G * 401 := by
+  set G := s.Gs.getX g
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "st") (e := .gF .st "g") (v := G.st.toN)
+    (by simp [Exp.gF, Exp.ev, hg, hgT, Fld.cap, Fld.get, GF.get, G])
+  set L1 := upd L "st" G.st.toN
+  have h1g : L1 "g" = g := by simp [L1, OM.Machine.State.upd, hg]
+  have c1 : ("st" =ₑ 2 : Exp).ev κ s L1 = some (if G.st.toN = 2 then 1 else 0) := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd]
+  have c2 : ("st" =ₑ 1 : Exp).ev κ s L1 = some (if G.st.toN = 1 then 1 else 0) := by
+    simp [Exp.ev, OM.Machine.BinOp.eval, L1, OM.Machine.State.upd]
+  cases hst : G.st with
+  | splitting =>
+    rw [hst] at c1; simp only [St.toN, if_true] at c1
+    obtain ⟨-, hM⟩ := hA g (Or.inl ⟨hst, rfl⟩)
+    obtain ⟨Ld, nd, ed, hnd⟩ := hM (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    have ec := evalF_call_ok (q := driveP) (args := [.var "g"]) (ds := []) (L := L1) (by simp [evList, Exp.ev, h1g]) ed
+    exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t c1 one_ne_zero ec), by simp [Exp.cost, costList, Exp.gF] at hnd ⊢; omega⟩
+  | overflow =>
+    rw [hst] at c1 c2; simp only [St.toN, if_true] at c1 c2
+    obtain ⟨-, hM⟩ := hA G.src (Or.inr ⟨hst, rfl⟩)
+    obtain ⟨Ld, nd, ed, hnd⟩ := hM (OM.Machine.State.setLocs (fun _ => 0) ["g"] [G.src])
+      (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    have ec := evalF_call_ok (q := driveP) (args := [.gF .src "g"]) (ds := []) (L := L1)
+      (by simp [evList, Exp.gF, Exp.ev, h1g, hgT, Fld.cap, Fld.get, GF.get, G]) ed
+    exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_f (by simpa using c1) (evalF_ite_t c2 one_ne_zero ec)),
+      by simp [Exp.cost, costList, Exp.gF] at hnd ⊢; omega⟩
+  | quiet =>
+    rw [driveGroup_quiet hst] at h
+    injection h with _ hs; subst hs
+    rw [hst] at c1 c2; simp only [St.toN] at c1 c2
+    have i2 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 1 : Exp)) (t := driveP.call [.gF .src "g"] []) (by simpa using c2)
+      evalF_skip
+    have i1 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 2 : Exp)) (t := driveP.call [.var "g"] []) (by simpa using c1) i2
+    exact ⟨_, _, evalF_seq_ok2 a1 i1, by simp [Exp.cost, Exp.gF]; omega⟩
+  | dead =>
+    rw [driveGroup_dead hst] at h
+    injection h with _ hs; subst hs
+    rw [hst] at c1 c2; simp only [St.toN] at c1 c2
+    have i2 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 1 : Exp)) (t := driveP.call [.gF .src "g"] []) (by simpa using c2)
+      evalF_skip
+    have i1 := evalF_ite_f (κ := κ) (c := ("st" =ₑ 2 : Exp)) (t := driveP.call [.var "g"] []) (by simpa using c1) i2
+    exact ⟨_, _, evalF_seq_ok2 a1 i1, by simp [Exp.cost, Exp.gF]; omega⟩
+
 end OM.Impl
