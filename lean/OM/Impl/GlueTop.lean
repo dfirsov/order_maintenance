@@ -180,6 +180,189 @@ theorem Shape.drain_finish_hyps {s : Core} {cl : List Nat} {ord : Nat → List N
     unfold tabs at this; rw [if_pos rfl] at this
     exact this
 
+/-- A table holds at most 160 entries, and so does a side list (`TabLen`). -/
+theorem tab_le_160 {t : TS} {dr n0 : Nat → Nat} (h : TabLen t dr n0) (X : Nat) :
+    (nd t X).table.length ≤ 160 ∧ (nd t X).side.length ≤ 160 := by
+  obtain ⟨a, b, c⟩ := h X
+  have : (Top.order t X).length = (nd t X).table.length := by simp [Top.order, Node.order]
+  omega
+
+/-- **The hypotheses of `insertAround` at a split start** (those of `insertAround_run`, and the
+facts the Level M program needs), from the top invariant. -/
+theorem ins_hyps {s : Core} {A : Abs} {x : Nat} (hA : INV s A) (hT : TopInv s)
+    (hres : s.resJob = none) (hxL : LiveC s x) :
+    ∃ f1x i1, (∀ T ∈ (ins0 s x).cin.getX x, RoomOK (ins0 s x) x T) ∧ (s.cin.getX x).Nodup ∧
+      ((ins0 s x).nodes.getX (((ins0 s x).path.getX x).getX 1)).lab? x = some f1x ∧
+      (s.cin.getX x).idx? ((s.path.getX x).getX 1) = some i1 ∧
+      f1x ≤ ((ins0 s x).C.getX x).tag ∧
+      x ∈ ((ins0 s x).nodes.getX ((ins0 s x).lpar.getX x)).children ∧
+      TagOK (ins0 s x) s.C.size (tagY (ins0 s x) x f1x i1) ∧
+      TagOK { (ins0 s x) with
+        C := (ins0 s x).C.modify s.C.size fun C => { C with tag := tagY (ins0 s x) x f1x i1 } }
+        (s.C.size + 1) (tagZ (ins0 s x) x f1x i1) ∧
+      cP (ins0 s x) s.C.size < s.C.size ∧ cN (ins0 s x) s.C.size < s.C.size + 2 ∧
+      cP (ins0 s x) (s.C.size + 1) < s.C.size + 2 ∧ cN (ins0 s x) (s.C.size + 1) < s.C.size ∧
+      (∀ T ∈ s.cin.getX x, T < s.nodes.size ∧ (s.nodes.getX T).table.length ≤ 160 ∧
+        (s.nodes.getX T).side.length ≤ 160) ∧
+      (s.cin.getX x).length ≤ 2 ∧ s.lpar.getX x < s.nodes.size ∧
+      (s.nodes.getX (s.lpar.getX x)).children.length ≤ 160 ∧ x < s.C.size ∧ x ≠ NIL := by
+  obtain ⟨hTP, cl, ord, dr, n0, hL, hC, hI⟩ := hT
+  rw [hres] at hI
+  change InvJ (ts s) cl ord dr n0 none at hI
+  have S := hI.shape
+  have h3 : 3 ≤ s.P.H := S.H3
+  have hx : x ∈ cl := (hC x).mpr hxL
+  have hxs : x < s.C.size := hxL.2
+  have hcl : cl = A.chunks := NList.unique hL.nlist hA.cList.nlist
+  have hxA : x ∈ A.chunks := hcl ▸ hx
+  have hent : Ent ord 0 x := by unfold Ent; rw [S.ord0]; exact hx
+  have hnd : (s.cin.getX x).Nodup := by
+    have := S.tabsNodup 0 x hent; unfold tabs at this; rw [if_pos rfl] at this; exact this
+  -- the split's data
+  have hT1 := ins_pp1 hI hC hx
+  obtain ⟨i1, hi1⟩ := idx?_some_of_mem hT1
+  set f1x := digit (ts s) x 1 with hf1
+  have hdist : ∀ i i', 1 ≤ i → i ≤ s.P.H → 1 ≤ i' → i' ≤ s.P.H → pth (ts s) x i = pth (ts s) x i' →
+      i = i' := by
+    intro i i' h1 h2 h1' h2' e
+    have a := (ins_pp_ht hI hx h1 h2).2
+    have b := (ins_pp_ht hI hx h1' h2').2
+    unfold pp at a b; rw [if_neg (by omega)] at a; rw [if_neg (by omega)] at b
+    rw [e] at a; omega
+  have hex : ∀ i, 1 ≤ i → i ≤ s.P.H → pth (ts s) x i < s.nodes.size := by
+    intro i h1 h2
+    have a := (ins_pp_ht hI hx h1 h2).1
+    unfold pp at a; rw [if_neg (by omega)] at a; exact a.2.1
+  have F := insFin_frame s x f1x i1 hxs hnd hdist hex
+  have SH := ins_shape hI hC hx F hTP rfl hi1
+  have htags := ins_tags hI hC hx F hTP rfl hi1
+  have T1 : ∀ c d, Before (clIns cl x s.C.size (s.C.size + 1)) c d →
+      tagF (insFin s x f1x i1) c < tagF (insFin s x f1x i1) d := fun c d h => SH.toShapeT.tagF_lt h
+  obtain ⟨Al, Bl, hcl1, hA1, hB1, hcl'⟩ := ins_cl hI hC hx
+  have hmem' : ∀ c, c ∈ clIns cl x s.C.size (s.C.size + 1) ↔ c ∈ cl ∨ c = s.C.size ∨ c = s.C.size + 1 := by
+    intro c; rw [hcl', hcl1]; simp only [List.mem_append, List.mem_cons]; tauto
+  -- the tags after the split are `tagF`
+  have hty : tagY (ins0 s x) x f1x i1 = tagF (insFin s x f1x i1) s.C.size := by
+    have := htags s.C.size ((hmem' _).mpr (Or.inr (Or.inl rfl)))
+    rw [F.tag, if_neg (by omega), if_pos rfl] at this; exact this
+  have htz : tagZ (ins0 s x) x f1x i1 = tagF (insFin s x f1x i1) (s.C.size + 1) := by
+    have := htags (s.C.size + 1) ((hmem' _).mpr (Or.inr (Or.inr rfl)))
+    rw [F.tag, if_pos rfl] at this; exact this
+  have hto : ∀ c ∈ cl, cT (ins0 s x) c = tagF (insFin s x f1x i1) c := by
+    intro c hc
+    have hcs := (hC c).mp hc
+    have := htags c ((hmem' _).mpr (Or.inl hc))
+    rw [F.tag, if_neg (by omega), if_neg (by omega)] at this
+    unfold cT; rw [ins0_tag s x hcs.2, this]
+  have hnd1 : cl.Nodup := S.ord0 ▸ S.ordNodup 0
+  -- the links around the new chunks
+  obtain ⟨hLk, hp2, hn2⟩ := linkCOK_push2 hA hxA
+  have hpx : cP s x = Al.getLastD NIL := by
+    rw [hA.cList.prev x hxA, ← hcl, hcl1, predOf_mid (hcl1 ▸ hnd1)]
+  have hnx : cN s x = Bl.headD NIL := by
+    rw [hA.cList.next x hxA, ← hcl, hcl1, succOf_mid (hcl1 ▸ hnd1)]
+  have hyx : s.C.size ≠ x := by omega
+  have cPy : cP (ins0 s x) s.C.size = Al.getLastD NIL := by
+    unfold ins0; rw [hLk.cP', if_neg hyx, if_pos rfl, hp2, hpx]
+  have cNy : cN (ins0 s x) s.C.size = x := by
+    unfold ins0; rw [hLk.cN', if_neg hyx, if_pos rfl]
+  have cPz : cP (ins0 s x) (s.C.size + 1) = x := by
+    unfold ins0; rw [hLk.cP', if_neg (by omega), if_neg (by omega), if_pos rfl]
+  have cNz : cN (ins0 s x) (s.C.size + 1) = Bl.headD NIL := by
+    unfold ins0; rw [hLk.cN', if_neg (by omega), if_neg (by omega), if_pos rfl, hn2, hnx]
+  have hgy : TagOK (ins0 s x) s.C.size (tagY (ins0 s x) x f1x i1) := by
+    refine ⟨fun hp => ?_, fun _ => ?_⟩
+    · rw [cPy] at hp ⊢
+      have hAl : Al ≠ [] := by rintro rfl; exact hp rfl
+      have hm := getLastD_mem hAl NIL
+      rw [hto _ (by rw [hcl1]; exact List.mem_append_left _ hm), hty]
+      apply T1; rw [hcl']; exact before_app_l hm
+    · rw [cNy, hto x hx, hty]
+      apply T1; rw [hcl', show Al ++ s.C.size :: x :: (s.C.size + 1) :: Bl =
+        (Al ++ [s.C.size]) ++ x :: (s.C.size + 1) :: Bl by simp]
+      exact before_app_l (by simp)
+  have hgz : TagOK { (ins0 s x) with
+      C := (ins0 s x).C.modify s.C.size fun C => { C with tag := tagY (ins0 s x) x f1x i1 } }
+      (s.C.size + 1) (tagZ (ins0 s x) x f1x i1) := by
+    have eP : ∀ c, cP { (ins0 s x) with
+        C := (ins0 s x).C.modify s.C.size fun C => { C with tag := tagY (ins0 s x) x f1x i1 } } c =
+        cP (ins0 s x) c := fun c => by unfold cP; simp only [Array.getX_modify]; split_ifs <;> rfl
+    have eN : ∀ c, cN { (ins0 s x) with
+        C := (ins0 s x).C.modify s.C.size fun C => { C with tag := tagY (ins0 s x) x f1x i1 } } c =
+        cN (ins0 s x) c := fun c => by unfold cN; simp only [Array.getX_modify]; split_ifs <;> rfl
+    have eT : ∀ c, c ≠ s.C.size → cT { (ins0 s x) with
+        C := (ins0 s x).C.modify s.C.size fun C => { C with tag := tagY (ins0 s x) x f1x i1 } } c =
+        cT (ins0 s x) c := fun c hc => by
+      unfold cT; simp only [Array.getX_modify, Ne.symm hc, false_and, if_false]
+    refine ⟨fun _ => ?_, fun hn => ?_⟩
+    · rw [eP, cPz, eT x (by omega), hto x hx, htz]
+      apply T1; rw [hcl', show Al ++ s.C.size :: x :: (s.C.size + 1) :: Bl =
+        (Al ++ [s.C.size]) ++ x :: (s.C.size + 1) :: Bl by simp]
+      exact before_app_r (by simp)
+    · rw [eN, cNz] at hn ⊢
+      have hBl : Bl ≠ [] := by rintro rfl; exact hn rfl
+      have hm := headD_mem hBl NIL
+      have hmc : Bl.headD NIL ∈ cl := by rw [hcl1]; exact List.mem_append_right _ (List.mem_cons_of_mem _ hm)
+      have hcs := (hC _).mp hmc
+      rw [eT _ (by omega), hto _ hmc, htz]
+      apply T1; rw [hcl', show Al ++ s.C.size :: x :: (s.C.size + 1) :: Bl =
+        (Al ++ [s.C.size, x]) ++ (s.C.size + 1) :: Bl by simp]
+      exact before_app_r hm
+  -- the run
+  have hroom : ∀ T ∈ (ins0 s x).cin.getX x, RoomOK (ins0 s x) x T := by
+    intro T hT
+    obtain ⟨A', le, Bs, htab, hA', hside, h1, h2, -, -⟩ :=
+      start_room hI hTP hx (T := T) hT s.C.size (s.C.size + 1)
+    exact ⟨A', le, Bs, htab, hA', hside, h1, h2⟩
+  have hw : x ∈ (nd (ts s) (pp (ts s) x 1)).table.map (·.1) :=
+    S.W3 x hx 1 le_rfl (by have := S.H3; omega)
+  obtain ⟨v, hv⟩ := lookup_some_of_mem hw
+  have hfv : f1x = v := by
+    rw [hf1]; unfold digit
+    show ((nd (ts s) (pp (ts s) x 1)).lab? x).getD 0 = v
+    unfold Node.lab?; rw [hv]; rfl
+  have hf1' : ((ins0 s x).nodes.getX (((ins0 s x).path.getX x).getX 1)).lab? x = some f1x := by
+    rw [hfv]; exact hv
+  have htx : f1x ≤ ((ins0 s x).C.getX x).tag := by
+    rw [ins0_tag s x hxs, show (s.C.getX x).tag = (ts s).tag x from rfl, S.tags x hx, hf1,
+      ← tagUp_one]
+    exact tagUp_mono _ _ _ _ (by have := S.H3; omega)
+  have hlp : x ∈ ((ins0 s x).nodes.getX ((ins0 s x).lpar.getX x)).children := (S.lp x hx).2.2
+  -- the exported facts
+  have hTL := tab_le_160 hI.len
+  have hlpx := S.lp x hx
+  have hlpl : (s.nodes.getX (s.lpar.getX x)).children.length ≤ 160 := by
+    obtain ⟨-, hsub', -⟩ := S.kids _ hlpx.1
+    have h2 := (sublist_of_subset_common hsub' (S.O1 _ hlpx.1.1) (S.ordNodup _)
+      (fun e he => S.kid_mem hI.time hlpx.1 he)).length_le
+    have hl2 := (hTL (lpr (ts s) x)).1
+    show (nd (ts s) (lpr (ts s) x)).children.length ≤ 160
+    simp only [Top.order, Node.order, List.length_map] at h2; omega
+  have hcinT : ∀ T ∈ s.cin.getX x, T < s.nodes.size := by
+    intro T hT
+    have := S.tabsIff 0 x T hent
+    unfold tabs at this; rw [if_pos rfl] at this
+    exact (this.mp hT).1.2.1
+  have hcl2 : (s.cin.getX x).length ≤ 2 := by
+    have := S.tabs_len hent; unfold tabs at this; rw [if_pos rfl] at this; exact this
+  have hlt : ∀ c ∈ cl, c < s.C.size := fun c hc => ((hC c).mp hc).2
+  refine ⟨f1x, i1, hroom, hnd, hf1', hi1, htx, hlp, hgy, hgz, ?_, ?_, ?_, ?_,
+    fun T hT => ⟨hcinT T hT, (hTL T).1, (hTL T).2⟩, hcl2, hlpx.1.1.2.1, hlpl, hxs, ?_⟩
+  · rw [cPy]
+    rcases List.eq_nil_or_concat Al with h | ⟨L, b, h⟩
+    · rw [h]; simp [NIL]; omega
+    · have hm : Al.getLastD NIL ∈ cl := by
+        rw [hcl1]; exact List.mem_append_left _ (getLastD_mem (by rw [h]; simp) NIL)
+      exact hlt _ hm
+  · rw [cNy]; omega
+  · rw [cPz]; omega
+  · rw [cNz]
+    rcases Bl with _ | ⟨b, Bl'⟩
+    · simp [NIL]; omega
+    · have hm : b ∈ cl := by rw [hcl1]; simp
+      exact hlt _ hm
+  · exact fun h => hL.nonil (h ▸ hx)
+
 end OM.Proof.Top
 
 namespace OM.Impl
@@ -206,13 +389,6 @@ structure TopCaps (κ : Caps) (s : Core) : Prop where
   lcin : 322 ≤ κ.lcap .cin
   lc : 162 ≤ κ.lcap .children
   pw : κ.pw = s.P.H + 1
-
-/-- A table holds at most 160 entries, and so does a side list (`TabLen`). -/
-theorem tab_le_160 {t : TS} {dr n0 : Nat → Nat} (h : TabLen t dr n0) (X : Nat) :
-    (nd t X).table.length ≤ 160 ∧ (nd t X).side.length ≤ 160 := by
-  obtain ⟨a, b, c⟩ := h X
-  have : (Top.order t X).length = (nd t X).table.length := by simp [Top.order, Node.order]
-  omega
 
 /-- The cost bound of `startDrain`, from tables of at most 160 entries and entries in at most two
 tables. -/
@@ -583,5 +759,67 @@ theorem jobAgree {κ : Caps} {s : Core} {j : Job} (hT : TopInv s) (hres : s.resJ
     obtain ⟨D, hD, hA⟩ := dsAgree_fund hcl hprep hI K
     obtain ⟨L', c, e, hc⟩ := jobStepS_fund (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) hres hpc hA h
     exact ⟨L', c, e, by unfold jobBound; omega⟩
+
+/-- The cost bound of a split start at Level M. -/
+def splitBound : Nat := 150 + (1200 + 60 * 160 + 2 * (1100 + 400 * 160) + 220 * 160)
+
+/-- **A split start agrees**, under the top invariant with no job running, outside a preparation,
+with the capacities and zero path rows beyond the chunks. -/
+theorem splitAgree_top {κ : Caps} {s : Core} {A : Abs} {x : Nat} (hA : INV s A) (hT : TopInv s)
+    (hres : s.resJob = none) (hxL : LiveC s x) (hprep : s.prep = none)
+    (hrow : ∀ c, s.C.size ≤ c → ∀ j, (s.path.getX c).getX j = 0) (K : TopCaps κ s) :
+    ∃ D, D ≤ splitBound ∧ SplitAgree κ s x D := by
+  obtain ⟨f1x, i1, hroom, hnd, hf1, hi1, htx, hlp, hgy, hgz, cPy, cNy, cPz, cNz, hT', hcl2, hlps, hlpl, hxs,
+    hx0⟩ := ins_hyps hA hT hres hxL
+  have H3 : 3 ≤ s.P.H := by
+    obtain ⟨-, cl, ord, dr, n0, -, -, hI⟩ := hT
+    rw [hres] at hI; exact hI.shape.H3
+  obtain ⟨-, -, -, -, -, hsz0⟩ := ins0_top (s := s) (x := x)
+  obtain ⟨-, cl, ord, dr, n0, hL, hC, -⟩ := hT
+  obtain ⟨hxn, hxp⟩ := CLok.links ⟨hL, hC⟩ ((hC x).mpr hxL)
+  have hia : IAOK κ (ins0 s x) x s.C.size (s.C.size + 1) f1x i1 160 := {
+    room := hroom, nd := hnd, yx := by omega, f1 := hf1, idx := hi1, tx := htx, lp := hlp, gy := hgy, gz := hgz,
+    zx := by omega, yz := by omega,
+    npx := by simp [notPrep, ins0, linkChunkPair, push2, hprep]
+    npy := by simp [notPrep, ins0, linkChunkPair, push2, hprep]
+    npz := by simp [notPrep, ins0, linkChunkPair, push2, hprep]
+    xC := by have := K.C; omega
+    pw := by rw [K.pw]; omega
+    H := by rw [K.pw]; rfl
+    xa := by have := K.alp; omega
+    ya := by have := K.alp; omega
+    za := by have := K.alp; omega
+    ys := by rw [hsz0]; omega
+    zs := by rw [hsz0]; omega
+    yC := by have := K.C; omega
+    zC := by have := K.C; omega
+    yP := by have := K.C; exact lt_of_lt_of_le cPy (by omega)
+    yN := by have := K.C; exact lt_of_lt_of_le cNy (by omega)
+    zP := by have := K.C; exact lt_of_lt_of_le cPz (by omega)
+    zN := by have := K.C; exact lt_of_lt_of_le cNz (by omega)
+    ry := fun j _ => by
+      simp only [rowOf, ins0, linkChunkPair, push2, hprep]; exact hrow _ le_rfl j
+    rz := fun j _ => by
+      simp only [rowOf, ins0, linkChunkPair, push2, hprep]; exact hrow _ (by omega) j
+    xi := by have := K.rcin; omega
+    yi := by have := K.rcin; omega
+    zi := by have := K.rcin; omega
+    cin := by have := K.lcin; exact le_trans hcl2 (by omega)
+    capT := fun T hT => by
+      obtain ⟨a, b, c⟩ := hT' T hT
+      have b' : ((ins0 s x).nodes.getX T).table.length ≤ 160 := b
+      have c' : ((ins0 s x).nodes.getX T).side.length ≤ 160 := c
+      have := K.rt; have := K.rs; have := K.N; have := K.lt; have := K.ls
+      exact ⟨by omega, by omega, by omega, by omega, by omega⟩
+    tB := fun T hT => ⟨(hT' T hT).2.1, (hT' T hT).2.2⟩
+    lr := by have := K.rc; exact lt_of_lt_of_le hlps (by omega)
+    ccap := by have := K.lc; exact le_trans (Nat.add_le_add_right hlpl 2) (by omega) }
+  refine ⟨_, ?_, splitAgree_ok hx0 hxs (by have := K.C; omega) (fun _ => hxp) (fun _ => hxn) hia⟩
+  unfold splitBound iaCost
+  have e1 := Nat.mul_le_mul_right (1100 + 400 * 160) hcl2
+  have e2 : (s.nodes.getX (s.lpar.getX x)).children.length ≤ 160 := hlpl
+  show 150 + (1200 + 60 * 160 + (s.cin.getX x).length * (1100 + 400 * 160) +
+    220 * (s.nodes.getX (s.lpar.getX x)).children.length) ≤ _
+  omega
 
 end OM.Impl
