@@ -573,3 +573,49 @@ with the running job's path copy completed (`finS`). `InvJ` has five parts:
 **Left to M6.** Level M programs, their simulation of Level F, and Theorems A, B and W at
 Level M.
 
+---
+
+## 15. M6: Level M (in progress)
+
+**Approach: a certified translator instead of per-procedure machine proofs.** §4 planned to
+prove each machine procedure against Level F with `wp`. That would repeat the same memory
+reasoning for about 140 procedures, so M6 inserts a small language between the two
+(`lean/OM/Impl/`):
+
+* `Lang.lean`: the **core language**. Expressions are numbers, locals, record fields
+  (`Fld`), table sizes and parameters. Statements are assignments, field writes, `push`,
+  sequencing, `if`, bounded `for`, calls, `fail` (a guard), `bug` (an unreachable state) and
+  `catch`. Its semantics `evalF` runs directly on Level F's `Core` and returns the outcome and
+  **the machine cost**.
+* `Compile.lean`: the **compiler** to machine `Stmt`, and the **encoding** `Enc p κ s m`: the core
+  in slot `p` occupies the machine arrays `1000·p + code`, one per field, with capacities `κ`.
+  Every default record reads 0 (Booleans are stored as `dead` bits), so freshly allocated memory
+  already holds default records.
+* `Sim.lean`: **one theorem, `sim`**, for every program of the language. If `m` holds `s`, the
+  compiled code ends exactly as `evalF` says: same outcome, a machine state that holds the new
+  core, same locals, and the same number of steps.
+* Per Level F function, a **transcription** into the language and an **agreement lemma**: on
+  every successful run of the Level F function, `evalF` of the transcription produces the same
+  state, within a stated number of steps. These are pure Level F proofs. A write that the
+  encoding cannot represent makes `evalF` return `bug`, so each agreement lemma also shows that
+  every index stays within its capacity.
+
+**Choices recorded here.**
+* Machine array names are numbers (`Arr := Nat`), so that distinct arrays differ by arithmetic.
+* Level F's truncated `-` becomes `Exp.monus a b = max(a,b) − b`, with `max` computed without
+  branches. Neither subtraction can underflow.
+* The machine has no `break`. The priority queue's downward scan (Level F's slow path, `O(s)`)
+  keeps its loop, guarded by the fast-path test. Its agreement lemma covers the case where no
+  scan is needed. The algorithm only adjusts a chunk's size by `+1` (the `−1` call is
+  unreachable under invariant F), and that adjustment never scans (K2).
+* Capacities are invariants of each module. For the queue, `PQCaps`: stored chunks are below the
+  chunk capacity, and stored buckets are below the bucket capacity. Each agreement lemma assumes
+  them and re-establishes them.
+
+**Done.** The language, the compiler, `sim`, and the priority queue (`PQ.lean`): all eight
+procedures agree with Level F.
+
+**Next.** List fields (children, tables, sides, paths, the free-group stack) and the optional
+records (`prep`, `resJob`) in the language; the core's procedures; the top structure's job steps;
+the wrapper; the capacities from Level F's invariants; Theorems A, B and W at Level M.
+

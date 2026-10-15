@@ -290,4 +290,157 @@ theorem pqInsertScan_agree (κ : Caps) (σ : Core) (L : Loc) {c s : Nat} (hc : L
       AF.get, Exp.ar, Exp.ifz, OM.Machine.State.upd, hc, hs, hm, hpB, hlt, Exp.cost, costList, he2, PF.get]
     omega
 
+@[simp] theorem pqInsertScanP_params : pqInsertScanP.params = ["c", "s"] := rfl
+@[simp] theorem pqInsertScanP_rets : pqInsertScanP.rets = [] := rfl
+
+def pqAdjustP : Proc where
+  name := "pqAdjust"
+  params := ["c", "old", "new"]
+  rets := []
+  body :=
+    "th" ::= .prm .theta ;;
+    .ite (("old" ≤ₑ "th") &&ₑ ("th" <ₑ "new")) (pqInsertScanP.call ["c", "new"] [])
+      (.ite (("new" ≤ₑ "th") &&ₑ ("th" <ₑ "old")) (pqDelP.call ["c"] [])
+        (.ite (("th" <ₑ "old") &&ₑ ("th" <ₑ "new"))
+          (.ite ("new" =ₑ Exp.var "old" + 1)
+            ("alone" ::= ((.ar .pqHead "old" =ₑ "c") &&ₑ (.ar .pqNext "c" =ₑ 0)) ;;
+             "p" ::= (Exp.ifz "alone" (.ar .nbPrev "old") + Exp.ifz (!ₑ "alone") "old") ;;
+             pqDelP.call ["c"] [] ;;
+             pqAddP.call ["c", "new", "p"] [])
+            (.ite (Exp.var "new" + 1 =ₑ "old")
+              ("p" ::= .ar .nbPrev "old" ;;
+               pqDelP.call ["c"] [] ;;
+               pqAddP.call ["c", "new", "p"] [])
+              (pqDelP.call ["c"] [] ;; pqInsertScanP.call ["c", "new"] [])))
+          .skip))
+
+/-- `pqAdjust` for a `+1` change of size (the only one the algorithm makes). -/
+theorem pqAdjust_agree (κ : Caps) (σ : Core) (L : Loc) {c old : Nat} (hc : L "c" = c)
+    (ho : L "old" = old) (hn : L "new" = old + 1) (hq : PQCaps κ σ) (hcC : c < Ccap κ)
+    (hnB : old + 1 < Bcap κ) {σ' : Core} (h : (pqAdjust c old (old + 1)).run σ = .ok () σ') :
+    (∃ L' n, evalF κ pqAdjustP.body σ L = .ok σ' L' n ∧ n ≤ 700) ∧ PQCaps κ σ' := by
+  have hoB : old < κ.arr .pqHead := by show old < Bcap κ; omega
+  have hcN : c < κ.arr .pqNext := hcC
+  have hbP : old < κ.arr .nbPrev := by rw [hq.cB.2]; show old < Bcap κ; omega
+  unfold pqAdjust at h
+  simp only [OM.Proof.run_getP_bind] at h
+  rcases lt_trichotomy old σ.P.theta with hlt | heq | hgt
+  · -- below the queue: nothing
+    rw [if_neg (by simp; omega), if_neg (by simp; omega), if_neg (by simp; omega)] at h
+    cases h
+    refine ⟨?_, hq⟩
+    have h1 : old + 1 ≤ σ.P.theta := hlt
+    simp [pqAdjustP, evalF, Exp.ev, Res.bind, Res.addCost, OM.Machine.State.upd, hc, ho, hn, PF.get,
+      Exp.cost, hlt, h1, Nat.le_of_lt hlt, Nat.not_lt.mpr (Nat.le_of_lt hlt)]
+  · -- entering at bucket `θ + 1`
+    rw [if_pos (by simp; omega)] at h
+    obtain ⟨⟨L2, n2, he2, hn2⟩, hq2⟩ := pqInsertScan_agree κ σ
+      (OM.Machine.State.setLocs (fun _ => 0) ["c", "s"] [c, old + 1]) (by simp) (by simp) hq hcC hnB
+      (by simp; omega) h
+    simp only [OM.Machine.State.setLocs] at he2
+    rw [heq] at he2
+    refine ⟨?_, hq2⟩
+    simp [pqAdjustP, Proc.call, evalF, Exp.ev, evList, Res.bind, Res.addCost, OM.Machine.State.upd, hc, ho,
+      hn, PF.get, Exp.cost, costList, he2, heq]
+    omega
+  · -- moving up one bucket
+    rw [if_neg (by simp; omega), if_neg (by simp; omega), if_pos (by simp; omega)] at h
+    simp only [OM.Proof.run_get_bind, beq_self_eq_true, if_true] at h
+    obtain ⟨u, σ1, h1, h2⟩ := run_bind_ok h
+    obtain ⟨⟨L1, n1, he1, hn1⟩, hq1⟩ := pqDel_agree κ σ
+      (OM.Machine.State.setLocs (fun _ => 0) ["c"] [c]) (by simp) hq hcC h1
+    simp only [OM.Machine.State.setLocs] at he1
+    have hlt1 : ¬(old + 1 ≤ σ.P.theta) := by omega
+    have hlt2 : ¬(old ≤ σ.P.theta) := by omega
+    have hlt3 : ¬(old < σ.P.theta) := by omega
+    by_cases ha : σ.pqHead.getX old = c ∧ σ.pqNext.getX c = 0
+    · rw [if_pos (by simp [ha.1, ha.2, NIL])] at h2
+      obtain ⟨⟨L2, n2, he2, hn2⟩, hq2⟩ := pqAdd_agree κ σ1
+        (OM.Machine.State.setLocs (fun _ => 0) ["c", "s", "p"] [c, old + 1, σ.nbPrev.getX old])
+        (by simp) (by simp) (by simp) hq1 hcC hnB (hq.nbP old) h2
+      simp only [OM.Machine.State.setLocs] at he2
+      refine ⟨?_, hq2⟩
+      simp [pqAdjustP, Proc.call, evalF, Exp.ev, evList, Res.bind, Res.addCost, OM.Machine.State.upd, hc, ho,
+        hn, PF.get, Exp.cost, costList, he1, he2, hgt, hlt1, hlt2, hlt3, Fld.get, Fld.cap, AF.get, Exp.ar, Exp.ifz,
+        hoB, hcN, hbP, ha.1, ha.2]
+      omega
+    · rw [if_neg (by simpa [NIL] using ha)] at h2
+      obtain ⟨⟨L2, n2, he2, hn2⟩, hq2⟩ := pqAdd_agree κ σ1
+        (OM.Machine.State.setLocs (fun _ => 0) ["c", "s", "p"] [c, old + 1, old])
+        (by simp) (by simp) (by simp) hq1 hcC hnB (by omega) h2
+      simp only [OM.Machine.State.setLocs] at he2
+      refine ⟨?_, hq2⟩
+      have ha' : σ.pqHead.getX old = c → σ.pqNext.getX c ≠ 0 := fun e1 e2 => ha ⟨e1, e2⟩
+      by_cases hh : σ.pqHead.getX old = c
+      · simp [pqAdjustP, Proc.call, evalF, Exp.ev, evList, Res.bind, Res.addCost, OM.Machine.State.upd, hc,
+          ho, hn, PF.get, Exp.cost, costList, he1, he2, hgt, hlt1, hlt2, hlt3, Fld.get, Fld.cap, AF.get, Exp.ar,
+          Exp.ifz, hoB, hcN, hbP, hh, ha' hh]
+        omega
+      · simp [pqAdjustP, Proc.call, evalF, Exp.ev, evList, Res.bind, Res.addCost, OM.Machine.State.upd, hc,
+          ho, hn, PF.get, Exp.cost, costList, he1, he2, hgt, hlt1, hlt2, hlt3, Fld.get, Fld.cap, AF.get, Exp.ar,
+          Exp.ifz, hoB, hcN, hbP, hh]
+        omega
+
+def pqEnterIfAboveP : Proc where
+  name := "pqEnterIfAbove"
+  params := ["c"]
+  rets := []
+  body :=
+    "s" ::= .rd (.c .size) "c" ;;
+    .ite (.prm .theta <ₑ "s") (pqInsertScanP.call ["c", "s"] []) .skip
+
+/-- `pqEnterIfAbove` for a chunk not above `θ` (every freshly quiet chunk: `c_max ≤ θ`). -/
+theorem pqEnterIfAbove_agree (κ : Caps) (σ : Core) (L : Loc) {c : Nat} (hc : L "c" = c)
+    (hcT : c < κ.tbl .C) (hle : (σ.C.getX c).size ≤ σ.P.theta) {σ' : Core}
+    (h : (pqEnterIfAbove c).run σ = .ok () σ') :
+    ∃ L' n, evalF κ pqEnterIfAboveP.body σ L = .ok σ' L' n ∧ n ≤ 20 := by
+  unfold pqEnterIfAbove at h
+  simp [OM.Proof.run_getC_bind, OM.Proof.run_getP_bind, Nat.not_lt.mpr hle] at h
+  cases h
+  have : ¬ σ.P.theta < (σ.C.getX c).size := by omega
+  simp [pqEnterIfAboveP, evalF, Exp.ev, Res.bind, Res.addCost, OM.Machine.State.upd, hc, PF.get, Exp.cost,
+    Fld.get, Fld.cap, CF.get, hcT, this]
+
+def pqPopMaxP : Proc where
+  name := "pqPopMax"
+  params := []
+  rets := ["c"]
+  body :=
+    "c" ::= .ar .pqHead (.sc .pqHi) ;;
+    .ite ("c" =ₑ 0) .fail .skip ;;
+    pqDelP.call ["c"] []
+
+theorem pqPopMax_agree (κ : Caps) (σ : Core) (L : Loc) (hq : PQCaps κ σ) {c : Nat} {σ' : Core}
+    (h : pqPopMax.run σ = .ok c σ') :
+    (∃ L' n, evalF κ pqPopMaxP.body σ L = .ok σ' L' n ∧ L' "c" = c ∧ n ≤ 240) ∧ PQCaps κ σ' := by
+  unfold pqPopMax at h
+  have hhi : σ.pqHi < κ.arr .pqHead := hq.hi
+  have hcC := hq.head σ.pqHi
+  by_cases h0 : σ.pqHead.getX σ.pqHi = 0
+  · simp [h0, OM.Model.guard, NIL] at h
+  · simp [h0, NIL] at h
+    obtain ⟨⟨u, h1⟩, rfl⟩ := h
+    obtain ⟨⟨L1, n1, he1, hn1⟩, hq1⟩ := pqDel_agree κ σ
+      (OM.Machine.State.setLocs (fun _ => 0) ["c"] [σ.pqHead.getX σ.pqHi]) (by simp) hq hcC h1
+    simp only [OM.Machine.State.setLocs] at he1
+    refine ⟨?_, hq1⟩
+    simp [pqPopMaxP, Proc.call, evalF, Exp.ev, evList, Res.bind, Res.addCost, OM.Machine.State.upd,
+      Exp.cost, costList, Fld.get, Fld.cap, AF.get, SF.get, Exp.ar, Exp.sc, hhi, h0, he1]
+    omega
+
+def pqEmptyP : Proc where
+  name := "pqEmpty"
+  params := []
+  rets := ["r"]
+  body := "r" ::= (.sc .pqHi =ₑ 0)
+
+theorem pqEmpty_agree (κ : Caps) (σ : Core) (L : Loc) {b : Bool} {σ' : Core}
+    (h : pqEmpty.run σ = .ok b σ') :
+    ∃ L' n, evalF κ pqEmptyP.body σ L = .ok σ' L' n ∧ L' "r" = b2n b ∧ n ≤ 10 := by
+  unfold pqEmpty at h
+  simp at h; obtain ⟨rfl, rfl⟩ := h
+  by_cases h0 : σ.pqHi = 0 <;>
+    simp [pqEmptyP, evalF, Exp.ev, Res.addCost, OM.Machine.State.upd, Exp.cost, Fld.get, Fld.cap,
+      SF.get, Exp.sc, h0, b2n]
+
 end OM.Impl
