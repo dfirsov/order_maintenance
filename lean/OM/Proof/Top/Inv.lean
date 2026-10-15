@@ -81,19 +81,19 @@ def wStart (s : TS) (j : Job) : Nat :=
   | .afterDrain _ up => up
   | .fund _ up _ _ => up
 
-/-- Live nodes whose stored weight lags its true weight by 2. -/
-def pend (s : TS) : List Nat :=
-  match s.resJob with
+/-- Live nodes whose stored weight lags its true weight by 2, when job `oj` runs. -/
+def pend (s : TS) (oj : Option Job) : List Nat :=
+  match oj with
   | some j => upChain s (s.P.H + 1) (wStart s j)
   | none => []
 
 /-- Ghost `v` is funded by the running job: a target of `v` is on the job's path. -/
-def funded (s : TS) (v : Nat) : Prop :=
-  match s.resJob with
+def funded (s : TS) (oj : Option Job) (v : Nat) : Prop :=
+  match oj with
   | some j => anc s j.y (ht s v) = (nd s v).t1 ∨ anc s j.y (ht s v) = (nd s v).t2
   | none => False
 
-instance (s : TS) (v : Nat) : Decidable (funded s v) := by
+instance (s : TS) (oj : Option Job) (v : Nat) : Decidable (funded s oj v) := by
   unfold funded; split <;> infer_instance
 
 /-- The lowest height at which the running job has sweeps left (`H + 1`: none). -/
@@ -106,8 +106,8 @@ def curH (s : TS) (j : Job) : Nat :=
   | .fund v _ _ _ => ht s v + 1
 
 /-- The sweeps the running job still owes ghost `v`. -/
-def slack (s : TS) (v : Nat) : Nat :=
-  match s.resJob with
+def slack (s : TS) (oj : Option Job) (v : Nat) : Nat :=
+  match oj with
   | none => 0
   | some j =>
     if anc s j.y (ht s v) = (nd s v).t1 ∨ anc s j.y (ht s v) = (nd s v).t2 then
@@ -126,9 +126,9 @@ def ew (s : TS) (cl : List Nat) (v : Nat) : Nat :=
 /-- Funding jobs of ghost `v` so far. -/
 def fundOf (s : TS) (cl : List Nat) (v : Nat) : Nat := (ew s cl v - (nd s v).weight) / 2
 
-structure Timing (s : TS) (cl : List Nat) : Prop where
+structure Timing (s : TS) (cl : List Nat) (oj : Option Job) : Prop where
   /-- (F1) stored weights. -/
-  wts : ∀ v, liveN s v → (nd s v).weight + (if v ∈ pend s then 2 else 0) = tw s cl v
+  wts : ∀ v, liveN s v → (nd s v).weight + (if v ∈ pend s oj then 2 else 0) = tw s cl v
   /-- T3 (a). -/
   wA : ∀ v, liveN s v → (nd s v).livePar ≠ NIL → srcOf s v = NIL → (nd s v).weight ≤ Wd s.P (ht s v)
   /-- T3 (b): the frozen start weight of a drain. -/
@@ -137,9 +137,9 @@ structure Timing (s : TS) (cl : List Nat) : Prop where
   wF : ∀ v, ghostN s v → (nd s v).weight ≤ ew s cl v ∧ (ew s cl v - (nd s v).weight) % 2 = 0
   /-- T3 (c). -/
   wC : ∀ v, ghostN s v →
-    (rng s cl v).length + (s.P.s - 2) * fundOf s cl v ≤ (nd s v).weight + slack s v
+    (rng s cl v).length + (s.P.s - 2) * fundOf s cl v ≤ (nd s v).weight + slack s oj v
   wC' : ∀ v, ghostN s v →
-    (s.P.s - 2) * (fundOf s cl v - (if funded s v then 1 else 0)) ≤ (nd s v).weight
+    (s.P.s - 2) * (fundOf s cl v - (if funded s oj v then 1 else 0)) ≤ (nd s v).weight
   /-- Fresh targets are heavy (T0), and weights never decrease. -/
   wD : ∀ v, liveN s v → s.P.H < v → lamd s.P (ht s v) ≤ tw s cl v
 
@@ -177,7 +177,7 @@ def JobAt (s : TS) (j : Job) : Prop :=
       (anc s j.y (ht s v) = (nd s v).t1 ∨ anc s j.y (ht s v) = (nd s v).t2) ∧
       up = anc s j.y (ht s v + 1)
   | .fund v up src k => liveN s v ∧ v = anc s j.y (ht s v) ∧ up = anc s j.y (ht s v + 1) ∧
-      ghostN s src ∧ srcOf s v = src ∧ 1 ≤ k ∧ k ≤ s.P.s
+      ghostN s src ∧ srcOf s v = src ∧ k ≤ s.P.s
 
 structure JobOK (s : TS) (cl : List Nat) (j : Job) : Prop where
   pos : ∃ A B, cl = A ++ j.y :: j.x :: j.z :: B
@@ -185,12 +185,16 @@ structure JobOK (s : TS) (cl : List Nat) (j : Job) : Prop where
 
 /-! ### The invariant -/
 
-/-- The invariant of a top structure whose running job (if any) has copied its path. -/
-structure InvT (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat → Nat) : Prop where
+/-- The invariant of a top structure running job `oj`, whose path copy is complete. -/
+structure InvJ (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat → Nat)
+    (oj : Option Job) : Prop where
   shape : Shape s cl ord
-  time : Timing s cl
+  time : Timing s cl oj
   room : Room s cl dr n0
-  job : ∀ j, s.resJob = some j → JobOK s cl j
+  job : ∀ j, oj = some j → JobOK s cl j
+
+abbrev InvT (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat → Nat) : Prop :=
+  InvJ s cl ord dr n0 s.resJob
 
 /-- **The top structure's invariant** (M5's `TI`). -/
 def TopInv (s : Core) : Prop :=

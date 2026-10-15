@@ -181,4 +181,56 @@ theorem Shape.rng_between (S : Shape s cl ord) {u c d e : Nat} (hu : isN s u)
     · rw [hc.2] at h1; rw [hd.2] at h2
       exact absurd h2 (h1.asymm (S.ordNodup _))
 
+/-! ### Paths and ancestors -/
+
+/-- The parent of the path entry at level `j - 1` is the live ancestor at level `j`. -/
+theorem Shape.par_pp (S : Shape s cl ord) {c : Nat} (hc : c ∈ cl) {j : Nat} (hj1 : 1 ≤ j)
+    (hj : j ≤ s.P.H) : par s (j - 1) (pp s c (j - 1)) = anc s c j := by
+  rcases Nat.lt_or_ge j 2 with h1 | h2
+  · have : j = 1 := by omega
+    subst this
+    simp [par, pp, anc]
+  · have hP := S.P c hc (j - 1) (by omega) (by omega)
+    obtain ⟨hl, hh⟩ := S.anc_live hc (j - 1) (by omega) (by omega)
+    have e : anc s c j = (nd s (anc s c (j - 1))).livePar := by
+      rw [← anc_succ c _ (by omega)]; congr 1; omega
+    rw [e]
+    rcases hP with hP | ⟨hg, ht⟩
+    · rw [hP, par_live (Or.inr hl), if_neg (by omega)]
+    · unfold par
+      rw [if_neg (by omega), if_pos hg.2]
+      obtain ⟨-, -, -, -, -, -, -, -, -, -, hlp, -⟩ := S.ghost _ hg
+      rcases ht with ht | ht
+      · rw [ht]
+      · rw [ht, ← hlp]
+
+/-- Live ancestors are monotone along the chunk list. -/
+theorem Shape.anc_mono (S : Shape s cl ord) {c d : Nat} (hcd : Before cl c d) :
+    ∀ j, j ≤ s.P.H → anc s c j = anc s d j ∨ Before (ord j) (anc s c j) (anc s d j)
+  | 0, _ => Or.inr (by rw [S.ord0]; exact hcd)
+  | j + 1, hj => by
+    have hc := hcd.mem_left
+    have hd := hcd.mem_right
+    by_cases he : anc s c (j + 1) = anc s d (j + 1)
+    · exact Or.inl he
+    · right
+      have hmc := S.anc_mem hc hj
+      have hmd := S.anc_mem hd hj
+      rcases before_total hmc hmd he with h1 | h1
+      · exact h1
+      · exfalso
+        obtain ⟨hlc, hhc⟩ := S.anc_live hc (j + 1) (by omega) hj
+        obtain ⟨hld, hhd⟩ := S.anc_live hd (j + 1) (by omega) hj
+        have hpc := S.par_pp hc (j := j + 1) (by omega) hj
+        have hpd := S.par_pp hd (j := j + 1) (by omega) hj
+        simp only [Nat.add_sub_cancel] at hpc hpd
+        -- the parents are in the wrong order, so the children are too
+        have hlow := S.OT (j + 1) (by omega) hj _ _ (pp s d j) (pp s c j) hld hlc h1
+          (by simpa using S.pathEnt d hd j (by omega)) (by simpa using S.pathEnt c hc j (by omega))
+          (by simpa using hpd) (by simpa using hpc)
+        simp only [Nat.add_sub_cancel] at hlow
+        rcases S.O2 j (by omega) c d hcd with h2 | h2
+        · exact hlow.ne (S.ordNodup j) h2.symm
+        · exact hlow.asymm (S.ordNodup j) h2
+
 end OM.Proof.Top

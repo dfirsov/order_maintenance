@@ -74,23 +74,23 @@ theorem lookup_lt_of_before {t : List (Nat × Nat)} (hk : (t.map (·.1)).Nodup)
 
 variable {s : TS} {cl : List Nat} {ord : Nat → List Nat}
 
-theorem Shape.pp_root (S : Shape s cl ord) {c : Nat} (hc : c ∈ cl) : pp s c s.P.H = s.P.H := by
+theorem ShapeT.pp_root (S : ShapeT s cl ord) {c : Nat} (hc : c ∈ cl) : pp s c s.P.H = s.P.H := by
   have := S.pathEnt c hc s.P.H le_rfl
   unfold Ent at this; rw [S.root.1] at this; simpa using this
 
-theorem Shape.labs_ok (S : Shape s cl ord) {X : Nat} (hX : isN s X) :
+theorem ShapeT.labs_ok (S : ShapeT s cl ord) {X : Nat} (hX : isN s X) :
     (labs s X).IsChain (· < ·) ∧ ∀ l ∈ labs s X, l < 2 ^ s.P.beta :=
   gapsGe_chain (S.labsOk X hX) le_rfl
 
-theorem Shape.order_nodup (S : Shape s cl ord) {X : Nat} (hX : isN s X) : (order s X).Nodup :=
+theorem ShapeT.order_nodup (S : ShapeT s cl ord) {X : Nat} (hX : isN s X) : (order s X).Nodup :=
   (S.O1 X hX).nodup (S.ordNodup _)
 
-theorem Shape.isN_pp (S : Shape s cl ord) {c : Nat} (hc : c ∈ cl) {j : Nat} (hj1 : 1 ≤ j)
+theorem ShapeT.isN_pp (S : ShapeT s cl ord) {c : Nat} (hc : c ∈ cl) {j : Nat} (hj1 : 1 ≤ j)
     (hj : j ≤ s.P.H) : isN s (pp s c j) ∧ ht s (pp s c j) = j :=
   (S.ordMem j hj1 hj _).mp (S.pathEnt c hc j hj)
 
 /-- A digit of a tag is a label of the table on the path, so it fits in `β` bits. -/
-theorem Shape.digit_lt (S : Shape s cl ord) {c : Nat} (hc : c ∈ cl) {j : Nat} (hj1 : 1 ≤ j)
+theorem ShapeT.digit_lt (S : ShapeT s cl ord) {c : Nat} (hc : c ∈ cl) {j : Nat} (hj1 : 1 ≤ j)
     (hj : j ≤ s.P.H) : digit s c j < 2 ^ s.P.beta := by
   obtain ⟨hN, -⟩ := S.isN_pp hc hj1 hj
   have hw := S.W3 c hc j hj1 hj
@@ -103,7 +103,7 @@ theorem Shape.digit_lt (S : Shape s cl ord) {c : Nat} (hc : c ∈ cl) {j : Nat} 
   exact (S.labs_ok hN).2 _ (List.mem_map.mpr ⟨q', List.mem_of_find?_eq_some hq', rfl⟩)
 
 /-- **Lemma T1.** Tags strictly increase along the chunk list. -/
-theorem Shape.tagF_lt (S : Shape s cl ord) {c d : Nat} (hcd : Before cl c d) :
+theorem ShapeT.tagF_lt (S : ShapeT s cl ord) {c d : Nat} (hcd : Before cl c d) :
     tagF s c < tagF s d := by
   have hc := hcd.mem_left
   have hd := hcd.mem_right

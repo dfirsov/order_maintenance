@@ -263,4 +263,69 @@ theorem tagUp_lt_of_digit {s s' : TS} {c d : Nat} (hβ : s'.P.beta = s.P.beta) {
       rw [Nat.add_mul, one_mul] at this
       omega
 
+/-- Two shifted digits, combined with `|||`, are added. -/
+theorem lor_shift_eq_add {pv vb h β : Nat} (hvb : vb < 2 ^ β) (h1 : 1 ≤ h) :
+    (pv <<< (h * β)) ||| (vb <<< ((h - 1) * β)) = pv * 2 ^ (h * β) + vb * 2 ^ ((h - 1) * β) := by
+  have hlt : vb <<< ((h - 1) * β) < 2 ^ (h * β) := by
+    rw [Nat.shiftLeft_eq]
+    have : h * β = β + (h - 1) * β := by
+      obtain ⟨k, rfl⟩ : ∃ k, h = k + 1 := ⟨h - 1, by omega⟩
+      simp; ring
+    rw [this, pow_add]
+    exact Nat.mul_lt_mul_of_pos_right hvb (by positivity)
+  rw [← Nat.shiftLeft_add_eq_or_of_lt hlt, Nat.shiftLeft_eq, Nat.shiftLeft_eq]
+
+theorem tagUp_congr {s s' : TS} {c c' : Nat} (hβ : s'.P.beta = s.P.beta) :
+    ∀ k, (∀ i, 1 ≤ i → i ≤ k → digit s' c' i = digit s c i) → tagUp s' c' k = tagUp s c k
+  | 0, _ => rfl
+  | k + 1, h => by
+    unfold tagUp
+    rw [tagUp_congr hβ k (fun i h1 h2 => h i h1 (by omega)), h (k + 1) (by omega) le_rfl, hβ]
+
+theorem tagUp_succ (s : TS) (c k : Nat) :
+    tagUp s c (k + 1) = tagUp s c k + digit s c (k + 1) * 2 ^ (k * s.P.beta) := rfl
+
+theorem tagUp_mono (s : TS) (c m : Nat) : ∀ k, m ≤ k → tagUp s c m ≤ tagUp s c k
+  | 0, hk => by rw [show m = 0 by omega]
+  | k + 1, hk => by
+    rcases Nat.eq_or_lt_of_le hk with e | hlt
+    · rw [e]
+    · have := tagUp_mono s c m k (by omega)
+      rw [tagUp_succ]; omega
+
+theorem tagUp_high {s s' : TS} {c c' : Nat} (hβ : s'.P.beta = s.P.beta) (m : Nat) :
+    ∀ k, m ≤ k → (∀ i, m < i → i ≤ k → digit s' c' i = digit s c i) →
+      tagUp s' c' k + tagUp s c m = tagUp s c k + tagUp s' c' m
+  | 0, hk, _ => by rw [show m = 0 by omega]; omega
+  | k + 1, hk, h => by
+    rcases Nat.eq_or_lt_of_le hk with e | hlt
+    · rw [e]; omega
+    · have := tagUp_high hβ m k (by omega) (fun i h1 h2 => h i h1 (by omega))
+      rw [tagUp_succ, tagUp_succ, h (k + 1) (by omega) le_rfl, hβ]
+      omega
+
+/-- Two consecutive digits `h`, `h+1` replaced: the arithmetic of `drainStep`'s tag update. -/
+theorem tagUp_replace2 {s s' : TS} {c c' : Nat} (hβ : s'.P.beta = s.P.beta) {h k : Nat}
+    (h1 : 1 ≤ h) (hk : h + 1 ≤ k)
+    (heq : ∀ i, 1 ≤ i → i ≤ k → i ≠ h → i ≠ h + 1 → digit s' c' i = digit s c i) :
+    digit s c (h + 1) * 2 ^ (h * s.P.beta) + digit s c h * 2 ^ ((h - 1) * s.P.beta) ≤ tagUp s c k ∧
+    tagUp s' c' k = tagUp s c k -
+        (digit s c (h + 1) * 2 ^ (h * s.P.beta) + digit s c h * 2 ^ ((h - 1) * s.P.beta)) +
+      (digit s' c' (h + 1) * 2 ^ (h * s.P.beta) + digit s' c' h * 2 ^ ((h - 1) * s.P.beta)) := by
+  obtain ⟨g, rfl⟩ : ∃ g, h = g + 1 := ⟨h - 1, by omega⟩
+  have hlow := tagUp_congr (c := c) (c' := c') hβ g (fun i h1 h2 => heq i h1 (by omega) (by omega) (by omega))
+  have hhi := tagUp_high (c := c) (c' := c') hβ (g + 2) k (by omega)
+    (fun i h1 h2 => heq i (by omega) h2 (by omega) (by omega))
+  have e1 : tagUp s c (g + 2) = tagUp s c g + digit s c (g + 1) * 2 ^ (g * s.P.beta) +
+      digit s c (g + 2) * 2 ^ ((g + 1) * s.P.beta) := rfl
+  have e2 : tagUp s' c' (g + 2) = tagUp s' c' g + digit s' c' (g + 1) * 2 ^ (g * s'.P.beta) +
+      digit s' c' (g + 2) * 2 ^ ((g + 1) * s'.P.beta) := rfl
+  rw [hβ] at e2
+  simp only [Nat.add_sub_cancel] at *
+  have hk2 : tagUp s c (g + 2) ≤ tagUp s c k := tagUp_mono s c _ k (by omega)
+  simp only [show g + 1 + 1 = g + 2 from rfl] at *
+  constructor
+  · omega
+  · omega
+
 end OM.Proof.Top

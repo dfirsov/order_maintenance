@@ -22,14 +22,22 @@ set_option linter.deprecated false
 /-- Entries of height `h`: chunks for `h = 0`, else nodes. -/
 abbrev Ent (ord : Nat → List Nat) (h e : Nat) : Prop := e ∈ ord h
 
-structure Shape (s : TS) (cl : List Nat) (ord : Nat → List Nat) : Prop where
-  -- heights and orders
+/-- The part of the invariant that orders tags (Lemma T1). -/
+structure ShapeT (s : TS) (cl : List Nat) (ord : Nat → List Nat) : Prop where
   H3 : 3 ≤ s.P.H
   ord0 : ord 0 = cl
   ordNodup : ∀ h, (ord h).Nodup
   ordMem : ∀ h, 1 ≤ h → h ≤ s.P.H → ∀ v, v ∈ ord h ↔ isN s v ∧ ht s v = h
   htN : ∀ v, isN s v → 1 ≤ ht s v ∧ ht s v ≤ s.P.H
   root : ord s.P.H = [s.P.H] ∧ liveN s s.P.H ∧ (nd s s.P.H).livePar = NIL
+  pathEnt : ∀ c ∈ cl, ∀ j, j ≤ s.P.H → Ent ord j (pp s c j)
+  W3 : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ s.P.H → pp s c (j - 1) ∈ order s (pp s c j)
+  O2 : ∀ j, j ≤ s.P.H → ∀ c d, Before cl c d →
+    pp s c j = pp s d j ∨ Before (ord j) (pp s c j) (pp s d j)
+  O1 : ∀ X, isN s X → (order s X).Sublist (ord (ht s X - 1))
+  labsOk : ∀ X, isN s X → GapsGe s.P.beta 1 (labs s X)
+
+structure Shape (s : TS) (cl : List Nat) (ord : Nat → List Nat) : Prop extends ShapeT s cl ord where
   -- the live tree
   up : ∀ v, liveN s v → ht s v < s.P.H →
     liveN s (nd s v).livePar ∧ ht s (nd s v).livePar = ht s v + 1 ∧
@@ -54,7 +62,6 @@ structure Shape (s : TS) (cl : List Nat) (ord : Nat → List Nat) : Prop where
     ghostN s (srcOf s t) ∧ (t = (nd s (srcOf s t)).t1 ∨ t = (nd s (srcOf s t)).t2)
   -- tables
   tabEnt : ∀ X, isN s X → ∀ e ∈ order s X, Ent ord (ht s X - 1) e
-  O1 : ∀ X, isN s X → (order s X).Sublist (ord (ht s X - 1))
   tabsIff : ∀ h e X, Ent ord h e → (X ∈ tabs s h e ↔ isN s X ∧ ht s X = h + 1 ∧ e ∈ order s X)
   tabsNodup : ∀ h e, Ent ord h e → (tabs s h e).Nodup
   Q : ∀ h e X, Ent ord h e → X ∈ tabs s h e → X = par s h e ∨ X = srcOf s (par s h e)
@@ -63,16 +70,14 @@ structure Shape (s : TS) (cl : List Nat) (ord : Nat → List Nat) : Prop where
     lookup (nd s v).side e = some (if par s (ht s v - 1) e = (nd s v).t1 then .left else .right)
   -- paths
   pathSize : ∀ c ∈ cl, (s.path.getX c).size = s.P.H + 1
-  pathEnt : ∀ c ∈ cl, ∀ j, j ≤ s.P.H → Ent ord j (pp s c j)
   P : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ s.P.H → pp s c j = anc s c j ∨
     (ghostN s (pp s c j) ∧ (anc s c j = (nd s (pp s c j)).t1 ∨ anc s c j = (nd s (pp s c j)).t2))
-  W3 : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ s.P.H → pp s c (j - 1) ∈ order s (pp s c j)
-  O2 : ∀ j, j ≤ s.P.H → ∀ c d, Before cl c d →
-    pp s c j = pp s d j ∨ Before (ord j) (pp s c j) (pp s d j)
+  /-- (S): below a ghost, the entry is in the table of the chunk's live ancestor. -/
+  Sr : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ s.P.H → ghostN s (pp s c j) →
+    pp s c (j - 1) ∈ order s (anc s c j)
   -- range pointers and tags
   ends : ∀ u, isN s u → (nd s u).first = (rng s cl u).headD NIL ∧
     (nd s u).last = (rng s cl u).getLastD NIL
   tags : ∀ c ∈ cl, s.tag c = tagF s c
-  labsOk : ∀ X, isN s X → GapsGe s.P.beta 1 (labs s X)
 
 end OM.Proof.Top
