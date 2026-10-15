@@ -56,9 +56,10 @@ def copyS (s : TS) (j : Job) (l : Nat) : TS :=
   let v := pth s j.x l
   let s1 := { s with path := s.path.setX j.y ((s.path.getX j.y).setX l v) }
   let s2 := { s1 with path := s1.path.setX j.z ((s1.path.getX j.z).setX l v) }
-  let s3 := if (nd s2 v).first == j.x then
+  let V := nd s2 v
+  let s3 := if V.first == j.x then
     { s2 with nodes := s2.nodes.modify v fun n => { n with first := j.y } } else s2
-  if (nd s3 v).last == j.x then
+  if V.last == j.x then
     { s3 with nodes := s3.nodes.modify v fun n => { n with last := j.z } } else s3
 
 /-- The state after the remaining copy steps `l, l+1, …, H`. -/
