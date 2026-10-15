@@ -63,6 +63,9 @@ theorem Exp.ev_monus (κ : Caps) (s : Core) (L : Loc) {a b : Exp} {x y : Nat} (h
   have h2 : Nat.max x y = if x ≤ y then y else x := rfl
   rw [if_pos h1]; congr 1; split at h2 <;> omega
 
+@[simp] theorem Exp.cost_monus (a b : Exp) : (Exp.monus a b).cost = 8 + 3 * a.cost + 4 * b.cost := by
+  simp [Exp.monus, Exp.max, Exp.cost]; omega
+
 /-- A procedure of the core language. -/
 structure Proc where
   name : String
