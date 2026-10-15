@@ -68,4 +68,42 @@ structure TopContract (TI : Core → Prop) (μ : Core → Nat) (J : Nat) (cap : 
     ∃ r s', (jobStep job).run s = .ok r s' ∧ TI { s' with resJob := r } ∧
       ∀ j', r = some j' → 1 ≤ μ { s' with resJob := r } ∧ μ { s' with resJob := r } < μ s
 
+/-- **The contract with a parameter-dependent job bound** (what M5 proves): a chunk split's job
+needs at most `J P` steps, `P` the core's parameters. -/
+structure TopContractP (TI : Core → Prop) (μ : Core → Nat) (J : Params → Nat) (cap : Params → Nat) :
+    Prop where
+  frame : ∀ s s', TopSame s s' → TI s → TI s'
+  mframe : ∀ s s', TopSame s s' → μ s' = μ s
+  start : ∀ s A x, INV s A → TI s → s.resJob = none → LiveC s x → cSt s x = .quiet →
+    s.C.size + 2 ≤ cap s.P →
+    ∃ job s2, (insertAround x s.C.size (s.C.size + 1)).run
+        (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) = .ok job s2 ∧
+      1 ≤ μ (markState s2 x s.C.size (s.C.size + 1) job) ∧
+      μ (markState s2 x s.C.size (s.C.size + 1) job) ≤ J s.P ∧
+      TI (markState s2 x s.C.size (s.C.size + 1) job)
+  step : ∀ s A job, INV s A → TI s → s.resJob = some job →
+    ∃ r s', (jobStep job).run s = .ok r s' ∧ TI { s' with resJob := r } ∧
+      ∀ j', r = some j' → 1 ≤ μ { s' with resJob := r } ∧ μ { s' with resJob := r } < μ s
+
+/-- `TI` at parameters `P`. -/
+def TIat (TI : Core → Prop) (P : Params) (s : Core) : Prop := TI s ∧ s.P = P
+
+/-- At fixed parameters, the job bound is a constant. -/
+theorem TopContractP.at {TI : Core → Prop} {μ : Core → Nat} {J cap : Params → Nat}
+    (h : TopContractP TI μ J cap) (P : Params) : TopContract (TIat TI P) μ (J P) cap := by
+  refine ⟨fun s s' hs hT => ⟨h.frame s s' hs hT.1, hs.P.trans hT.2⟩, h.mframe, ?_, ?_⟩
+  · intro s A x hI hT hres hx hq hcap
+    obtain ⟨job, s2, hrun, h1, h2, h3⟩ := h.start s A x hI hT.1 hres hx hq hcap
+    have hR : TopRel (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) s2 := by
+      have := top_insertAround x s.C.size (s.C.size + 1)
+        (linkChunkPair (push2 s) x s.C.size (s.C.size + 1))
+      rw [hrun] at this; exact this
+    refine ⟨job, s2, hrun, h1, by rw [← hT.2]; exact h2, h3, ?_⟩
+    show s2.P = P
+    rw [hR.rest.1, ← hT.2]; rfl
+  · intro s A job hI hT hres
+    obtain ⟨r, s', hrun, h1, h2⟩ := h.step s A job hI hT.1 hres
+    have hR : TopRel s s' := by have := top_jobStep job s; rw [hrun] at this; exact this
+    exact ⟨r, s', hrun, ⟨h1, by show s'.P = P; rw [hR.rest.1, hT.2]⟩, h2⟩
+
 end OM.Proof

@@ -121,7 +121,7 @@ set_option linter.deprecated false
 conditions, and Lemma R's I5 (M5 fixes `J` and `H`). -/
 structure CostSetup (mk : Nat → Params) (TI PI : Core → Prop) (μ : Core → Nat) (ν : Core → Nat)
     (Jf capf nf Rf : Params → Nat) : Prop where
-  top : ∀ N, TopContract TI μ (Jf (mk N)) capf
+  top : TopContractP TI μ Jf capf
   prep : PrepContract TI PI ν
   core : ∀ N, CoreP (mk N)
   gp : ∀ N, GParams (mk N)
@@ -143,7 +143,7 @@ variable {mk : Nat → Params} {TI PI : Core → Prop} {μ : Core → Nat} {ν :
 /-- A core in service: the cost invariant for its element list, which it counts. -/
 structure CoreOK (mk : Nat → Params) (TI : Core → Prop) (μ : Core → Nat)
     (Jf nf Rf : Params → Nat) (c : Core) (L : List Nat) : Prop where
-  cost : CostInv TI μ (Jf c.P) (nf c.P) (Rf c.P) L c
+  cost : CostInv (TIat TI c.P) μ (Jf c.P) (nf c.P) (Rf c.P) L c
   cnt : c.count = L.length
   pmk : c.P = mk c.P.N
 
@@ -165,7 +165,7 @@ theorem CoreOK.insert {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν Jf
   have hs := S.size N
   have hc := S.capc N
   rw [← hmk] at hs hc
-  have hTC : TopContract TI μ (Jf c.P) capf := by rw [hmk]; exact S.top N
+  have hTC : TopContract (TIat TI c.P) μ (Jf c.P) capf := S.top.at c.P
   obtain ⟨c', hr, hnf, hC', hcnt, hP⟩ := insertAfter_cost hTC
     h.cost hx (by rw [hmk]; exact S.kR N) (by rw [hmk]; exact S.R N) (by rw [hmk]; exact S.n1 N)
     (by omega) (by omega) (by rw [hmk]; exact S.I5 N) hh
@@ -179,7 +179,7 @@ theorem CoreOK.markDead {c : Core} {L : List Nat} (S : CostSetup mk TI PI μ ν 
     ∃ c', (OM.Model.markDead x).run c = .ok () c' ∧ CoreOK mk TI μ Jf nf Rf c' L ∧
       c'.count = c.count ∧ c'.P = c.P := by
   have hmk := h.pmk
-  have hTC : TopContract TI μ (Jf c.P) capf := by rw [hmk]; exact S.top c.P.N
+  have hTC : TopContract (TIat TI c.P) μ (Jf c.P) capf := S.top.at c.P
   obtain ⟨c', hr, hC'⟩ := markDead_cost hTC h.cost x
   have he : c' = { c with E := c.E.modify x fun e => { e with live := false } } := by
     rw [markDead_run] at hr; cases hr; rfl
@@ -240,7 +240,7 @@ theorem newCore_eager (S : CostSetup mk TI PI μ ν Jf capf nf Rf) (N : Nat) :
   obtain ⟨hcnt, hP⟩ := initCore_fields hr
   obtain ⟨hL, hI⟩ := lowinv_initCore (S.gp N) (S.cp N) (S.lp N) hr
   obtain ⟨hTI, hres⟩ := S.prep.eager _ _ hr
-  refine ⟨n, hnew, ⟨costInv_fresh hL hTI hres (by rw [hP]; exact S.n1 N) (gval_fresh hL hI),
+  refine ⟨n, hnew, ⟨costInv_fresh hL ⟨hTI, rfl⟩ hres (by rw [hP]; exact S.n1 N) (gval_fresh hL hI),
     by rw [hcnt, initAbs_elist]; rfl, by rw [hP]; show mk N = mk (mk N).N; rw [S.PN]⟩, hcnt, hP⟩
 
 /-- **A preparation step** of a core being built: it finishes (the core is in service) or it
@@ -261,7 +261,7 @@ theorem PrepOK.step (S : CostSetup mk TI PI μ ν Jf capf nf Rf) {n : Core}
     have hn1 : 1 ≤ nf n'.P := by rw [hP, hpm]; exact S.n1 _
     have hc1 : n'.count = initAbs.elist.length := by rw [hR.1.count, h.cnt, initAbs_elist]; rfl
     have hpm' : n'.P = mk n'.P.N := by rw [hP]; exact hpm
-    exact ⟨costInv_fresh hL' hTI hres hn1 (gval_fresh hL' hI'), hc1, hpm'⟩
+    exact ⟨costInv_fresh hL' ⟨hTI, rfl⟩ hres hn1 (gval_fresh hL' hI'), hc1, hpm'⟩
   · obtain ⟨hPI, hν⟩ := hF hb
     have hc1 : n'.count = 1 := by rw [hR.1.count, h.cnt]
     have hpm' : n'.P = mk n'.P.N := by rw [hP]; exact h.pmk
