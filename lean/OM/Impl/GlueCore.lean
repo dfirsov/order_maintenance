@@ -407,7 +407,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
         n ≤ 600) ∧
     (∃ L' n, evalF κ driveGroupS s1 (OM.Machine.State.setLocs (fun _ => 0) ["g"] [g]) = .ok s' L' n ∧
       n ≤ 30 + s1.P.K_G * 401) ∧
-    s'.Gs.size ≤ s.Gs.size + 2 ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size := by
+    s'.Gs.size ≤ s.Gs.size + 2 ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size ∧ s1.E = s.E ∧ s1.P = s.P := by
   have hgl := hI.mem_glist_iff.mpr hg
   have hgT : g < κ.tbl .G := by have := hg.2.1; have := K.G; omega
   have hLg : OM.Machine.State.setLocs (fun _ => 0) ["g"] [g] "g" = g := by
@@ -418,7 +418,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
     · simp [h]
   suffices hD : (∀ q, ((s1.Gs.getX g).st = .splitting ∧ q = g ∨
       (s1.Gs.getX g).st = .overflow ∧ q = (s1.Gs.getX g).src) → DriveAgree κ q s1 s') ∧
-      s'.Gs.size ≤ s.Gs.size + 2 ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size by
+      s'.Gs.size ≤ s.Gs.size + 2 ∧ s'.C.size = s.C.size ∧ s'.E.size = s.E.size ∧ s1.E = s.E ∧ s1.P = s.P by
     refine ⟨fun hc => ?_, driveGroupS_agree κ s1 _ hLg hgT h2 hD.1, hD.2⟩
     rw [if_pos hc] at h1
     exact startGroupSplitS_agree κ s _ hLg (by omega) K.C (hI.gP_lt hgl) (hI.gN_lt hgl) (hXc s hX g hg)
@@ -453,7 +453,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
         have hs1' : (s1.Gs.getX g).st = .splitting := hs1
         rw [driveGroup_split hs1'] at h2
         have e := hA.eq_of_run h2; subst e
-        refine ⟨fun q hq => ?_, by omega, by rw [hsz.2.1, S.Csize], by rw [hsz.2.2, S.E]⟩
+        refine ⟨fun q hq => ?_, by omega, by rw [hsz.2.1, S.Csize], by rw [hsz.2.2, S.E], S.E, S.P⟩
         rcases hq with ⟨-, rfl⟩ | ⟨h, -⟩
         · exact hA
         · rw [hs1'] at h; cases h
@@ -463,7 +463,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
         injection h1 with _ e; subst e
         simp only [gSt] at hst
         rw [driveGroup_quiet hst] at h2; injection h2 with _ e; subst e
-        refine ⟨fun q hq => ?_, by omega, rfl, rfl⟩
+        refine ⟨fun q hq => ?_, by omega, rfl, rfl, rfl, rfl⟩
         rcases hq with ⟨h, -⟩ | ⟨h, -⟩ <;> rw [hst] at h <;> cases h
     | overflow =>
       have hc : ¬ ((s.Gs.getX g).st == St.quiet && decide ((s.Gs.getX g).size ≥ s.P.G)) = true := by
@@ -495,7 +495,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
       have hst' : (s.Gs.getX g).st = .overflow := hst
       rw [driveGroup_ovf hst'] at h2
       have e := hA.eq_of_run h2; subst e
-      refine ⟨fun q hq => ?_, by omega, hsz.2.1, hsz.2.2⟩
+      refine ⟨fun q hq => ?_, by omega, hsz.2.1, hsz.2.2, rfl, rfl⟩
       rcases hq with ⟨h, -⟩ | ⟨-, rfl⟩
       · rw [hst'] at h; cases h
       · exact hA
@@ -513,7 +513,7 @@ theorem groupPhaseAgree {X Y : Core → Prop} {s : Core} {A : Abs} {gh : GGh} {g
       have hst' : (s.Gs.getX g).st = .splitting := hst
       rw [driveGroup_split hst'] at h2
       have e := hA.eq_of_run h2; subst e
-      refine ⟨fun q hq => ?_, by omega, hsz.2.1, hsz.2.2⟩
+      refine ⟨fun q hq => ?_, by omega, hsz.2.1, hsz.2.2, rfl, rfl⟩
       rcases hq with ⟨-, rfl⟩ | ⟨h, -⟩
       · exact hA
       · rw [hst'] at h; cases h
@@ -880,5 +880,167 @@ theorem reservationAgree_top {TI : Core → Prop} {μ : Core → Nat} {J n R : N
         obtain ⟨L', m, e, hm⟩ := hA t2 h
         exact ⟨L', m, e, by omega⟩)
   exact ⟨t', L', m, hrun, he, by unfold resBound; omega⟩
+
+theorem PQCaps.of_same {κ : Caps} {s s' : Core} (h : PQCaps κ s) (S : PQSame s s') : PQCaps κ s' :=
+  ⟨h.cC, h.cB, by rw [S.next]; exact h.next, by rw [S.prev]; exact h.prev, by rw [S.head]; exact h.head,
+    by rw [S.where_]; exact h.where_, by rw [S.nbn]; exact h.nbN, by rw [S.nbp]; exact h.nbP,
+    by rw [S.lo]; exact h.lo, by rw [S.hi]; exact h.hi⟩
+
+/-- The cost bound of the background work of one insertion at Level M. -/
+def bgBound (P : Params) : Nat :=
+  750 + 600 + (30 + P.K_G * 401) + (30 + P.K_C * 751) + resBound P.K_R + 100
+
+/-- **The background work agrees** (the context of `background_ok`), relative to a predicate `Mc`
+on cores that gives the Level M side conditions of the reservation and that its rounds keep. -/
+theorem bgAgree {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat} {L : List Nat}
+    {s0 s1 s2 : Core} {y g c : Nat} (hTC : TopContract TI μ J cap) (hTI : ∀ t, TI t → OM.Proof.Top.TopInv t)
+    (hPost : InsPost TI k J n R μ L s0 g c s2) (hy : y ∈ L) (heg1 : eG s1 y = g)
+    (hgc1 : gC s1 g = c) (hchunk : (chunkSize c true).run s1 = .ok () s2)
+    (hE12 : s2.E = s1.E) (hP1 : s1.P = s0.P) (hkP : s0.P.K_R = k) (hn : 1 ≤ n)
+    (hsize : 2 + 2 * (s2.count / (s0.P.theta + 1 - cmax s0.P)) ≤ n + 1)
+    (hcap : 2 + 2 * (s2.count / (s0.P.theta + 1 - cmax s0.P)) ≤ cap s0.P)
+    (hI5 : (s0.P.theta : ℝ) + R * (OM.Zeroing.Hn (n - 1) + 1) ≤ s0.P.T)
+    {κ : Caps} (Ly : Loc) (hLy : Ly "y" = y) (hpow : s0.P.a = 2 ^ Nat.log2 s0.P.a)
+    (hq1 : PQCaps κ s1) (hcC : c < Ccap κ) (hcB : (s1.C.getX c).size + 1 < Bcap κ)
+    (K1 : GCaps κ s1) (hG2 : s1.Gs.size + 2 ≤ κ.tbl .G) (hF0 : 0 < κ.lrec .freeG)
+    (hF : s1.freeG.length ≤ κ.lcap .freeG) (hyE : y < κ.tbl .E)
+    (Mc : Core → Prop) (hM4 : ∀ t, DFrame s2 t → PQCaps κ t → Mc t)
+    (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
+      ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
+    (hMpop : ∀ t c, Mc t → Mc (delSt t c))
+    (hMjob : ∀ s j t job r t1, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = some job →
+      (jobStep job).run t = .ok r t1 → Mc { t1 with resJob := r })
+    (hMsplit : ∀ s j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → pqPopMax.run t = .ok c t1 →
+      (splitChunkStart c).run t1 = .ok () t2 → Mc t2) :
+    ∃ s', (background y).run s1 = .ok () s' ∧
+      ∃ L' m, evalF κ backgroundS s1 Ly = .ok s' L' m ∧ m ≤ bgBound s0.P := by
+  obtain ⟨A, hI, hel⟩ := hPost.inv
+  obtain ⟨gh, hG⟩ := hPost.ginv
+  obtain ⟨s₀, hC, hLX⟩ := hPost.cinv
+  obtain ⟨e, pops, hN⟩ := hPost.cnt
+  obtain ⟨⟨lg, hLi⟩, hLP, hGP⟩ := hLX
+  have hP2 : s2.P = s0.P := hPost.P
+  obtain ⟨hgL, hgc, hpos⟩ := hPost.grp
+  have heg2 : eG s2 y = g := by simp only [eG, hE12]; exact heg1
+  have hS12 : Same s1 s2 := by have := pres_chunkSize c true s1; rw [hchunk] at this; exact this
+  subst hel
+  -- the group phase
+  have hXg := (((xgroup_cinv (L := A.elist) (δ := δ1 c) (δu := fun _ => 0) (s₀ := s₀) (c := c)
+    (by unfold δ1; simp)).and (xgroup_linv (L := A.elist) (s₀ := s₀) (δ := δ1 c)
+      (δu := fun _ => 0) (c := c))).and (xgroup_frame (L := A.elist) (c := c) s2)).and
+    (xgroup_track (L := A.elist) (c' := c) y c hy)
+  have hroom : gSt s2 g = .quiet → s2.P.G ≤ gSz s2 g → SplitRoom s2 g := by
+    intro hq hge
+    have hq0 := (hG.quiet g hgL hq).1
+    unfold δ1 at hq0; rw [if_pos rfl] at hq0
+    have hcl : LiveC s2 (gC s2 g) := by rw [hgc]; exact hPost.cL
+    have hδ1 : ∀ x, LiveC s2 x → cSt s2 x = .splitting →
+        δ1 c (cLl s2 x) + δ1 c x + δ1 c (cRr s2 x) ≤ 1 := by
+      intro x hx hxs
+      have Fx := hC.cfam x hx hxs
+      have h1 := Fx.lx hI hx; have h2 := Fx.rx hI hx; have h3 := Fx.lr hI hx
+      unfold δ1; split_ifs <;> simp_all
+    have hnd : cSt s2 c ≠ .dead := by rw [← hgc]; exact (hC.gchk g hgL).2
+    obtain ⟨harr, hins⟩ := chunk_budget hC hLi hPost.cp hPost.cL hnd hδ1 hPost.quiet
+    rw [← hgc] at harr hins
+    exact split_room hI hLi hLP hGP hgL hq (by omega) hcl harr hins
+  have hX0 : (((CInv s2 A.elist (δ1 c) (fun _ => 0) s₀ ∧ LX s₀ (δ1 c) (fun _ => 0) s2) ∧
+      CFrame s2 s2) ∧ gC s2 (eG s2 y) = c) :=
+    ⟨⟨⟨hC, ⟨lg, hLi⟩, hLP, hGP⟩, CFrame.refl s2⟩, by rw [heg2, hgc]⟩
+  obtain ⟨s3, hgp, hDD⟩ := groupPhase_ok hI (by rw [hgc]; exact hXg) hX0 hG hGP hgL hpos hroom
+  -- the state after the split start
+  have hsplit : ∃ s2', (if ((s2.Gs.getX g).st == St.quiet && decide ((s2.Gs.getX g).size ≥ s2.P.G)) = true then
+      startGroupSplit g else pure ()).run s2 = .ok () s2' ∧ (driveGroup g).run s2' = .ok () s3 := by
+    by_cases hcond : ((s2.Gs.getX g).st == St.quiet && decide ((s2.Gs.getX g).size ≥ s2.P.G)) = true
+    · rw [if_pos hcond] at hgp ⊢
+      obtain ⟨u, s2', h2a, h2b⟩ := run_bind_ok hgp
+      exact ⟨s2', h2a, h2b⟩
+    · rw [if_neg hcond] at hgp ⊢
+      exact ⟨s2, rfl, hgp⟩
+  obtain ⟨s2', h2a, h2b⟩ := hsplit
+  have K2 : GCaps κ s2 := ⟨by rw [hS12.1.Gsize]; exact K1.G, by rw [hS12.1.Esize]; exact K1.E,
+    by rw [hS12.1.Csize]; exact K1.C, K1.fl, K1.f0⟩
+  have hXc : ∀ t, (((CInv t A.elist (δ1 c) (fun _ => 0) s₀ ∧ LX s₀ (δ1 c) (fun _ => 0) t) ∧
+      CFrame s2 t) ∧ gC t (eG t y) = c) → ∀ g, LiveG t g → gC t g < t.C.size :=
+    fun t hx g hg => (hx.1.1.1.gchk g hg).1.2
+  obtain ⟨mG2, ⟨L3, n3, e3, hn3⟩, hsz3⟩ := groupPhaseAgree hI (by rw [hgc]; exact hXg) hX0 hG hGP hgL hpos hroom
+    hXc K2 (by rw [hS12.1.Gsize]; exact hG2) hF0 (by rw [hS12.1.freeG]; exact hF) h2a h2b
+  obtain ⟨hGs3, hCs3, hEs3, hE2', hP2'⟩ := hsz3
+  -- the state after the group phase
+  obtain ⟨A3, hI3, hel3⟩ := hDD.inv
+  obtain ⟨gh3, hG3⟩ := hDD.ginv
+  have hP3 : s3.P = s2.P := hDD.P
+  obtain ⟨δu', hC3, hLX3, hCF, htr⟩ : ∃ δu' : Nat → Nat, CInv s3 A.elist (δ1 c) δu' s₀ ∧
+      LX s₀ (δ1 c) δu' s3 ∧ CFrame s2 s3 ∧ gC s3 (eG s3 y) = c := by
+    rcases hDD.x with ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ | ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩
+    · exact ⟨_, h1, h2, h3, h4⟩
+    · exact ⟨_, h1, h2, h3, h4⟩
+  have hQS := hCF.qsame
+  have hcL3 : LiveC s3 c := by simp only [LiveC, hCF.Csize]; exact hPost.cL
+  have hcnd3 : cSt s3 c ≠ .dead := by
+    rw [(hCF.C c).2.1, ← hgc]; exact (hC.gchk g hgL).2
+  have hcsz3 : 1 ≤ cSz s3 c := by rw [(hCF.C c).1]; exact hPost.csz
+  -- the chunk phase
+  obtain ⟨t4, hdc, hCP4⟩ := driveChunk_ok hI3 hel3 hG3 (hel3 ▸ hC3) hLX3
+    (hN.frame hQS hCF.count) (by rw [hP3]; exact hGP) (by rw [hP3]; exact hPost.cp) hcL3 hcnd3
+    hcsz3
+  have K3 : GCaps κ s3 := ⟨by have := hS12.1.Gsize; have := K1.G; omega, by rw [hEs3, hS12.1.Esize]; exact K1.E,
+    by rw [hCs3, hS12.1.Csize]; exact K1.C, K1.fl, K1.f0⟩
+  obtain ⟨⟨L4, n4, e4, hn4⟩, -⟩ := driveChunkAgree hI3 hel3 hG3 (hel3 ▸ hC3) hLX3
+    (hN.frame hQS hCF.count) (by rw [hP3]; exact hGP) (by rw [hP3]; exact hPost.cp) hcL3 hcnd3
+    hcsz3 K3 hdc
+  have hD : DFrame s2 t4 := hCF.dframe.trans hCP4.fr
+  -- the reservation
+  obtain ⟨yg, ig, ag, ipg, jsg, hGm, hRA⟩ := hPost.game
+  have hk2 : s1.P.K_R = k := by rw [hP1]; exact hkP
+  have hP4 : t4.P = s0.P := hD.P.trans hP2
+  have h0 : ResInv TI k J n R μ A.elist t4 0 t4 := by
+    refine ⟨⟨hCP4.inv, hCP4.ginv, ⟨s₀, hCP4.cinv, hCP4.lx⟩, hPost.pq.dframe hD, hCP4.cnt,
+      by rw [hP4, ← hP2]; exact hPost.cp⟩, hTC.frame _ _ hD.topSame hPost.ti, rfl, rfl,
+      yg, ig, ag, ipg, jsg, hGm.mono (fun j => le_of_eq (by rw [hD.gvec])), ?_⟩
+    rw [hD.top.2.2.2.2.1, hTC.mframe _ _ hD.topSame]; exact hRA
+  -- chunkSize at Level M
+  have hcs1 : c < s1.C.size := by have := hPost.cL.2; rw [hS12.1.Csize] at this; exact this
+  obtain ⟨⟨L1, n1, e1, hn1⟩, hq2⟩ := csP_agree (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["c"] [c])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hcs1 (by have := K1.C; omega) hq1 hcC hcB hchunk
+  have hq4 : PQCaps κ t4 := hq2.of_same hD.pq
+  have hkt : t4.P.K_R = k := by rw [hP4]; exact hkP
+  obtain ⟨s', L5, n5, hres, e5, hn5⟩ := reservationAgree_top (κ := κ) (OM.Machine.State.setLocs (fun _ => 0) [] [])
+    hTC hTI (by rw [hkt]; exact h0) hn (by rw [hD.count, hP4]; exact hsize) (by rw [hD.count, hP4]; exact hcap)
+    (by rw [hP4]; exact hI5) (by rw [hP4]; exact hpow) Mc (hM4 t4 hD hq4) hMc hMpop
+    (fun j t job r t1 => hMjob t4 j t job r t1) (fun j t c t1 t2 => hMsplit t4 j t c t1 t2)
+  rw [hkt] at hres
+  -- assembly
+  have hgo1 : gOf s1 y = g := heg1
+  have hco1 : cOf s1 y = c := by show gC s1 (eG s1 y) = c; rw [heg1, hgc1]
+  have hgo2 : gOf s2 y = g := heg2
+  have hgo2' : gOf s2' y = g := by show (s2'.E.getX y).grp = g; rw [hE2']; exact heg2
+  have hgo3 : gOf s3 y < s3.Gs.size := by
+    have := (hI3.mem_glist_iff.mp (hI3.eG_mem (hel3 ▸ hy))).2.1; exact this
+  have hco3 : cOf s3 y = c := htr
+  have hb : bgSplit s2 y s1.P = ((s2.Gs.getX g).st == St.quiet && decide ((s2.Gs.getX g).size ≥ s2.P.G)) := by
+    simp only [bgSplit, hgo2, hP1, hP2]
+  obtain ⟨hrun, L', m, e, hm⟩ := backgroundS_agree (κ := κ) (L := Ly) (s0 := s1) (s1 := s2) (s2 := s2') (s3 := s3)
+    (s4 := t4) (s5 := s') hLy (by rw [hco1]; exact hchunk) (by rw [hb, hgo2]; exact h2a) (by rw [hgo2']; exact h2b)
+    (by rw [hco3]; exact hdc) (by rw [hk2]; exact hres)
+    ⟨L1, n1, by rw [hco1]; exact e1, hn1⟩
+    (fun hc => by
+      rw [hb] at hc
+      obtain ⟨L2, n2, e2, hn2⟩ := mG2 hc
+      exact ⟨L2, n2, by rw [hgo2]; exact e2, hn2⟩)
+    ⟨L3, n3, by rw [hgo2']; exact e3, hn3⟩
+    ⟨L4, n4, by rw [hco3]; exact e4, hn4⟩
+    ⟨L5, n5, e5, hn5⟩
+    (by rw [hP1, hP2]) hyE (by rw [hgo1]; have := hgL.2.1; rw [hS12.1.Gsize] at this; have := K1.G; omega)
+    (by rw [hgo2]; have := hgL.2.1; have := K2.G; omega) (by rw [hgo2']; have := hgL.2.1; have := K2.G; omega)
+    (by have := K3.G; omega)
+  refine ⟨s', hrun, L', m, e, ?_⟩
+  have hP2'' : s2'.P = s0.P := by rw [hP2', hP2]
+  have hP3' : s3.P = s0.P := by rw [hP3, hP2]
+  rw [hP2'', hP3', hP4] at hm
+  unfold bgBound
+  generalize resBound s0.P.K_R = RB at hm ⊢
+  exact hm
+
 
 end OM.Impl
