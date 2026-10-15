@@ -10,6 +10,11 @@ open OM.Model OM.Proof
 
 set_option linter.deprecated false
 
+theorem foldr_sum (l : List Nat) (f : Nat → Nat) : l.foldr (fun e acc => acc + f e) 0 = (l.map f).sum := by
+  induction l with
+  | nil => rfl
+  | cons a t ih => simp [ih]; omega
+
 /-- The job after the walk starts a drain at `v` (`up` its live parent). -/
 def drainJob (j : Job) (v up : Nat) : Job := { j with pc := .afterDrain v up }
 
@@ -434,6 +439,114 @@ theorem time : Timing S' cl (some (drainJob j v (nd (ts s) v).livePar)) := by
       have := (C.tw_new_range u (by omega)).1
       have hl := C.TP.lamK (Top.ht (ts s) v) C.h1
       omega
+
+/-- **The potential of a table that held `v`.** -/
+theorem growth_tab {X : Nat} (hT : X ∈ (nd (ts s) v).inTables) :
+    growth S' cl X + (if X < v then tw (ts s) cl v - taud s.P (Top.ht (ts s) v) else 0) = growth (ts s) cl X ∧
+    oldLive S' X + (if v < X then 1 else 0) = oldLive (ts s) X := by
+  have hvlt := C.H.hv
+  obtain ⟨hX, hXh, hvX⟩ := C.inTab X hT
+  have hXn := C.nN X hX
+  have hXnn : ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) := fun h => h.elim hXn.1 hXn.2
+  have hXv : X ≠ v := fun e => by rw [e] at hXh; omega
+  obtain ⟨P, Q, hPQ⟩ := List.mem_iff_append.mp hvX
+  have hnd : (Top.order (ts s) X).Nodup := (C.S.ordNodup _).sublist (C.S.O1 X hX)
+  have hord' : Top.order S' X = P ++ s.nodes.size :: v :: (s.nodes.size + 1) :: Q := by
+    rw [C.order, if_neg hXn.1, if_neg hXn.2, if_pos hT, hPQ]
+    rw [hPQ] at hnd
+    have hP : v ∉ P := fun h => (List.nodup_append.mp hnd).2.2 v h v (by simp) rfl
+    rw [replace1_split _ hP]; simp
+  rw [hPQ] at hnd
+  have hPQv : ∀ e ∈ P ++ Q, e ≠ v ∧ Top.isN (ts s) e ∧ Top.ht (ts s) e = Top.ht (ts s) v := by
+    intro e he
+    have hvP : v ∉ P := fun h => (List.nodup_append.mp hnd).2.2 v h v (by simp) rfl
+    have hvQ : v ∉ Q := (List.nodup_cons.mp (List.nodup_append.mp hnd).2.1).1
+    have hem : e ∈ Top.order (ts s) X := by
+      rw [hPQ]
+      rcases List.mem_append.mp he with h | h
+      · exact List.mem_append_left _ h
+      · exact List.mem_append_right _ (List.mem_cons_of_mem _ h)
+    have hent := C.S.tabEnt X hX e hem
+    rw [hXh, Nat.add_sub_cancel] at hent
+    obtain ⟨hn, hh⟩ := (C.S.ordMem _ C.h1 (by have := C.hHt; omega) e).mp hent
+    refine ⟨fun h => ?_, hn, hh⟩
+    subst h
+    simp only [List.mem_append] at he
+    rcases he with h | h
+    · exact hvP h
+    · exact hvQ h
+  have hl : ∀ e ∈ P ++ Q, (Top.liveN S' e ↔ Top.liveN (ts s) e) ∧ tw S' cl e = tw (ts s) cl e := by
+    intro e he
+    obtain ⟨hev, hn, -⟩ := hPQv e he
+    refine ⟨?_, C.tw_old hn hev⟩
+    rw [C.liveN]
+    have := C.nN e hn
+    constructor
+    · rintro (⟨h, -⟩ | h | h)
+      · exact h
+      · exact absurd h this.1
+      · exact absurd h this.2
+    · intro h; exact Or.inl ⟨h, hev⟩
+  have hNl : Top.liveN S' s.nodes.size := (C.liveN _).mpr (Or.inr (Or.inl rfl))
+  have hN1l : Top.liveN S' (s.nodes.size + 1) := (C.liveN _).mpr (Or.inr (Or.inr rfl))
+  have hvl' : ¬Top.liveN S' v := fun h => by
+    rcases (C.liveN v).mp h with ⟨-, h⟩ | h | h
+    · exact h rfl
+    · omega
+    · omega
+  have hXN : X < s.nodes.size := hX.2.1
+  have hτN := (C.tw_new_range _ (Or.inl rfl)).2
+  have hτN1 := (C.tw_new_range _ (Or.inr rfl)).2
+  have hht : Top.ht S' X - 1 = Top.ht (ts s) v := by rw [C.ht X, if_neg hXnn, hXh, Nat.add_sub_cancel]
+  have hht' : Top.ht (ts s) X - 1 = Top.ht (ts s) v := by rw [hXh, Nat.add_sub_cancel]
+  constructor
+  · unfold growth
+    rw [hord', hPQ, foldr_sum, foldr_sum, hht, hht', C.H.P, show (ts s).P = s.P from rfl]
+    have eP : (P.filter fun e => decide (Top.liveN S' e) && decide (X < e)) =
+        P.filter fun e => decide (Top.liveN (ts s) e) && decide (X < e) :=
+      List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
+        decide_eq_decide.mpr (hl e (by simp [he])).1])
+    have eQ : (Q.filter fun e => decide (Top.liveN S' e) && decide (X < e)) =
+        Q.filter fun e => decide (Top.liveN (ts s) e) && decide (X < e) :=
+      List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
+        decide_eq_decide.mpr (hl e (by simp [he])).1])
+    rw [List.filter_append, List.filter_append, eP, List.filter_cons, List.filter_cons, List.filter_cons,
+      List.filter_cons, eQ]
+    simp only [decide_eq_true hNl, decide_eq_true hN1l, decide_eq_false hvl', decide_eq_true C.vl,
+      decide_eq_true hXN, decide_eq_true (show X < s.nodes.size + 1 by omega), Bool.true_and, Bool.false_and,
+      if_true, Bool.false_eq_true, if_false]
+    have mP : ((P.filter fun e => decide (Top.liveN (ts s) e) && decide (X < e)).map
+        fun e => tw S' cl e - taud s.P (Top.ht (ts s) v)) =
+        (P.filter fun e => decide (Top.liveN (ts s) e) && decide (X < e)).map
+        fun e => tw (ts s) cl e - taud s.P (Top.ht (ts s) v) :=
+      List.map_congr_left (fun e he => by rw [(hl e (by simp [(List.mem_filter.mp he).1])).2])
+    have mQ : ((Q.filter fun e => decide (Top.liveN (ts s) e) && decide (X < e)).map
+        fun e => tw S' cl e - taud s.P (Top.ht (ts s) v)) =
+        (Q.filter fun e => decide (Top.liveN (ts s) e) && decide (X < e)).map
+        fun e => tw (ts s) cl e - taud s.P (Top.ht (ts s) v) :=
+      List.map_congr_left (fun e he => by rw [(hl e (by simp [(List.mem_filter.mp he).1])).2])
+    simp only [List.map_append, List.map_cons, List.sum_append, List.sum_cons, mP, mQ]
+    by_cases hXv' : X < v
+    · simp only [decide_eq_true hXv', if_true, List.map_cons, List.sum_cons]; rw [if_pos hXv']; omega
+    · simp only [decide_eq_false hXv', Bool.false_eq_true, if_false]; rw [if_neg hXv']; omega
+  · unfold oldLive
+    rw [hord', hPQ]
+    have eP : (P.filter fun e => decide (Top.liveN S' e) && decide (e < X)) =
+        P.filter fun e => decide (Top.liveN (ts s) e) && decide (e < X) :=
+      List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
+        decide_eq_decide.mpr (hl e (by simp [he])).1])
+    have eQ : (Q.filter fun e => decide (Top.liveN S' e) && decide (e < X)) =
+        Q.filter fun e => decide (Top.liveN (ts s) e) && decide (e < X) :=
+      List.filter_congr (fun e he => by rw [show (decide (Top.liveN S' e) = decide (Top.liveN (ts s) e)) from
+        decide_eq_decide.mpr (hl e (by simp [he])).1])
+    rw [List.filter_append, List.filter_append, eP, List.filter_cons, List.filter_cons, List.filter_cons,
+      List.filter_cons, eQ]
+    simp only [decide_eq_false hvl', decide_eq_true C.vl, decide_eq_false (show ¬(s.nodes.size < X) by omega),
+      decide_eq_false (show ¬(s.nodes.size + 1 < X) by omega), Bool.and_false, Bool.true_and, Bool.false_and,
+      Bool.false_eq_true, if_false]
+    by_cases hvX : v < X
+    · simp only [decide_eq_true hvX, if_true, List.length_append, List.length_cons]; rw [if_pos hvX]; omega
+    · simp only [decide_eq_false hvX, Bool.false_eq_true, if_false, List.length_append]; rw [if_neg hvX]; omega
 
 end SDCtx
 
