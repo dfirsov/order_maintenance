@@ -25,15 +25,6 @@ theorem getD_ne_of_nodup {l : List Nat} (hl : l.Nodup) {i j : Nat} (hi : i < l.l
 theorem getD_mem' {l : List Nat} {i : Nat} (hi : i < l.length) : l.getD i 0 ∈ l := by
   rw [List.getD_eq_getElem _ _ hi]; exact List.getElem_mem hi
 
-/-- A drain's targets weigh at most `Π_h` together. -/
-theorem Timing.ew_le {s : TS} {cl : List Nat} {oj : Option Job} (Ti : Timing s cl oj) (hTP : TopParams s.P)
-    {g : Nat} (hg : ghostN s g) : ew s cl g ≤ Pid s.P (ht s g) := by
-  have h1 := Ti.wF g hg
-  have h2 := (Ti.wB g hg).2
-  have h3 := Ti.fund_le hTP hg
-  unfold fundOf at h3
-  unfold Pid; omega
-
 theorem cutLen_ones : ∀ (m b : Nat), cutLen (List.replicate m 1) b = min m b
   | 0, b => by simp [cutLen]
   | m + 1, b => by

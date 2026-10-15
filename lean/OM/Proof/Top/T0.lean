@@ -1,4 +1,4 @@
-import OM.Proof.Top.Step
+import OM.Proof.Top.Len
 
 /-!
 # M5: Lemma T0 (the partition of a drain)

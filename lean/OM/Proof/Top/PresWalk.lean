@@ -173,7 +173,8 @@ theorem inv_winc {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
   have Ti := hI.time
   have hW' : ∀ u, u ≠ v → (nd (ts (wiC s v)) u).weight = (nd (ts s) u).weight := fun u hu => by
     rw [hW u, if_neg hu]
-  refine ⟨SH, ?_, ?_, ?_, by rw [hP]; exact hI.cap⟩
+  refine ⟨SH, ?_, ?_, ?_, by rw [hP]; exact hI.cap,
+    hI.len.congr fun X => ⟨(wiC_sameTree s v).order X, (wiC_sameTree s v).side X⟩⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
       fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_, ?_⟩
     · rw [T.liveN] at hu

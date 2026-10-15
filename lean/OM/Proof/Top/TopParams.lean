@@ -121,9 +121,38 @@ theorem room_8 (hb : P.beta = 64) (h : Nat) (h1 : 1 ≤ h) : 2 ^ Dmax P h * (n0m
           Nat.mul_le_mul (Nat.pow_le_pow_right (by norm_num) hd) (by omega)
       _ ≤ 2 ^ 64 := by norm_num
 
+theorem tab_8 (h : Nat) (h1 : 1 ≤ h) : n0max P h + 2 * Dmax P h ≤ 160 := by
+  have hP1 : Pid P 1 = 24 := by rw [Pid_eq ha hs]; norm_num
+  have hP2 : Pid P 2 = 160 := by rw [Pid_eq ha hs]; norm_num
+  have hP3 : Pid P 3 = 1256 := by rw [Pid_eq ha hs]; norm_num
+  have ht1 : taud P 1 = 9 := by show P.a + 1 = 9; rw [ha]
+  have hl1 : lamd P 1 = 8 := by show P.a = 8; rw [ha]
+  have ht2 : taud P 2 = 89 := by rw [show 2 = 0 + 2 from rfl, taud_eq ha hs, hP1]; norm_num
+  have hl2 : lamd P 2 = 41 := by rw [show 2 = 0 + 2 from rfl, lamd_eq ha hs, hP1]; norm_num
+  have ht3 : taud P 3 = 673 := by rw [show 3 = 1 + 2 from rfl, taud_eq ha hs, hP2]; norm_num
+  have hg1 : gamd P 1 = 8 := by unfold gamd; rw [Wd_eq ha hs, ht1]; norm_num
+  have hg2 : gamd P 2 = 40 := by unfold gamd; rw [Wd_eq ha hs, ht2]; norm_num
+  obtain ⟨k, rfl⟩ : ∃ k, h = k + 1 := ⟨h - 1, by omega⟩
+  rcases k with _ | _ | _ | k
+  · have hn : n0max P 1 = 9 := by unfold n0max; rw [if_pos le_rfl, ha]
+    have hd : Dmax P 1 = 12 := by unfold Dmax; rw [if_pos le_rfl, hP1]
+    rw [hn, hd]; norm_num
+  · have hn : n0max P 2 = 18 := by unfold n0max; rw [if_neg (by omega), ht2, show 2 - 1 = 1 from rfl, hl1]
+    have hd : Dmax P 2 = 39 := by
+      unfold Dmax; rw [if_neg (by omega), hn, hP2, show 2 - 1 = 1 from rfl, hg1]
+    rw [show 0 + 1 + 1 = 2 from rfl, hn, hd]; norm_num
+  · have hn : n0max P 3 = 25 := by unfold n0max; rw [if_neg (by omega), ht3, show 3 - 1 = 2 from rfl, hl2]
+    have hd : Dmax P 3 = 57 := by
+      unfold Dmax; rw [if_neg (by omega), hn, hP3, show 3 - 1 = 2 from rfl, hg2]
+    rw [show 0 + 1 + 1 + 1 = 3 from rfl, hn, hd]; norm_num
+  · rw [show k + 1 + 1 + 1 + 1 = k + 4 from rfl]
+    have hn := n0max_le ha hs k
+    have hd := Dmax_le ha hs k
+    omega
+
 /-- **The top structure's parameter conditions** for `a = 8`, `s = 11`, `β = 64`. -/
 theorem topParams_8 (hb : P.beta = 64) : TopParams P :=
-  ⟨s3_8 ha hs, lamK_8 ha hs, room_8 ha hs hb, piW_8 ha hs, gam1_8 ha hs⟩
+  ⟨s3_8 ha hs, lamK_8 ha hs, room_8 ha hs hb, piW_8 ha hs, gam1_8 ha hs, tab_8 ha hs⟩
 
 end
 

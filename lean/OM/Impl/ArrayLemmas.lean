@@ -45,3 +45,24 @@ theorem Array.modify_congr_getX {α : Type} [Inhabited α] (a : Array α) (i : N
     · simp [e]
 
 end OM.Impl
+
+namespace OM.Impl
+
+/-- Evaluate a core-language program symbolically (with extra facts). -/
+macro "dsl_simp" "[" ls:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| simp [evalF, Exp.ev, evList, Res.bind, Res.addCost, Fld.set, Fld.get, Fld.cap, EF.get, GF.get,
+      CF.get, NF.get, SF.get, AF.get, EF.ok, GF.ok, CF.ok, NF.ok, SF.ok, SF.set, AF.set, Exp.sc, Stm.wsc, Exp.ar,
+      Stm.war, OM.Machine.State.upd, Exp.cost, costList, PF.get, Tbl.size, Tbl.push, pushCost, Proc.call,
+      $ls,*])
+
+/-- `set!` is a `modify` with a constant. -/
+theorem Array.set!_eq_modify {α : Type} (a : Array α) (i : Nat) (v : α) : a.set! i v = a.modify i (fun _ => v) := by
+  apply Array.ext
+  · simp
+  · intro j h1 h2
+    simp only [Array.getElem_modify, Array.set!, Array.getElem_setIfInBounds]
+    by_cases e : i = j
+    · subst e; simp
+    · rw [Array.getElem_setIfInBounds_ne (by simpa using h2) e]; simp [e]
+
+end OM.Impl

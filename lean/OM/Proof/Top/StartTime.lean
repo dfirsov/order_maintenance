@@ -23,6 +23,11 @@ def drSD (dr : Nat → Nat) (tabs : List Nat) (N : Nat) (T : Nat) : Nat :=
 def n0SD (n0 : Nat → Nat) (N lL lR : Nat) (T : Nat) : Nat :=
   if T = N then lL else if T = N + 1 then lR else n0 T
 
+theorem length_replace1_le (l : List Nat) (x a b c : Nat) : (l.replace1 x [a, b, c]).length ≤ l.length + 2 := by
+  induction l with
+  | nil => simp [List.replace1]
+  | cons y t ih => simp only [List.replace1]; split <;> simp <;> omega
+
 /-- The job after the walk starts a drain at `v` (`up` its live parent). -/
 def drainJob (j : Job) (v up : Nat) : Job := { j with pc := .afterDrain v up }
 
@@ -774,11 +779,64 @@ theorem job : JobOK S' cl (drainJob j v (nd (ts s) v).livePar) := by
     · exact Or.inr rfl
   · rw [C.anc C.y_mem _ (by omega), if_neg (fun h => by omega), anc_succ _ _ C.h1, ← C.vy]
 
+/-- **Table lengths after a drain starts.** -/
+theorem len : TabLen S' (drSD dr (nd (ts s) v).inTables s.nodes.size)
+    (n0SD n0 s.nodes.size (sLeft (wiC s v) v side).length (sRight (wiC s v) v side).length) := by
+  have hvlt := C.H.hv
+  have hTP' : TopParams (ts (sdS (wiC s v) v side)).P := by rw [C.H.P]; exact C.TP
+  have hcap' : cl.length + 2 ≤ Wd (ts (sdS (wiC s v) v side)).P ((ts (sdS (wiC s v) v side)).P.H - 1) := by
+    rw [C.H.P]; exact C.I.cap
+  have hvT : v ∉ (nd (ts s) v).inTables := fun h => by have := (C.inTab v h).2.1; omega
+  have htab := C.TP.tab (Top.ht (ts s) v) C.h1
+  intro X
+  obtain ⟨a, b, c⟩ := C.I.len X
+  unfold drSD n0SD
+  by_cases hT : X ∈ (nd (ts s) v).inTables
+  · have hXn := C.nN X (C.inTab X hT).1
+    rw [if_pos hT, if_neg hXn.1, if_neg hXn.2]
+    have hXN : Top.isN S' X := (C.isN X).mpr (Or.inl (C.inTab X hT).1)
+    have hb := C.room.len_le C.shape C.time hTP' hcap' hXN
+    unfold drSD n0SD at hb; rw [if_pos hT, if_neg hXn.1, if_neg hXn.2] at hb
+    refine ⟨?_, ?_, hb⟩
+    · rw [C.order, if_neg hXn.1, if_neg hXn.2, if_pos hT]
+      have := length_replace1_le (Top.order (ts s) X) v s.nodes.size v (s.nodes.size + 1)
+      omega
+    · rw [C.H.sides, if_neg (show ¬X = v from fun e => hvT (Eq.mp (congrArg (· ∈ (nd (ts s) v).inTables) e) hT)),
+        if_neg (show ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) from fun h => h.elim hXn.1 hXn.2), if_pos hT]
+      have := OM.Proof.Top.length_sideAround_le (nd (ts s) X) v s.nodes.size (s.nodes.size + 1)
+      omega
+  · rw [if_neg hT]
+    by_cases hN : X = s.nodes.size
+    · subst hN
+      rw [if_pos (Or.inl rfl), if_pos rfl]
+      have hl := sc_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look
+      refine ⟨?_, ?_, by omega⟩
+      · rw [C.order, if_pos rfl]; omega
+      · rw [C.H.sides, if_neg (by omega), if_pos (Or.inl rfl)]; simp
+    by_cases hN1 : X = s.nodes.size + 1
+    · subst hN1
+      rw [if_pos (Or.inr rfl), if_neg (by omega), if_pos rfl]
+      have hl := sc_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look
+      refine ⟨?_, ?_, by omega⟩
+      · rw [C.order, if_neg (by omega), if_pos rfl]; omega
+      · rw [C.H.sides, if_neg (by omega), if_pos (Or.inr rfl)]; simp
+    rw [if_neg (show ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) from fun h => h.elim hN hN1), if_neg hN,
+      if_neg hN1]
+    refine ⟨?_, ?_, c⟩
+    · rw [C.order, if_neg hN, if_neg hN1, if_neg hT]; exact a
+    · rw [C.H.sides, if_neg (show ¬(X = s.nodes.size ∨ X = s.nodes.size + 1) from fun h => h.elim hN hN1),
+        if_neg hT]
+      by_cases hv : X = v
+      · rw [if_pos hv]; subst hv
+        have := sp_side_len C.pc C.v0 C.I C.lp C.TP C.of C.W C.hside
+        omega
+      · rw [if_neg hv]; exact b
+
 /-- **The invariant after a drain starts.** -/
 theorem inv : InvJ S' cl (ordSD ord (Top.ht (ts s) v) v s.nodes.size) (drSD dr (nd (ts s) v).inTables s.nodes.size)
     (n0SD n0 s.nodes.size (sLeft (wiC s v) v side).length (sRight (wiC s v) v side).length)
     (some (drainJob j v (nd (ts s) v).livePar)) :=
-  ⟨C.shape, C.time, C.room, fun j' hj => by cases hj; exact C.job, by rw [C.H.P]; exact C.I.cap⟩
+  ⟨C.shape, C.time, C.room, fun j' hj => by cases hj; exact C.job, by rw [C.H.P]; exact C.I.cap, C.len⟩
 
 end SDCtx
 

@@ -751,7 +751,14 @@ theorem inv_drainFinish {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr 
   have hfun : ∀ u, funded (ts (fdS v s)) (some { j with pc := .walk (some up) }) u ↔
       funded (ts s) (some { j with pc := .fund w up v k }) u := by
     intro u; unfold funded; simp only [F.anc, F.ht, F.t1, F.t2]
-  refine ⟨SH, ?_, ?_, ?_, by rw [F.P]; exact hI.cap⟩
+  have hlen : TabLen (ts (fdS v s)) dr n0 := hI.len.mono fun X => by
+    unfold order Node.order
+    rw [F.node X]
+    split
+    · simp only [List.length_map, assocErase]
+      exact ⟨List.length_filter_le _ _, List.length_filter_le _ _⟩
+    · simp
+  refine ⟨SH, ?_, ?_, ?_, by rw [F.P]; exact hI.cap, hlen⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
       fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_, ?_⟩
     · rw [hL] at hu; rw [F.weight, hpend, F.tw]; exact Ti.wts u hu

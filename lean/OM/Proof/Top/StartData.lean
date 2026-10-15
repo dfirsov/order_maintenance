@@ -120,3 +120,52 @@ theorem fixSides_spec (ns : Array Node) : ∀ (es : List Nat) (side : List (Nat 
       · simp only [List.mem_cons, hxe, false_or]
 
 end OM.Proof.Top
+
+namespace OM.Proof.Top
+
+open OM.Model
+
+/-! ### Side list lengths -/
+
+theorem length_assocSet_of_some {β : Type} {l : List (Nat × β)} {k : Nat} (v : β)
+    (h : (lookup l k).isSome) : (assocSet l k v).length = l.length := by
+  unfold assocSet
+  have : l.any (·.1 == k) = true := by
+    unfold lookup at h
+    obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp h
+    simp only [Option.map_eq_some_iff] at hp
+    obtain ⟨q, hq, -⟩ := hp
+    exact List.any_eq_true.mpr ⟨q, List.mem_of_find?_eq_some hq, by simpa using List.find?_some hq⟩
+  rw [if_pos this]; simp
+
+theorem length_sideStep_fold (b : Nat) : ∀ (l : List Nat) (acc : List (Nat × Side) × Side),
+    (l.foldl (sideStep b) acc).1.length ≤ acc.1.length + l.length
+  | [], _ => by simp
+  | e :: l, acc => by
+    simp only [List.foldl_cons, List.length_cons]
+    have := length_sideStep_fold b l (sideStep b acc e)
+    have h2 : (sideStep b acc e).1.length ≤ acc.1.length + 1 := by
+      unfold sideStep assocSet; split <;> (split <;> simp)
+    omega
+
+theorem length_sidesOf (order : List Nat) (b : Nat) : (sidesOf order b).length ≤ order.length := by
+  rw [sidesOf_eq]; have := length_sideStep_fold b order ([], .left); simpa using this
+
+theorem length_fixSides (ns : Array Node) : ∀ (es : List Nat) (side side' : List (Nat × Side)),
+    (∀ e ∈ es, (lookup side e).isSome) → fixSides ns es side = some side' → side'.length = side.length
+  | [], side, side', _, h => by simp [fixSides] at h; rw [h]
+  | e :: es, side, side', hk, h => by
+    simp only [fixSides] at h
+    split at h
+    · split at h
+      · next st _ =>
+        have hk' : ∀ e' ∈ es, (lookup (assocSet side e st) e').isSome := by
+          intro e' he'
+          rw [lookup_assocSet]; split
+          · rfl
+          · exact hk e' (List.mem_cons_of_mem _ he')
+        rw [length_fixSides ns es _ side' hk' h, length_assocSet_of_some st (hk e (by simp))]
+      · simp at h
+    · exact length_fixSides ns es side side' (fun e' he' => hk e' (List.mem_cons_of_mem _ he')) h
+
+end OM.Proof.Top

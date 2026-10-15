@@ -360,7 +360,7 @@ theorem topInv (hTP : TopParams P) (H3 : 3 ≤ P.H) : TopInv s := by
   have hfc : s.firstChunk = 1 := F.low.rest.2.2.2.2.2.1
   unfold TopInv; rw [F.res]; simp only [finS]
   refine ⟨by rw [hP]; exact hTP, [1], chainOrd P, fun _ => 0, fun _ => 1, ⟨by simp, by simp [NIL], ?_, ?_, ?_⟩,
-    fun c => ?_, ⟨F.shape H3 hb, F.time hTP, F.room hTP hb, fun _ h => absurd h (by simp), ?_⟩⟩
+    fun c => ?_, ⟨F.shape H3 hb, F.time hTP, F.room hTP hb, fun _ h => absurd h (by simp), ?_, fun X => ?_⟩⟩
   · rw [hfc]; rfl
   · intro x hx; simp only [List.mem_singleton] at hx; subst hx
     show (s.C.getX 1).next = _; rw [hC1]; rfl
@@ -374,6 +374,11 @@ theorem topInv (hTP : TopParams P) (H3 : 3 ≤ P.H) : TopInv s := by
       calc 2 = 2 ^ 1 := rfl
         _ ≤ 2 ^ (P.H - 1) := Nat.pow_le_pow_right (by omega) (by omega)
     omega
+  · unfold order Node.order
+    rw [F.nd_eq X]
+    split
+    · simp [chainNd]
+    · exact ⟨Nat.zero_le _, Nat.zero_le _, by norm_num⟩
 
 end Final
 

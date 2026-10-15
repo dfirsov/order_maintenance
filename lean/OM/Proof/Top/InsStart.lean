@@ -102,6 +102,23 @@ theorem cP_markState (t : Core) (x y z : Nat) (j : Job) (c : Nat) :
   unfold cP markState; simp only [Array.getX_modify]; split_ifs <;> rfl
 
 /-- **The contract's `start`.** -/
+theorem length_assocSet_le {β : Type} (l : List (Nat × β)) (k : Nat) (v : β) :
+    (assocSet l k v).length ≤ l.length + 1 := by
+  unfold assocSet; split <;> simp
+
+theorem length_aroundT_le (tab : List (Nat × Nat)) (e n1 n2 a b : Nat) :
+    (aroundT tab e n1 n2 a b).length ≤ tab.length + 2 := by
+  unfold aroundT; simp only [List.length_insertIdx]; split <;> split <;> omega
+
+theorem length_sideAround_le (T : Node) (e n1 n2 : Nat) :
+    (sideAround T e n1 n2).length ≤ T.side.length + 2 := by
+  unfold sideAround; split
+  · have h1 := length_assocSet_le T.side n1 ((lookup T.side e).getD .left)
+    have h2 := length_assocSet_le (assocSet T.side n1 ((lookup T.side e).getD .left)) n2
+      ((lookup T.side e).getD .left)
+    omega
+  · omega
+
 theorem top_start {s : Core} {A : Abs} {x : Nat} (hA : INV s A) (hT : TopInv s)
     (hres : s.resJob = none) (hxL : LiveC s x) (hcap : s.C.size + 2 ≤ capT s.P) :
     ∃ job s2, (insertAround x s.C.size (s.C.size + 1)).run
@@ -283,17 +300,48 @@ theorem top_start {s : Core} {A : Abs} {x : Nat} (hA : INV s A) (hT : TopInv s)
   · show InvJ (finS (ts (markState (ins3 s x f1x i1) x s.C.size (s.C.size + 1) (insJob s x)))
       (some (insJob s x))) _ _ _ _ (some (insJob s x))
     rw [hfin]
-    refine ⟨SH, ins_time hI hC hx F hTP, ins_room hI hC hx F hTP, fun j hj => ?_, ?_⟩
-    · cases hj
-      refine ⟨⟨Al, Bl, hcl'⟩, ?_⟩
-      show 1 ≤ 1 ∧ 1 ≤ (insFin s x f1x i1).P.H ∧
-        lpr (insFin s x f1x i1) s.C.size = lpr (insFin s x f1x i1) x ∧
-        lpr (insFin s x f1x i1) (s.C.size + 1) = lpr (insFin s x f1x i1) x
-      rw [F.P, F.lpar, F.lpar, F.lpar, if_pos (Or.inl rfl), if_pos (Or.inr rfl), if_neg (by omega)]
-      exact ⟨le_rfl, by omega, rfl, rfl⟩
-    · rw [F.P, hcl', List.length_append, List.length_cons, List.length_cons, List.length_cons]
+    have hcap' : (clIns cl x s.C.size (s.C.size + 1)).length + 2 ≤
+        Wd (insFin s x f1x i1).P ((insFin s x f1x i1).P.H - 1) := by
+      rw [F.P, hcl', List.length_append, List.length_cons, List.length_cons, List.length_cons]
       rw [hcl1, List.length_append, List.length_cons] at hlen
       unfold capT at hcap
       omega
+    have hTi := ins_time hI hC hx F hTP
+    have hRo := ins_room hI hC hx F hTP
+    have hTP' : TopParams (insFin s x f1x i1).P := by rw [F.P]; exact hTP
+    have hTL : TabLen (insFin s x f1x i1) (drIns dr (s.cin.getX x)) n0 := by
+      intro X
+      obtain ⟨a, b, c⟩ := hI.len X
+      by_cases hX : X ∈ s.cin.getX x
+      · have hXT := (S.tabsIff 0 x X hent).mp (by unfold tabs; rw [if_pos rfl]; exact hX)
+        have hXN := hXT.1
+        have hsz : X < s.nodes.size := hXN.2.1
+        have hXN' : isN (insFin s x f1x i1) X :=
+          ⟨hXN.1, by rw [F.size]; exact hsz, by rw [F.alive]; exact hXN.2.2⟩
+        have hb := hRo.len_le SH hTi hTP' hcap' hXN'
+        unfold drIns at hb ⊢; rw [if_pos hX] at hb ⊢
+        unfold order Node.order at a ⊢
+        rw [F.table X, F.side X, if_pos ⟨hX, hsz⟩, if_pos ⟨hX, hsz⟩]
+        refine ⟨?_, ?_, hb⟩
+        · have := length_aroundT_le (s.nodes.getX X).table x s.C.size (s.C.size + 1) (insF s x X).1 (insF s x X).2
+          rw [List.length_map]; rw [List.length_map] at a
+          show _ ≤ n0 X + 2 * (dr X + 1)
+          have e1 : ((s.nodes.getX X).table).length = ((nd (ts s) X).table).length := rfl
+          omega
+        · have := length_sideAround_le (s.nodes.getX X) x s.C.size (s.C.size + 1)
+          have e1 : ((s.nodes.getX X).side).length = ((nd (ts s) X).side).length := rfl
+          omega
+      · unfold drIns; rw [if_neg hX]
+        unfold order Node.order at a ⊢
+        rw [F.table X, F.side X, if_neg (fun h => hX h.1), if_neg (fun h => hX h.1)]
+        exact ⟨a, b, c⟩
+    refine ⟨SH, hTi, hRo, fun j hj => ?_, hcap', hTL⟩
+    cases hj
+    refine ⟨⟨Al, Bl, hcl'⟩, ?_⟩
+    show 1 ≤ 1 ∧ 1 ≤ (insFin s x f1x i1).P.H ∧
+      lpr (insFin s x f1x i1) s.C.size = lpr (insFin s x f1x i1) x ∧
+      lpr (insFin s x f1x i1) (s.C.size + 1) = lpr (insFin s x f1x i1) x
+    rw [F.P, F.lpar, F.lpar, F.lpar, if_pos (Or.inl rfl), if_pos (Or.inr rfl), if_neg (by omega)]
+    exact ⟨le_rfl, by omega, rfl, rfl⟩
 
 end OM.Proof.Top

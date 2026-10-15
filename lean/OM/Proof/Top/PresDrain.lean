@@ -827,7 +827,7 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
     rw [← hwh, ← hwa]; exact hsrc.2
   have Ti := hI.time
   have Ro := hI.room
-  refine ⟨SH, ?_, ?_, ?_, by rw [T.P]; exact hI.cap⟩
+  refine ⟨SH, ?_, ?_, ?_, by rw [T.P]; exact hI.cap, hI.len.congr fun X => ⟨T.order X, T.side X⟩⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
       fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_, ?_⟩
     · rw [T.liveN] at hu; rw [hW, T.pend_fund j w up v k (k + 1), T.tw]; exact Ti.wts u hu

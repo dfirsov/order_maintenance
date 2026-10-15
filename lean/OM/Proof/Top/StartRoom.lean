@@ -10,41 +10,6 @@ open OM.Model OM.Proof
 
 set_option linter.deprecated false
 
-/-- **Every node serves at most `Π_h`.** -/
-theorem ew_le_any {s : TS} {cl : List Nat} {ord : Nat → List Nat} {oj : Option Job} (S : Shape s cl ord)
-    (Ti : Timing s cl oj) (hTP : TopParams s.P) (hcap : cl.length + 2 ≤ Wd s.P (s.P.H - 1)) {T : Nat}
-    (hT : isN s T) : ew s cl T ≤ Pid s.P (ht s T) := by
-  by_cases hd : (nd s T).draining = true
-  · exact Ti.ew_le hTP ⟨hT, hd⟩
-  · have hl : liveN s T := ⟨hT, by simpa using hd⟩
-    have hew : ew s cl T = tw s cl T := by unfold ew; rw [if_neg hd]
-    rw [hew]
-    obtain ⟨h1, hH⟩ := S.htN T hT
-    by_cases hs : srcOf s T = NIL
-    · by_cases hp : (nd s T).livePar = NIL
-      · -- the root
-        have hroot : ht s T = s.P.H := by
-          by_contra h; exact (S.up T hl (by omega)).1.1.1 hp
-        have := tw_le (s := s) cl T
-        have ha : 2 ≤ s.P.a := by have := hTP.lamK 1 le_rfl; simp [lamd] at this; omega
-        have hw : Wd s.P (s.P.H - 1) ≤ Wd s.P s.P.H := by
-          unfold Wd; have := Nat.pow_le_pow_right (show 1 ≤ s.P.a by omega) (show s.P.H - 1 ≤ s.P.H by omega)
-          omega
-        rw [hroot]; unfold Pid; omega
-      · have := Ti.wA T hl hp hs
-        have hw := Ti.wts T hl
-        unfold Pid; split at hw <;> omega
-    · obtain ⟨hg, htg⟩ := S.src T hl hs
-      generalize srcOf s T = g at hg htg
-      have hle := Ti.ew_le hTP hg
-      obtain ⟨-, -, hh1, hh2, -⟩ := S.ghost _ hg
-      unfold ew at hle; rw [if_pos hg.2] at hle
-      rcases htg with e | e
-      · have : ht s T = ht s g := by rw [e]; exact hh1
-        rw [this]; rw [← e] at hle; omega
-      · have : ht s T = ht s g := by rw [e]; exact hh2
-        rw [this]; rw [← e] at hle; omega
-
 /-- **A table one level up has room on both sides of an entry.** -/
 theorem room_up {s : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat} {oj : Option Job}
     (hI : InvJ s cl ord dr n0 oj) (hTP : TopParams s.P) {e T : Nat} (he : isN s e) (hT : T ∈ (nd s e).inTables)

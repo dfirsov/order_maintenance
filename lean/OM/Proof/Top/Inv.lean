@@ -63,6 +63,8 @@ structure TopParams (P : Params) : Prop where
   piW : ∀ h, 2 ≤ h → Pid P (h - 1) ≤ Wd P h
   /-- Draining one level down frees room: `γ_h ≥ 1`. -/
   gam1 : ∀ h, 1 ≤ h → 1 ≤ gamd P h
+  /-- Tables stay short: at most 160 entries (the machine's per-node list capacity). -/
+  tab : ∀ h, 1 ≤ h → n0max P h + 2 * Dmax P h ≤ 160
 
 /-! ### The copy phase -/
 
@@ -197,6 +199,23 @@ structure Room (s : TS) (cl : List Nat) (dr n0 : Nat → Nat) : Prop where
     gamd s.P (ht s X - 1) * dr X + growth s cl X + (if s.P.H < X then lamd s.P (ht s X) else 1) +
       gamd s.P (ht s X - 1) * oldLive s X ≤ ew s cl X + gamd s.P (ht s X - 1) * n0 X
 
+/-- **Table lengths.** A table holds at most two entries per insertion event beyond its initial
+ones, and so does its side list; and `n0 + 2·dr ≤ 160` (so every table and side list, dead ones
+included, has at most 160 entries: the machine's per-node list capacity). -/
+def TabLen (s : TS) (dr n0 : Nat → Nat) : Prop :=
+  ∀ X, (order s X).length ≤ n0 X + 2 * dr X ∧ (nd s X).side.length ≤ n0 X + 2 * dr X ∧
+    n0 X + 2 * dr X ≤ 160
+
+/-- Lists that do not grow keep the bound (with the same `dr`, `n0`). -/
+theorem TabLen.mono {s s' : TS} {dr n0 : Nat → Nat} (h : TabLen s dr n0)
+    (hl : ∀ X, (order s' X).length ≤ (order s X).length ∧ (nd s' X).side.length ≤ (nd s X).side.length) :
+    TabLen s' dr n0 := fun X => by
+  obtain ⟨a, b, c⟩ := h X; obtain ⟨d, e⟩ := hl X; exact ⟨by omega, by omega, c⟩
+
+theorem TabLen.congr {s s' : TS} {dr n0 : Nat → Nat} (h : TabLen s dr n0)
+    (hl : ∀ X, order s' X = order s X ∧ (nd s' X).side = (nd s X).side) : TabLen s' dr n0 :=
+  h.mono fun X => by rw [(hl X).1, (hl X).2]; exact ⟨le_rfl, le_rfl⟩
+
 /-! ### The running job's position -/
 
 /-- Where the running job is, in the state with its path copied. -/
@@ -226,6 +245,7 @@ structure InvJ (s : TS) (cl : List Nat) (ord : Nat → List Nat) (dr n0 : Nat �
   job : ∀ j, oj = some j → JobOK s cl j
   /-- Room for the chunks (the contract's capacity): nodes of height `H - 1` never drain. -/
   cap : cl.length + 2 ≤ Wd s.P (s.P.H - 1)
+  len : TabLen s dr n0
 
 /-- **The top structure's invariant** (M5's `TI`). -/
 def TopInv (s : Core) : Prop :=

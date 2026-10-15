@@ -212,6 +212,32 @@ theorem sp_ghost (h2 : 2 ≤ ht (ts s) v) {g : Nat} (hg : g ∈ order (ts s) v) 
   have hw := S.W1 g hgh v hT
   exact ⟨hinf2.subset (by simp), hinf2.subset (by simp), hinf2, hw⟩
 
+/-- The drain's side list is no longer than `v`'s table. -/
+theorem sp_side_len {side : List (Nat × Side)} (hs : sSideO (wiC s v) v = some side) :
+    side.length ≤ (order (ts s) v).length := by
+  obtain ⟨-, P, Q, hsp⟩ := sp_b hpc hv0 hI hlp hTP hof hW
+  have hnd := sp_order_nodup hpc hv0 hI hlp hTP hof hW
+  have hord : ((wiC s v).nodes.getX v).order = order (ts s) v := (wiC_sameTree s v).order v
+  have hh : ((wiC s v).nodes.getX v).height = ht (ts s) v := (wiC_sameTree s v).height v
+  unfold sSideO drainSide sB at hs
+  rw [sd_kids_eq, hord, hh] at hs
+  have h0 := length_sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)
+  split at hs
+  · have hk : ∀ e ∈ drainEntries (wiC s v).nodes ((wiC s v).nodes.getX v),
+        (lookup (sidesOf (order (ts s) v) ((nd (ts s) v).children.getD (sK (wiC s v) v) 0)) e).isSome := by
+      intro e he
+      have hem : e ∈ order (ts s) v := by rw [← hord]; exact List.mem_of_mem_filter he
+      rw [hsp] at hnd hem ⊢
+      rw [sidesOf_spec hnd e]
+      simp only [List.mem_append, List.mem_cons] at hem
+      split
+      · rfl
+      · split
+        · rfl
+        · next h1 h2 => exfalso; rcases hem with h | h | h <;> [exact h1 h; exact h2 (Or.inl h); exact h2 (Or.inr h)]
+    rw [length_fixSides _ _ _ _ hk hs]; exact h0
+  · cases hs; exact h0
+
 /-- **The sides** `startDrain` computes. -/
 theorem sp_side : ∃ side, sSideO (wiC s v) v = some side ∧ ∀ x, lookup side x =
     if 2 ≤ ht (ts s) v ∧ x ∈ sEntries (wiC s v) v ∧ (nd (ts s) x).draining = true then
