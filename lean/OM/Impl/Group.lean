@@ -343,4 +343,143 @@ theorem unlinkGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "
   simp only [Exp.cost, Exp.gF, Exp.cF] at hn4 hn5 hn8 ⊢
   omega
 
+/-! ### Moving one element -/
+
+theorem evalF_wrE_ok {κ : Caps} {s : Core} {L : Loc} {k : EF} {i e : Exp} {j w : Nat} (hi : i.ev κ s L = some j)
+    (he : e.ev κ s L = some w) (hj : j < s.E.size) (hc : j < κ.tbl .E) (hk : k.ok w = true) :
+    evalF κ (.wr (.e k) i e) s L = .ok { s with E := s.E.modify j (EF.set · w k) } L (1 + i.cost + e.cost) := by
+  simp [evalF, hi, he, Fld.set, hj, hk]
+
+def mvGS (first : Bool) : Stm :=
+  if first then .ite ("f" =ₑ "l") (.wgF .first "g" 0 ;; .wgF .last "g" 0) (.wgF .first "g" "en")
+  else .ite ("f" =ₑ "l") (.wgF .first "g" 0 ;; .wgF .last "g" 0) (.wgF .last "g" "en")
+def mvDS (first : Bool) : Stm :=
+  if first then .ite (.gF .first "d" =ₑ 0) (.wgF .first "d" "e") .skip ;; .wgF .last "d" "e"
+  else .ite (.gF .first "d" =ₑ 0) (.wgF .last "d" "e") .skip ;; .wgF .first "d" "e"
+def mvES : Stm := .weF .grp "e" "d" ;; .weF .lab "e" "lab"
+
+/-- Move element `e` from group `g` to group `d` with label `lab`: the first of `g` to the end of `d`
+(`first`), or the last of `g` to the front of `d` (locals `g d e lab`). -/
+def moveS (first : Bool) : Stm :=
+  "f" ::= .gF .first "g" ;; "l" ::= .gF .last "g" ;; "en" ::= .eF (if first then .next else .prev) "e" ;;
+  mvGS first ;; mvDS first ;; mvES
+
+theorem moveS_agree (κ : Caps) (σ : Core) (L : Loc) (first : Bool) {g d e lab : Nat} (hg : L "g" = g)
+    (hd : L "d" = d) (he : L "e" = e) (hl : L "lab" = lab) (hgG : g < σ.Gs.size) (hdG : d < σ.Gs.size)
+    (heE : e < σ.E.size) (hG : σ.Gs.size ≤ κ.tbl .G) (hE : σ.E.size ≤ κ.tbl .E) :
+    ∃ L' n, evalF κ (moveS first) σ L =
+      .ok (if first then moveFirstLeft σ g d e lab else moveLastRight σ g d e lab) L' n ∧ n ≤ 80 := by
+  set G := σ.Gs.getX g
+  set en := if first then (σ.E.getX e).next else (σ.E.getX e).prev
+  have hgT : g < κ.tbl .G := by omega
+  have hdT : d < κ.tbl .G := by omega
+  have heT : e < κ.tbl .E := by omega
+  have e1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "f") (e := .gF .first "g") (v := G.first)
+    (by simp [Exp.gF, Exp.ev, hg, Fld.cap, Fld.get, GF.get, G, hgT])
+  have e2 := evalF_assign_ok (κ := κ) (s := σ) (L := upd L "f" G.first) (x := "l") (e := .gF .last "g") (v := G.last)
+    (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, hg, Fld.cap, Fld.get, GF.get, G, hgT])
+  have e3 := evalF_assign_ok (κ := κ) (s := σ) (L := upd (upd L "f" G.first) "l" G.last) (x := "en")
+    (e := .eF (if first then .next else .prev) "e") (v := en)
+    (by cases first <;> simp [Exp.eF, Exp.ev, OM.Machine.State.upd, he, Fld.cap, Fld.get, EF.get, en, heT])
+  set L3 := upd (upd (upd L "f" G.first) "l" G.last) "en" en
+  have r : ∀ x, x ≠ "f" → x ≠ "l" → x ≠ "en" → L3 x = L x := fun x h1 h2 h3 => by
+    simp [L3, OM.Machine.State.upd, h1, h2, h3]
+  have rg : L3 "g" = g := by rw [r "g" (by decide) (by decide) (by decide), hg]
+  have rd : L3 "d" = d := by rw [r "d" (by decide) (by decide) (by decide), hd]
+  have re : L3 "e" = e := by rw [r "e" (by decide) (by decide) (by decide), he]
+  have rl : L3 "lab" = lab := by rw [r "lab" (by decide) (by decide) (by decide), hl]
+  have rf : L3 "f" = G.first := by simp [L3, OM.Machine.State.upd]
+  have rll : L3 "l" = G.last := by simp [L3, OM.Machine.State.upd]
+  have ren : L3 "en" = en := by simp [L3, OM.Machine.State.upd]
+  have hvg : ∀ s' : Core, (Exp.var "g").ev κ s' L3 = some g := fun _ => by simp [Exp.ev, rg]
+  have hvd : ∀ s' : Core, (Exp.var "d").ev κ s' L3 = some d := fun _ => by simp [Exp.ev, rd]
+  have hve : ∀ s' : Core, (Exp.var "e").ev κ s' L3 = some e := fun _ => by simp [Exp.ev, re]
+  -- the source group
+  set A1 := σ.Gs.modify g fun X => if G.first == G.last then { X with first := NIL, last := NIL }
+    else if first then { X with first := en } else { X with last := en }
+  have b4 : ∃ n4, evalF κ (mvGS first) σ L3 = .ok { σ with Gs := A1 } L3 n4 ∧ n4 ≤ 15 := by
+    by_cases hfl : G.first = G.last
+    · have w1 := evalF_wrG_ok (κ := κ) (s := σ) (L := L3) (k := .first) (e := (0 : Exp)) (w := 0) (hvg _) rfl hgG hgT rfl
+      have w2 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := σ.Gs.modify g (GF.set · 0 .first) }) (L := L3)
+        (k := .last) (e := (0 : Exp)) (w := 0) (hvg _) rfl (by simp [hgG]) hgT rfl
+      have hA : A1 = (σ.Gs.modify g (GF.set · 0 .first)).modify g (GF.set · 0 .last) := by
+        rw [Array.modify_modify_same]; simp only [A1, hfl, beq_self_eq_true, if_true]; rfl
+      rw [hA]
+      have ec : ("f" =ₑ "l" : Exp).ev κ σ L3 = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, rf, rll, hfl]
+      cases first <;> exact ⟨_, evalF_ite_t ec one_ne_zero (evalF_seq_ok2 w1 w2), by simp [Exp.cost]⟩
+    · have ec : ("f" =ₑ "l" : Exp).ev κ σ L3 = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, rf, rll, hfl]
+      cases first
+      · have w1 := evalF_wrG_ok (κ := κ) (s := σ) (L := L3) (k := .last) (e := .var "en") (w := en) (hvg _)
+          (by simp [Exp.ev, ren]) hgG hgT rfl
+        have hA : A1 = σ.Gs.modify g (GF.set · en .last) := by
+          simp only [A1, show (G.first == G.last) = false by simpa using hfl]; rfl
+        rw [hA]; exact ⟨_, evalF_ite_f ec w1, by simp [Exp.cost]⟩
+      · have w1 := evalF_wrG_ok (κ := κ) (s := σ) (L := L3) (k := .first) (e := .var "en") (w := en) (hvg _)
+          (by simp [Exp.ev, ren]) hgG hgT rfl
+        have hA : A1 = σ.Gs.modify g (GF.set · en .first) := by
+          simp only [A1, show (G.first == G.last) = false by simpa using hfl]; rfl
+        rw [hA]; exact ⟨_, evalF_ite_f ec w1, by simp [Exp.cost]⟩
+  obtain ⟨n4, b4, hn4⟩ := b4
+  -- the destination group
+  have hA1s : A1.size = σ.Gs.size := by simp [A1]
+  set D1 := A1.getX d
+  set A2 := A1.modify d fun X => if first then { X with first := if X.first == NIL then e else X.first, last := e }
+    else { X with last := if X.first == NIL then e else X.last, first := e }
+  have b5 : ∃ n5, evalF κ (mvDS first) { σ with Gs := A1 } L3 = .ok { σ with Gs := A2 } L3 n5 ∧ n5 ≤ 15 := by
+    have ec : (.gF .first "d" =ₑ 0 : Exp).ev κ { σ with Gs := A1 } L3 = some (if D1.first = 0 then 1 else 0) := by
+      simp [Exp.gF, Exp.ev, OM.Machine.BinOp.eval, rd, hdT, Fld.cap, Fld.get, GF.get, D1]
+    by_cases h0 : D1.first = 0
+    · have h0' : (A1.getX d).first = 0 := h0
+      rw [if_pos h0] at ec
+      cases first
+      · have w1 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := A1 }) (L := L3) (k := .last) (e := .var "e") (w := e)
+          (hvd _) (hve _) (by simp [hA1s, hdG]) hdT rfl
+        have w2 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := A1.modify d (GF.set · e .last) }) (L := L3) (k := .first)
+          (e := .var "e") (w := e) (hvd _) (hve _) (by simp [hA1s, hdG]) hdT rfl
+        have hA : A2 = (A1.modify d (GF.set · e .last)).modify d (GF.set · e .first) := by
+          rw [Array.modify_modify_same]; apply Array.modify_congr_getX
+          simp [GF.set, h0', NIL]
+        rw [hA]
+        exact ⟨_, evalF_seq_ok2 (evalF_ite_t ec one_ne_zero w1) w2, by simp [Exp.cost, Exp.gF]⟩
+      · have w1 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := A1 }) (L := L3) (k := .first) (e := .var "e") (w := e)
+          (hvd _) (hve _) (by simp [hA1s, hdG]) hdT rfl
+        have w2 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := A1.modify d (GF.set · e .first) }) (L := L3) (k := .last)
+          (e := .var "e") (w := e) (hvd _) (hve _) (by simp [hA1s, hdG]) hdT rfl
+        have hA : A2 = (A1.modify d (GF.set · e .first)).modify d (GF.set · e .last) := by
+          rw [Array.modify_modify_same]; apply Array.modify_congr_getX
+          simp [GF.set, h0', NIL]
+        rw [hA]
+        exact ⟨_, evalF_seq_ok2 (evalF_ite_t ec one_ne_zero w1) w2, by simp [Exp.cost, Exp.gF]⟩
+    · have h0' : ¬(A1.getX d).first = 0 := h0
+      rw [if_neg h0] at ec
+      cases first
+      · have w2 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := A1 }) (L := L3) (k := .first)
+          (e := .var "e") (w := e) (hvd _) (hve _) (by simp [hA1s, hdG]) hdT rfl
+        have hA : A2 = A1.modify d (GF.set · e .first) := by
+          apply Array.modify_congr_getX
+          simp [GF.set, h0', NIL]
+        rw [hA]
+        exact ⟨_, evalF_seq_ok2 (evalF_ite_f ec evalF_skip) w2, by simp [Exp.cost, Exp.gF]⟩
+      · have w2 := evalF_wrG_ok (κ := κ) (s := { σ with Gs := A1 }) (L := L3) (k := .last)
+          (e := .var "e") (w := e) (hvd _) (hve _) (by simp [hA1s, hdG]) hdT rfl
+        have hA : A2 = A1.modify d (GF.set · e .last) := by
+          apply Array.modify_congr_getX
+          simp [GF.set, h0', NIL]
+        rw [hA]
+        exact ⟨_, evalF_seq_ok2 (evalF_ite_f ec evalF_skip) w2, by simp [Exp.cost, Exp.gF]⟩
+  obtain ⟨n5, b5, hn5⟩ := b5
+  -- the element
+  have w6 := evalF_wrE_ok (κ := κ) (s := { σ with Gs := A2 }) (L := L3) (k := .grp) (e := .var "d") (w := d)
+    (hve _) (hvd _) heE heT rfl
+  have w7 := evalF_wrE_ok (κ := κ) (s := { σ with Gs := A2, E := σ.E.modify e (EF.set · d .grp) }) (L := L3)
+    (k := .lab) (e := .var "lab") (w := lab) (hve _) (by simp [Exp.ev, rl]) (by simp [heE]) heT rfl
+  have hfin : { σ with Gs := A2, E := (σ.E.modify e (EF.set · d .grp)).modify e (EF.set · lab .lab) } =
+      (if first then moveFirstLeft σ g d e lab else moveLastRight σ g d e lab) := by
+    rw [Array.modify_modify_same]
+    cases first <;> rfl
+  refine ⟨L3, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 b4 (evalF_seq_ok2 b5
+    (by simp only [mvES, Stm.weF]; rw [← hfin]; exact evalF_seq_ok2 w6 w7))))), ?_⟩
+  simp only [Exp.cost, Exp.gF, Exp.eF] at hn4 hn5 ⊢
+  omega
+
 end OM.Impl
