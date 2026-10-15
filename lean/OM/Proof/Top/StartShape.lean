@@ -780,6 +780,121 @@ theorem sh_Q : ∀ k e X, Ent O' k e → X ∈ tabs S' k e →
     rw [hpe, C.srcOf (nd (ts s) v).livePar, if_neg (fun h => h.elim hLn.1 hLn.2), ← hpv]
     exact C.S.Q _ v X hent hT
 
+theorem sh_W1 : ∀ g, Top.ghostN S' g → ∀ X ∈ tabs S' (Top.ht S' g) g,
+    [(nd S' g).t1, g, (nd S' g).t2] <:+: Top.order S' X := by
+  intro g hg X hX
+  have hvlt := C.H.hv
+  have hvn := C.nN v C.vl.1
+  have hvnn : ¬(v = s.nodes.size ∨ v = s.nodes.size + 1) := fun h => h.elim hvn.1 hvn.2
+  rw [C.ghostN] at hg
+  rcases hg with hg | hgv
+  · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+    have hgn := C.nN g hg.1
+    have hgnn : ¬(g = s.nodes.size ∨ g = s.nodes.size + 1) := fun h => h.elim hgn.1 hgn.2
+    obtain ⟨g1, g2, g3, g4, g5, g6, -⟩ := C.S.ghost g hg
+    have ht1v : (nd (ts s) g).t1 ≠ v := fun e => by rw [e] at g5; rw [show Top.srcOf (ts s) v = NIL from C.of] at g5; exact hg.1.1 g5.symm
+    have ht2v : (nd (ts s) g).t2 ≠ v := fun e => by rw [e] at g6; rw [show Top.srcOf (ts s) v = NIL from C.of] at g6; exact hg.1.1 g6.symm
+    rw [C.H.t1, C.H.t2, if_neg hgv, if_neg hgv, if_neg hgnn, if_neg hgnn]
+    rw [C.ht g, if_neg hgnn] at hX
+    obtain ⟨h1, hH⟩ := C.S.htN g hg.1
+    have hent : Ent ord (Top.ht (ts s) g) g := (C.S.ordMem _ h1 hH g).mpr ⟨hg.1, rfl⟩
+    rw [C.tabs_old hent hH] at hX
+    simp only [List.mem_append, List.mem_ite_nil_right, List.mem_singleton] at hX
+    have hnv : v ∉ [(nd (ts s) g).t1, g, (nd (ts s) g).t2] := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false, not_or]
+      exact ⟨Ne.symm ht1v, Ne.symm hgv, Ne.symm ht2v⟩
+    rcases hX with (hX | ⟨⟨hk, hle⟩, rfl⟩) | ⟨⟨hk, hre⟩, rfl⟩
+    · have hw := C.S.W1 g hg X hX
+      have hXn := ((C.S.tabsIff _ g X hent).mp hX).1
+      have hXnn := C.nN X hXn
+      rw [C.order, if_neg hXnn.1, if_neg hXnn.2]
+      split
+      · exact infix_replace1 hw hnv
+      · exact hw
+    all_goals
+      -- a new table: the triple sits in the part, as in `v`'s table
+      have h2 : 2 ≤ Top.ht (ts s) v := by have := C.h1; omega
+    · have hgo := C.left_mem hle
+      obtain ⟨hk1, hk2, hinf2, hinf3⟩ := sp_ghost C.pc C.v0 C.I C.lp C.TP C.of C.W h2 hgo hg.2
+      have hns := sw_nosep C.pc C.v0 C.I C.lp C.TP C.of C.W C.look h2 hgo hg.2
+      have ht1 : (nd (ts s) g).t1 ∈ (nd (ts s) v).children.take (sK (wiC s v) v) := by
+        rcases (sw_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mp hle with h | ⟨-, -, -, -, h⟩
+        · exfalso; obtain ⟨-, -, hkk⟩ := C.S.kids v C.vl
+          have := (hkk g (List.mem_of_mem_take h)).2 h2; exact absurd hg.2 (by rw [this.2]; simp)
+        · exact h
+      have hmem : ∀ x ∈ [(nd (ts s) g).t1, g, (nd (ts s) g).t2], x ∈ sLeft (wiC s v) v side := by
+        intro x hx
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+        rcases hx with rfl | rfl | rfl
+        · exact (sw_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inl ht1)
+        · exact hle
+        · exact (sw_left C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inl (hns.mp ht1))
+      rw [C.order, if_pos rfl]
+      obtain ⟨r, hrw⟩ : ∃ r : Nat → Bool, sLeft (wiC s v) v side = (Top.order (ts s) v).filter r := by
+        unfold sLeft sEntries drainEntries
+        rw [show ((wiC s v).nodes.getX v).order = Top.order (ts s) v from (wiC_sameTree s v).order v,
+          List.filter_filter]
+        exact ⟨_, rfl⟩
+      rw [hrw]
+      refine infix_filter hinf3 (fun x hx => ?_)
+      have := hmem x hx
+      rw [hrw] at this
+      exact (List.mem_filter.mp this).2
+    · have hgo := C.right_mem hre
+      obtain ⟨hk1, hk2, hinf2, hinf3⟩ := sp_ghost C.pc C.v0 C.I C.lp C.TP C.of C.W h2 hgo hg.2
+      have hns := sw_nosep C.pc C.v0 C.I C.lp C.TP C.of C.W C.look h2 hgo hg.2
+      have ht1 : (nd (ts s) g).t1 ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+        rcases (sw_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mp hre with h | ⟨-, -, -, -, h⟩
+        · exfalso; obtain ⟨-, -, hkk⟩ := C.S.kids v C.vl
+          have := (hkk g (List.mem_of_mem_drop h)).2 h2; exact absurd hg.2 (by rw [this.2]; simp)
+        · exact h
+      have ht1n : (nd (ts s) g).t1 ∉ (nd (ts s) v).children.take (sK (wiC s v) v) := by
+        rcases C.kids_split hk1 with ⟨-, b⟩ | ⟨a, -⟩
+        · exact absurd ht1 b
+        · exact a
+      have ht2 : (nd (ts s) g).t2 ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+        rcases C.kids_split hk2 with ⟨a, -⟩ | ⟨-, b⟩
+        · exact absurd (hns.mpr a) ht1n
+        · exact b
+      have hmem : ∀ x ∈ [(nd (ts s) g).t1, g, (nd (ts s) g).t2], x ∈ sRight (wiC s v) v side := by
+        intro x hx
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+        rcases hx with rfl | rfl | rfl
+        · exact (sw_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inl ht1)
+        · exact hre
+        · exact (sw_right C.pc C.v0 C.I C.lp C.TP C.of C.W C.look).mpr (Or.inl ht2)
+      rw [C.order, if_neg (by omega), if_pos rfl]
+      obtain ⟨r, hrw⟩ : ∃ r : Nat → Bool, sRight (wiC s v) v side = (Top.order (ts s) v).filter r := by
+        unfold sRight sEntries drainEntries
+        rw [show ((wiC s v).nodes.getX v).order = Top.order (ts s) v from (wiC_sameTree s v).order v,
+          List.filter_filter]
+        exact ⟨_, rfl⟩
+      rw [hrw]
+      refine infix_filter hinf3 (fun x hx => ?_)
+      have := hmem x hx
+      rw [hrw] at this
+      exact (List.mem_filter.mp this).2
+  · -- the new ghost `v`
+    rw [hgv] at hX ⊢
+    rw [C.H.t1, C.H.t2, if_pos rfl, if_pos rfl]
+    rw [C.ht v, if_neg hvnn] at hX
+    have hent : Ent ord (Top.ht (ts s) v) v := (C.S.ordMem _ C.h1 (C.S.htN v C.vl.1).2 v).mpr ⟨C.vl.1, rfl⟩
+    rw [C.tabs_old hent (by have := C.hH; omega)] at hX
+    simp only [List.mem_append, List.mem_ite_nil_right, List.mem_singleton] at hX
+    have hT : X ∈ (nd (ts s) v).inTables := by
+      rcases hX with (hX | ⟨⟨hk, -⟩, -⟩) | ⟨⟨hk, -⟩, -⟩
+      · unfold tabs at hX; rwa [if_neg (by have := C.h1; omega)] at hX
+      all_goals have := C.h1; omega
+    obtain ⟨hXn, -, hvX⟩ := C.inTab X hT
+    have hXnn := C.nN X hXn
+    rw [C.order, if_neg hXnn.1, if_neg hXnn.2, if_pos hT]
+    obtain ⟨P, Q, hPQ⟩ := List.mem_iff_append.mp hvX
+    have hnd : (Top.order (ts s) X).Nodup := (C.S.ordNodup _).sublist (C.S.O1 X hXn)
+    rw [hPQ] at hnd ⊢
+    have hP : v ∉ P := fun h => (List.nodup_append.mp hnd).2.2 v h v (by simp) rfl
+    rw [replace1_split _ hP]
+    exact ⟨P, Q, by simp⟩
+
 end SDCtx
 
 end OM.Proof.Top
