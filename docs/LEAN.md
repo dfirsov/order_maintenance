@@ -626,6 +626,20 @@ reasoning for about 140 procedures, so M6 inserts a small language between the t
   covers the two cases where `startDrain` changes nothing. On the way: the cut (`drainCut`),
   `roomNextTo` and `tableInsert` each agree with Level F.
 
+* Groups (`Group.lean`, `GroupStep.lean`): linking and unlinking, first/last moves, the label
+  primitives, `newGroup` (reuse a freed group or push), `startGroupSplit`, removal, element moves,
+  `groupSplitStep`, the drive loop and `driveGroup`.
+* Chunks (`ChunkStep.lean`): removal, the moved unit (one group, or three), the new labels on the
+  receiving side, `moveGroupsLeft/Right`, the size transfer, `chunkSplitStep` (both moves and the
+  removal), the drive loop and `driveChunk`.
+* `.bug` for unreachable branches. `groupSplitStep`'s cross-chunk branch compiles to `bug`. Under
+  invariant F it never runs, just like FALLBACK. The agreement lemmas hold on runs where Level F
+  succeeds, so they never reach it.
+
+**Kernel timeouts.** Rewriting or splitting the status `match` inside a hypothesis about
+`driveGroup` times out the kernel. The fix: goal-side lemmas per status
+(`driveGroup_split/ovf/quiet/dead`, proved by `unfold; rw`), then `rw [lemma] at h`.
+
 **How `startDrain` is matched.** The program builds `v`'s side list first, directly in `v`'s side
 list, because the later steps look sides up. Level F only writes it at the end. So after the side
 list, every program state is Level F's stage `sd_k` with `v`'s side list already set
@@ -637,6 +651,6 @@ tests are recomputed from `v`'s lists.
 **Also in M5.** `TabLen` in `InvJ`: every table and side list has at most 160 entries
 (`TopParams.tab`, proved for `a = 8`). The Level M loops rely on this for their constant cost.
 
-**Next.** The rest of the core (groups, chunks, background); the remaining top-structure job steps;
-the wrapper; the capacities; Theorems A, B and W at Level M. `Group.lean` is a started draft (with
-`sorry`) and is not imported.
+**Next.** Reservation (`splitChunkStart`: `insertAround`, `linkChunkPair`, `markSplit`; the job
+steps), `background`, `insertAfter`, initialisation, the wrapper, the capacities, and Theorems A, B
+and W at Level M.
