@@ -125,4 +125,78 @@ theorem start_room {s : TS} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
   have := S.side T ⟨hTN, hd⟩ x hxT
   rw [this]; rfl
 
+/-! ### Views of the state after the split -/
+
+namespace InsFrame
+variable {s : Core} {x f1x i1 : Nat} {t : TS} (F : InsFrame s x f1x i1 t)
+include F
+
+theorem height (u : Nat) : (nd t u).height = (nd (ts s) u).height := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem livePar (u : Nat) : (nd t u).livePar = (nd (ts s) u).livePar := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem weight (u : Nat) : (nd t u).weight = (nd (ts s) u).weight := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem inTables (u : Nat) : (nd t u).inTables = (nd (ts s) u).inTables := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem draining (u : Nat) : (nd t u).draining = (nd (ts s) u).draining := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem t1 (u : Nat) : (nd t u).t1 = (nd (ts s) u).t1 := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem t2 (u : Nat) : (nd t u).t2 = (nd (ts s) u).t2 := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem overflowOf (u : Nat) : (nd t u).overflowOf = (nd (ts s) u).overflowOf := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem alive (u : Nat) : (nd t u).alive = (nd (ts s) u).alive := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem first (u : Nat) : (nd t u).first = insFirst s x u := by rw [F.node]
+theorem last (u : Nat) : (nd t u).last = insLast s x u := by rw [F.node]
+theorem table (u : Nat) : (nd t u).table = if u ∈ s.cin.getX x ∧ u < s.nodes.size then
+    aroundT (s.nodes.getX u).table x s.C.size (s.C.size + 1) (insF s x u).1 (insF s x u).2
+    else (s.nodes.getX u).table := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem side (u : Nat) : (nd t u).side = if u ∈ s.cin.getX x ∧ u < s.nodes.size then
+    sideAround (s.nodes.getX u) x s.C.size (s.C.size + 1) else (s.nodes.getX u).side := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+theorem children (u : Nat) : (nd t u).children = if u = s.lpar.getX x ∧ u < s.nodes.size then
+    (s.nodes.getX u).children.replace1 x [s.C.size, x, s.C.size + 1] else (s.nodes.getX u).children := by
+  rw [F.node]; unfold insNode; split_ifs <;> rfl
+
+theorem ht (u : Nat) : Top.ht t u = Top.ht (ts s) u := F.height u
+theorem isN (u : Nat) : Top.isN t u ↔ Top.isN (ts s) u := by
+  unfold Top.isN; rw [F.size, F.alive]; rfl
+theorem liveN (u : Nat) : Top.liveN t u ↔ Top.liveN (ts s) u := by
+  unfold Top.liveN; rw [F.isN, F.draining]
+theorem ghostN (u : Nat) : Top.ghostN t u ↔ Top.ghostN (ts s) u := by
+  unfold Top.ghostN; rw [F.isN, F.draining]
+theorem srcOf (u : Nat) : Top.srcOf t u = Top.srcOf (ts s) u := F.overflowOf u
+
+theorem anc_old (c : Nat) (hy : c ≠ s.C.size) (hz : c ≠ s.C.size + 1) :
+    ∀ j, Top.anc t c j = Top.anc (ts s) c j
+  | 0 => rfl
+  | 1 => by show lpr t c = lpr (ts s) c; rw [F.lpar, if_neg (by omega)]
+  | j + 2 => by
+    show (nd t (Top.anc t c (j + 1))).livePar = (nd (ts s) (Top.anc (ts s) c (j + 1))).livePar
+    rw [anc_old c hy hz (j + 1), F.livePar]
+
+theorem anc_new (c : Nat) (hc : c = s.C.size ∨ c = s.C.size + 1) :
+    ∀ j, 1 ≤ j → Top.anc t c j = Top.anc (ts s) x j
+  | 0, h => absurd h (by omega)
+  | 1, _ => by show lpr t c = lpr (ts s) x; rw [F.lpar, if_pos hc]
+  | j + 2, _ => by
+    show (nd t (Top.anc t c (j + 1))).livePar = (nd (ts s) (Top.anc (ts s) x (j + 1))).livePar
+    rw [anc_new c hc (j + 1) (by omega), F.livePar]
+
+theorem pp_old (c : Nat) (hy : c ≠ s.C.size) (hz : c ≠ s.C.size + 1) (j : Nat) :
+    Top.pp t c j = Top.pp (ts s) c j := by
+  unfold Top.pp; split
+  · rfl
+  · rw [F.path, if_neg (by omega)]
+
+theorem pp_new (c : Nat) (hc : c = s.C.size ∨ c = s.C.size + 1) (j : Nat) (hj1 : 1 ≤ j)
+    (hj : j ≤ s.P.H) : Top.pp t c j = Top.pp (ts s) x j := by
+  unfold Top.pp; rw [if_neg (by omega), if_neg (by omega), F.path, if_pos hc, if_pos ⟨hj1, hj⟩]
+
+end InsFrame
+
 end OM.Proof.Top
