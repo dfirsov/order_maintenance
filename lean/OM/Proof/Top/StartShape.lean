@@ -1143,6 +1143,33 @@ theorem sh_Sr : ∀ c ∈ cl, ∀ j, 1 ≤ j → j ≤ (ts (sdS (wiC s v) v side
           · exact absurd a ht1n
           · exact b
 
+theorem sh_tags : ∀ c ∈ cl, (ts (sdS (wiC s v) v side)).tag c = tagF S' c := by
+  intro c hc
+  have hvlt := C.H.hv
+  rw [C.H.tag, C.S.tags c hc]
+  unfold tagF
+  rw [C.H.P]
+  have hβ : (ts (sdS (wiC s v) v side)).P.beta = (ts s).P.beta := by rw [C.H.P]; rfl
+  refine (tagUp_congr hβ s.P.H (fun i hi1 hi => ?_)).symm
+  unfold digit
+  rw [C.pp, C.pp]
+  have hiH : i ≤ (ts s).P.H := hi
+  obtain ⟨hXn, hXh⟩ := (C.S.ordMem i hi1 hiH _).mp (C.S.pathEnt c hc i hiH)
+  have hXnn := C.nN _ hXn
+  unfold Node.lab?
+  rw [C.H.table, if_neg hXnn.1, if_neg hXnn.2]
+  split
+  · next hT =>
+    obtain ⟨-, hh, hv⟩ := C.inTab _ hT
+    obtain ⟨A, le, Bs, htab, hA⟩ := table_split hv
+    rw [htab, aroundT_eq hA]
+    unfold aroundTab
+    have hk : Top.pp (ts s) c (i - 1) < s.nodes.size := by
+      have hi2 : 2 ≤ i := by have := C.h1; omega
+      exact ((C.S.ordMem (i - 1) (by omega) (by omega) _).mp (C.S.pathEnt c hc (i - 1) (by omega))).1.2.1
+    rw [lookup_around _ _ (by omega) (by omega)]
+  · rfl
+
 end SDCtx
 
 end OM.Proof.Top
