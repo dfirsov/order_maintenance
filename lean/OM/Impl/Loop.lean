@@ -29,6 +29,23 @@ theorem evalF_assign_ok {κ : Caps} {x : Reg} {e : Exp} {s : Core} {L : Loc} {v 
     (h : e.ev κ s L = some v) : evalF κ (.assign x e) s L = .ok s (OM.Machine.State.upd L x v) (1 + e.cost) := by
   simp [evalF, h]
 
+theorem evalF_seq_ok2 {κ : Caps} {A B : Stm} {s s1 s2 : Core} {L L1 L2 : Loc} {c1 c2 : Nat}
+    (h1 : evalF κ A s L = .ok s1 L1 c1) (h2 : evalF κ B s1 L1 = .ok s2 L2 c2) :
+    evalF κ (.seq A B) s L = .ok s2 L2 (c1 + c2) := by
+  simp [evalF, h1, h2, Res.bind, Res.addCost]
+
+theorem evalF_ite_t {κ : Caps} {c : Exp} {t f : Stm} {s s' : Core} {L L' : Loc} {v c' : Nat}
+    (hc : c.ev κ s L = some v) (hv : v ≠ 0) (ht : evalF κ t s L = .ok s' L' c') :
+    evalF κ (.ite c t f) s L = .ok s' L' (1 + c.cost + c') := by
+  simp [evalF, hc, hv, ht, Res.addCost]
+
+theorem evalF_ite_f {κ : Caps} {c : Exp} {t f : Stm} {s s' : Core} {L L' : Loc} {c' : Nat}
+    (hc : c.ev κ s L = some 0) (hf : evalF κ f s L = .ok s' L' c') :
+    evalF κ (.ite c t f) s L = .ok s' L' (1 + c.cost + c') := by
+  simp [evalF, hc, hf, Res.addCost]
+
+theorem evalF_skip {κ : Caps} {s : Core} {L : Loc} : evalF κ .skip s L = .ok s L 1 := by simp [evalF]
+
 /-- **The loop rule.** -/
 theorem evalF_loop {κ : Caps} {x : Reg} {n : Exp} {b : Stm} {s : Core} {L : Loc} {N : Nat}
     (hn : n.ev κ s L = some N) (I : Nat → Core → Loc → Prop) (cb : Nat) (h0 : I 0 s L)
@@ -38,5 +55,24 @@ theorem evalF_loop {κ : Caps} {x : Reg} {n : Exp} {b : Stm} {s : Core} {L : Loc
   obtain ⟨s', L', c, he, hc, hI⟩ := runForF_inv b x N I cb hb N 0 s L (by omega) h0
   refine ⟨s', L', 1 + n.cost + c, ?_, by omega, hI⟩
   simp only [evalF, hn, he, Res.addCost]
+
+/-- **The loop rule for loops that only change locals**: an abstraction `abs` of the locals follows
+the fold of `f` over the iterations, and a frame condition `F` is kept. -/
+theorem evalF_loop_pure {κ : Caps} {x : Reg} {n : Exp} {b : Stm} {s : Core} {L : Loc} {N : Nat}
+    (hn : n.ev κ s L = some N) {α : Type} (F : Loc → Prop) (abs : Loc → α) (f : α → Nat → α) (cb : Nat)
+    (h0 : F L)
+    (hb : ∀ k < N, ∀ L', F L' → ∃ L'' c, evalF κ b s (OM.Machine.State.upd L' x k) = .ok s L'' c ∧ c ≤ cb ∧
+      F L'' ∧ abs L'' = f (abs L') k) :
+    ∃ L' c, evalF κ (.loop x n b) s L = .ok s L' c ∧ c ≤ 1 + n.cost + N * (1 + cb) ∧ F L' ∧
+      abs L' = (List.range N).foldl f (abs L) := by
+  obtain ⟨s', L', c, he, hc, hs, hF, ha⟩ := evalF_loop hn
+    (fun k s' L' => s' = s ∧ F L' ∧ abs L' = (List.range k).foldl f (abs L)) cb ⟨rfl, h0, rfl⟩
+    (by
+      intro k hk s1 L1 ⟨hs, hF, ha⟩
+      subst hs
+      obtain ⟨L2, c, he, hc, hF2, ha2⟩ := hb k hk L1 hF
+      exact ⟨s1, L2, c, he, hc, rfl, hF2, by rw [ha2, ha, List.range_succ, List.foldl_append]; rfl⟩)
+  subst hs
+  exact ⟨L', c, he, hc, hF, ha⟩
 
 end OM.Impl
