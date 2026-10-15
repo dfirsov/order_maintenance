@@ -90,6 +90,34 @@ theorem shiftL_eq (pr : Nat → Bool) (n : Nat) (hp : PairsOK pr n) (k f : Nat) 
   · rw [if_neg (fun h' => h h'.1)]
     unfold shiftL; rw [if_neg h]
 
+/-! ### The cut only asks about pairs inside -/
+
+theorem shiftR_congr {pr pr' : Nat → Bool} {n : Nat} (h : ∀ k, 1 ≤ k → k < n → pr k = pr' k) :
+    ∀ f k, shiftR pr n f k = shiftR pr' n f k
+  | 0, _ => rfl
+  | f + 1, k => by
+    unfold shiftR
+    by_cases hk : 0 < k ∧ k < n
+    · simp only [hk, decide_true, Bool.and_self, if_true, h k (by omega) hk.2, shiftR_congr h f (k + 1)]
+    · simp only [Bool.and_eq_true, decide_eq_true_eq, hk, if_false]
+
+theorem shiftL_congr {pr pr' : Nat → Bool} {n : Nat} (h : ∀ k, 1 ≤ k → k < n → pr k = pr' k) :
+    ∀ f k, k < n → shiftL pr f k = shiftL pr' f k
+  | 0, _, _ => rfl
+  | f + 1, k, hk => by
+    unfold shiftL
+    by_cases h0 : k > 0
+    · rw [if_pos h0, if_pos h0, h k h0 hk, shiftL_congr h f (k - 1) (by omega)]
+    · rw [if_neg h0, if_neg h0]
+
+theorem drainCut_congr {ws : List Nat} {pr pr' : Nat → Bool} (hh : Bool)
+    (h : ∀ k, 1 ≤ k → k < ws.length → pr k = pr' k) : drainCut ws pr hh = drainCut ws pr' hh := by
+  unfold drainCut
+  simp only [shiftR_congr h]
+  by_cases hn : ws.length = 0
+  · simp only [hn]; rfl
+  · rw [shiftL_congr h _ _ (by omega)]
+
 /-! ### Lemma T0 -/
 
 theorem sum_take_succ' (ws : List Nat) (m : Nat) (hm : m < ws.length) :

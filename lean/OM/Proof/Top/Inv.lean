@@ -59,6 +59,8 @@ structure TopParams (P : Params) : Prop where
   lamK : ∀ h, 1 ≤ h → 2 + 2 * Kd P h ≤ lamd P h
   /-- Labels have room for every insertion event (our form of I7). -/
   room : ∀ h, 1 ≤ h → 2 ^ Dmax P h * (n0max P h + 1) ≤ 2 ^ P.beta
+  /-- A drain's targets weigh less than a node about to drain at the height above (`Π_{h-1} ≤ W_h`). -/
+  piW : ∀ h, 2 ≤ h → Pid P (h - 1) ≤ Wd P h
 
 /-! ### The copy phase -/
 
