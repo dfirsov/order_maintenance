@@ -670,4 +670,57 @@ theorem initCoreS_eager {κ : Caps} {P : Params} {L : Loc} (hL : L "lz" = 0) (hB
   exact ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_ite_f (by simp [Exp.ev, hlz]) (evalF_seq_ok2 e3 e4))),
     by simp [Exp.cost, prepStart, initState] at hn3 ⊢; omega⟩
 
+/-! ### `prepareStep` -/
+
+/-- `r := prepareStep`. -/
+def prepP : Proc where
+  name := "prepareStep"
+  params := []
+  rets := ["r"]
+  body :=
+    .ite (.rd (.s .notReady) 0) (initStepP.call [] ["d"] ;; .ite "d" (.wr (.s .notReady) 0 0) .skip) .skip ;;
+    "r" ::= !ₑ (.rd (.s .notReady) 0)
+
+theorem prepP_agree {κ : Caps} {s : Core} {L : Loc} {D : Nat} (hA : s.ready = false → ISAgree κ s D)
+    (hrd : ∀ b s1, initStep.run s = .ok b s1 → s1.ready = s.ready)
+    {r : Bool} {s' : Core} (h : prepareStep.run s = .ok r s') :
+    ∃ L' c, evalF κ prepP.body s L = .ok s' L' c ∧ L' "r" = b2n r ∧ c ≤ D + 40 := by
+  unfold prepareStep at h
+  cases hr : s.ready
+  · simp only [OM.Proof.run_get_bind, hr, Bool.not_false, if_true] at h
+    obtain ⟨b, s1, h1, h2⟩ := run_bind_ok h
+    have hr1 := hrd b s1 h1
+    obtain ⟨Lg, cg, eg, hd, hcg⟩ := hA hr b s1 h1
+    have ec := evalF_call_ok (q := initStepP) (args := []) (ds := ["d"]) (L := L) (by simp [evList]) eg
+    set L1 := OM.Machine.State.setLocs L ["d"] (initStepP.rets.map Lg)
+    have h1d : L1 "d" = b2n b := by simp [L1, initStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hd]
+    cases b
+    · simp at h2
+      obtain ⟨rfl, rfl⟩ := h2
+      have e2 := evalF_assign_ok (κ := κ) (s := s1) (L := L1) (x := "r") (e := !ₑ (.rd (.s .notReady) 0)) (v := 0)
+        (by simp [Exp.ev, Fld.cap, Fld.get, SF.get, hr1, hr, b2n, OM.Machine.UnOp.eval])
+      refine ⟨_, _, evalF_seq_ok2 (evalF_ite_t (v := 1) (by simp [Exp.ev, Fld.cap, Fld.get, SF.get, hr, b2n])
+        one_ne_zero (evalF_seq_ok2 ec (evalF_ite_f (by simp [Exp.ev, h1d, b2n]) evalF_skip))) e2,
+        by simp [OM.Machine.State.upd, hr1, hr, b2n], ?_⟩
+      simp [Exp.cost, costList] at hcg ⊢; omega
+    · simp at h2
+      obtain ⟨rfl, rfl⟩ := h2
+      have e3 : evalF κ (.wr (.s .notReady) 0 0) s1 L1 = .ok { s1 with ready := true } L1 3 := by
+        simp [evalF, Exp.ev, Fld.set, SF.ok, SF.set, Exp.cost]
+      have e2 := evalF_assign_ok (κ := κ) (s := { s1 with ready := true }) (L := L1) (x := "r")
+        (e := !ₑ (.rd (.s .notReady) 0)) (v := 1)
+        (by simp [Exp.ev, Fld.cap, Fld.get, SF.get, b2n, OM.Machine.UnOp.eval])
+      refine ⟨_, _, evalF_seq_ok2 (evalF_ite_t (v := 1) (by simp [Exp.ev, Fld.cap, Fld.get, SF.get, hr, b2n])
+        one_ne_zero (evalF_seq_ok2 ec (evalF_ite_t (v := 1) (by simp [Exp.ev, h1d, b2n]) one_ne_zero e3))) e2,
+        by simp [OM.Machine.State.upd, b2n], ?_⟩
+      simp [Exp.cost, costList] at hcg ⊢; omega
+  · simp only [OM.Proof.run_get_bind, hr, Bool.not_true, Bool.false_eq_true, if_false] at h
+    simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    have e2 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "r") (e := !ₑ (.rd (.s .notReady) 0)) (v := 1)
+      (by simp [Exp.ev, Fld.cap, Fld.get, SF.get, hr, b2n, OM.Machine.UnOp.eval])
+    refine ⟨_, _, evalF_seq_ok2 (evalF_ite_f (by simp [Exp.ev, Fld.cap, Fld.get, SF.get, hr, b2n]) evalF_skip) e2,
+      by simp [OM.Machine.State.upd, hr, b2n], ?_⟩
+    simp [Exp.cost]
+
 end OM.Impl
