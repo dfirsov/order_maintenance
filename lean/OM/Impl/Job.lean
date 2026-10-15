@@ -290,4 +290,109 @@ theorem dsPickS_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v) (
       rw [hL7 r h3 h4]; simp only [L6, L5, OM.Machine.State.upd, if_neg h7, if_neg h8]
       rw [hL3 r h3 h4]; simp [L2, L1, OM.Machine.State.upd, h1, h2]
 
+/-- A table lookup that must succeed: `r := lab? of entry e in table t`. -/
+def labS (t e r : Reg) : Stm := (lookupP .table).call [.var t, .var e] ["f", r] ;; .ite "f" .skip .fail
+
+theorem labS_ok {κ : Caps} {s : Core} {L : Loc} {t e r : Reg} {tv ev l : Nat} (hr : r ≠ "f") (ht : L t = tv)
+    (he : L e = ev) (htr : tv < κ.lrec .table) (hl : (s.nodes.getX tv).lab? ev = some l) :
+    ∃ c, evalF κ (labS t e r) s L =
+      .ok s (OM.Machine.State.setLocs L ["f", r] [1, l]) c ∧ c ≤ 70 + 20 * (s.nodes.getX tv).table.length := by
+  obtain ⟨Lf, cf, ef, hf, hv, -, -, hcf⟩ := lookupP_agree κ .table s
+    (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [tv, ev]) (i := tv) (x := ev)
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) htr
+  have hlk : lookup (LK.view s tv .table) ev = some l := hl
+  rw [hlk] at hf hv
+  simp only [Option.isSome_some, if_true, Option.getD_some] at hf hv
+  have e1 := evalF_call_ok (q := lookupP .table) (args := [.var t, .var e]) (ds := ["f", r]) (L := L)
+    (by simp [evList, Exp.ev, ht, he]) ef
+  have hL : OM.Machine.State.setLocs L ["f", r] ((lookupP .table).rets.map Lf) =
+      OM.Machine.State.setLocs L ["f", r] [1, l] := by simp [lookupP, hf, hv]
+  rw [hL] at e1
+  have hf1 : OM.Machine.State.setLocs L ["f", r] [1, l] "f" = 1 := by
+    simp [OM.Machine.State.setLocs, OM.Machine.State.upd, Ne.symm hr]
+  have e2 : evalF κ (.ite "f" .skip .fail) s (OM.Machine.State.setLocs L ["f", r] [1, l]) =
+      .ok s (OM.Machine.State.setLocs L ["f", r] [1, l]) 3 := by
+    simp only [evalF, Exp.ev, hf1]; simp [Exp.cost, Res.addCost]
+  refine ⟨_, evalF_seq_ok2 e1 e2, ?_⟩
+  simp only [LK.view, costList, List.map, List.sum_cons, List.sum_nil, Exp.cost, List.length_cons,
+    List.length_nil] at hcf ⊢
+  omega
+
+/-- The labels around the move and the tag fields they make (locals `v h y t bl`). -/
+def dsLabS : Stm :=
+  .ite ("h" <ₑ .prm .H) .skip .fail ;;
+  "pr" ::= .prd "y" ("h" + 1) ;;
+  labS "pr" "t" "pt" ;; labS "t" "bl" "tb" ;; labS "pr" "v" "pv" ;; labS "v" "bl" "vb" ;;
+  "e1" ::= .bin .shl 1 ("h" * .prm .beta) ;; "e0" ::= .bin .shl 1 (("h" - 1) * .prm .beta) ;;
+  "old" ::= "pv" * "e1" + "vb" * "e0" ;; "new" ::= "pt" * "e1" + "tb" * "e0"
+
+theorem dsLabS_ok {κ : Caps} {s : Core} {L : Loc} {v h y t bl pt tb pv vb : Nat}
+    (hv : L "v" = v) (hh : L "h" = h) (hy : L "y" = y) (ht : L "t" = t) (hbl : L "bl" = bl)
+    (hhH : h < s.P.H) (h1 : 1 ≤ h) (hnp : notPrep s y) (hyC : y < κ.tbl .C) (hw : h + 1 < κ.pw)
+    (hpt : (s.nodes.getX ((s.path.getX y).getX (h + 1))).lab? t = some pt)
+    (htb : (s.nodes.getX t).lab? bl = some tb)
+    (hpv : (s.nodes.getX ((s.path.getX y).getX (h + 1))).lab? v = some pv)
+    (hvb : (s.nodes.getX v).lab? bl = some vb)
+    (htbB : tb < 2 ^ s.P.beta) (hvbB : vb < 2 ^ s.P.beta)
+    (hprr : (s.path.getX y).getX (h + 1) < κ.lrec .table) (htr : t < κ.lrec .table) (hvr : v < κ.lrec .table) :
+    ∃ L' c, evalF κ dsLabS s L = .ok s L' c ∧
+      L' "old" = (pv <<< (h * s.P.beta)) ||| (vb <<< ((h - 1) * s.P.beta)) ∧
+      L' "new" = (pt <<< (h * s.P.beta)) ||| (tb <<< ((h - 1) * s.P.beta)) ∧
+      c ≤ 400 + 40 * (s.nodes.getX ((s.path.getX y).getX (h + 1))).table.length +
+        20 * (s.nodes.getX t).table.length + 20 * (s.nodes.getX v).table.length ∧
+      ∀ r, r = "v" ∨ r = "y" ∨ r = "t" ∨ r = "lf" ∨ r = "h" → L' r = L r := by
+  set pr := (s.path.getX y).getX (h + 1)
+  set β := s.P.beta
+  have e1 : evalF κ (.ite ("h" <ₑ .prm .H) .skip .fail) s L = .ok s L 6 := by
+    simp [evalF, Exp.ev, hh, OM.Machine.BinOp.eval, PF.get, hhH, Exp.cost, Res.addCost]
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "pr") (e := .prd "y" ("h" + 1)) (v := pr)
+    (by simp [Exp.ev, hy, hh, OM.Machine.BinOp.eval, hyC, hw, rowOf_notPrep hnp, pr])
+  set L2 := upd L "pr" pr
+  obtain ⟨c3, e3, hc3⟩ := labS_ok (κ := κ) (s := s) (L := L2) (t := "pr") (e := "t") (r := "pt") (by decide)
+    (by simp [L2, OM.Machine.State.upd]) (by simp [L2, OM.Machine.State.upd, ht]) hprr hpt
+  set L3 := OM.Machine.State.setLocs L2 ["f", "pt"] [1, pt]
+  obtain ⟨c4, e4, hc4⟩ := labS_ok (κ := κ) (s := s) (L := L3) (t := "t") (e := "bl") (r := "tb") (by decide)
+    (by simp [L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, ht])
+    (by simp [L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, hbl]) htr htb
+  set L4 := OM.Machine.State.setLocs L3 ["f", "tb"] [1, tb]
+  obtain ⟨c5, e5, hc5⟩ := labS_ok (κ := κ) (s := s) (L := L4) (t := "pr") (e := "v") (r := "pv") (by decide)
+    (by simp [L4, L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [L4, L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, hv]) hprr hpv
+  set L5 := OM.Machine.State.setLocs L4 ["f", "pv"] [1, pv]
+  obtain ⟨c6, e6, hc6⟩ := labS_ok (κ := κ) (s := s) (L := L5) (t := "v") (e := "bl") (r := "vb") (by decide)
+    (by simp [L5, L4, L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, hv])
+    (by simp [L5, L4, L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, hbl]) hvr hvb
+  set L6 := OM.Machine.State.setLocs L5 ["f", "vb"] [1, vb]
+  have hL6 : ∀ r, r ≠ "pr" → r ≠ "f" → r ≠ "pt" → r ≠ "tb" → r ≠ "pv" → r ≠ "vb" → L6 r = L r := by
+    intro r h1 h2 h3 h4 h5 h6
+    simp [L6, L5, L4, L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, h1, h2, h3, h4, h5, h6]
+  have h6 : L6 "pt" = pt ∧ L6 "tb" = tb ∧ L6 "pv" = pv ∧ L6 "vb" = vb ∧ L6 "h" = h := by
+    simp [L6, L5, L4, L3, L2, OM.Machine.State.setLocs, OM.Machine.State.upd, hh]
+  obtain ⟨h6pt, h6tb, h6pv, h6vb, h6h⟩ := h6
+  have a7 := evalF_assign_ok (κ := κ) (s := s) (L := L6) (x := "e1") (e := .bin .shl 1 ("h" * .prm .beta))
+    (v := 2 ^ (h * β)) (by simp [Exp.ev, h6h, OM.Machine.BinOp.eval, PF.get, β])
+  set L7 := upd L6 "e1" (2 ^ (h * β))
+  have a8 := evalF_assign_ok (κ := κ) (s := s) (L := L7) (x := "e0") (e := .bin .shl 1 (("h" - 1) * .prm .beta))
+    (v := 2 ^ ((h - 1) * β)) (by simp [Exp.ev, L7, OM.Machine.State.upd, h6h, OM.Machine.BinOp.eval, PF.get, β, h1])
+  set L8 := upd L7 "e0" (2 ^ ((h - 1) * β))
+  have a9 := evalF_assign_ok (κ := κ) (s := s) (L := L8) (x := "old") (e := "pv" * "e1" + "vb" * "e0")
+    (v := pv * 2 ^ (h * β) + vb * 2 ^ ((h - 1) * β))
+    (by simp [Exp.ev, L8, L7, OM.Machine.State.upd, h6pv, h6vb, OM.Machine.BinOp.eval])
+  set L9 := upd L8 "old" (pv * 2 ^ (h * β) + vb * 2 ^ ((h - 1) * β))
+  have a10 := evalF_assign_ok (κ := κ) (s := s) (L := L9) (x := "new") (e := "pt" * "e1" + "tb" * "e0")
+    (v := pt * 2 ^ (h * β) + tb * 2 ^ ((h - 1) * β))
+    (by simp [Exp.ev, L9, L8, L7, OM.Machine.State.upd, h6pt, h6tb, OM.Machine.BinOp.eval])
+  refine ⟨_, _, evalF_seq_ok2 e1 (evalF_seq_ok2 a2 (evalF_seq_ok2 e3 (evalF_seq_ok2 e4 (evalF_seq_ok2 e5
+    (evalF_seq_ok2 e6 (evalF_seq_ok2 a7 (evalF_seq_ok2 a8 (evalF_seq_ok2 a9 a10)))))))), ?_, ?_, ?_, ?_⟩
+  · simp [L9, OM.Machine.State.upd, lor_shift pv vb β h hvbB h1]
+  · simp [OM.Machine.State.upd, lor_shift pt tb β h htbB h1]
+  · simp only [Exp.cost, Exp.ofNat_def, Exp.mul_def, Exp.add_def, Exp.sub_def] at hc3 hc4 hc5 hc6 ⊢; omega
+  · intro r hr
+    have : r ≠ "pr" ∧ r ≠ "f" ∧ r ≠ "pt" ∧ r ≠ "tb" ∧ r ≠ "pv" ∧ r ≠ "vb" ∧ r ≠ "e1" ∧ r ≠ "e0" ∧ r ≠ "old" ∧
+        r ≠ "new" := by rcases hr with rfl | rfl | rfl | rfl | rfl <;> decide
+    obtain ⟨a, b, c, d, e, f, g, i, k, m⟩ := this
+    simp only [L9, L8, L7, OM.Machine.State.upd, if_neg g, if_neg i, if_neg k, if_neg m]
+    exact hL6 r a b c d e f
+
 end OM.Impl
