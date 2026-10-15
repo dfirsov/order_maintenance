@@ -172,4 +172,152 @@ theorem eraseIdxP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i p : Nat} (h
   simp only [Exp.cost, Exp.monus, Exp.max, Exp.sub_def, Exp.add_def, Exp.mul_def, Exp.ofNat_def] at hc ⊢
   omega
 
+/-! ### Filtering by key -/
+
+/-- The kept prefix after `j` elements. -/
+abbrev keepF (l : List (Nat × Nat)) (x j : Nat) : List (Nat × Nat) := (l.take j).filter (·.1 != x)
+
+theorem length_keepF_le (l : List (Nat × Nat)) (x j : Nat) : (keepF l x j).length ≤ min j l.length := by
+  have := List.length_filter_le (·.1 != x) (l.take j); simp at this ⊢ <;> omega
+
+theorem keepF_succ {l : List (Nat × Nat)} {x j : Nat} (hj : j < l.length) :
+    keepF l x (j + 1) = keepF l x j ++ (if l[j].1 != x then [l[j] ] else []) := by
+  simp only [keepF, List.take_succ_eq_append_getElem hj, List.filter_append]
+  congr 1; cases h : (l[j].1 != x) <;> simp [h]
+
+theorem getElem_append_drop {A l : List (Nat × Nat)} {j : Nat} (hA : A.length ≤ j) (hj : j < l.length)
+    (h : j < (A ++ l.drop A.length).length) : (A ++ l.drop A.length)[j] = l[j] := by
+  rw [List.getElem_append_right (by omega)]
+  simp; congr 1; omega
+
+theorem getD_append_drop {A l : List (Nat × Nat)} {j : Nat} (hA : A.length ≤ j) (hj : j < l.length) :
+    (A ++ l.drop A.length).getD j (0, 0) = l[j] := by
+  rw [List.getD_eq_getElem _ _ (by simp; omega), getElem_append_drop hA hj]
+
+theorem set_append_drop {A l : List (Nat × Nat)} (hA : A.length < l.length) (a : Nat × Nat) :
+    (A ++ l.drop A.length).set A.length a = (A ++ [a]) ++ l.drop (A ++ [a]).length := by
+  rw [List.set_append_right _ _ (by omega), Nat.sub_self, List.drop_eq_getElem_cons hA, List.set_cons_zero]
+  simp
+
+theorem valid_append_drop {k : LK} {l A : List (Nat × Nat)} (hv : k.valid l = true) (hA : k.valid A = true) (w : Nat) :
+    k.valid (A ++ l.drop w) = true := by
+  rw [LK.valid_iff] at hv hA ⊢
+  intro z hz; rcases List.mem_append.mp hz with h | h
+  · exact hA z h
+  · exact hv z (List.mem_of_mem_drop h)
+
+theorem valid_keepF {k : LK} {l : List (Nat × Nat)} (hv : k.valid l = true) (x j : Nat) :
+    k.valid (keepF l x j) = true := by
+  rw [LK.valid_iff] at hv ⊢
+  intro z hz; exact hv z (List.mem_of_mem_take (List.mem_of_mem_filter hz))
+
+def filterBody (k : LK) : Stm := .ite (.lrd k false "i" "j" =ₑ "x") .skip (mvS k "w" "j" ;; "w" ::= "w" + 1)
+
+def filterP (k : LK) : Proc where
+  name := "filter"
+  params := ["i", "x"]
+  rets := []
+  body :=
+    "n" ::= .llen k "i" ;; "w" ::= 0 ;; .loop "j" "n" (filterBody k) ;;
+    "c" ::= .monus "n" "w" ;; .loop "t" "c" (.lshrink k "i")
+
+/-- **`filterP` keeps the elements whose key is not `x`.** -/
+theorem filterP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i x : Nat} (hi : L "i" = i) (hx : L "x" = x)
+    (hid : k.idOk s i) (hr : k.recOk s i = true) (hir : i < κ.lrec k) (hcap : (k.view s i).length ≤ κ.lcap k) :
+    ∃ L' c, evalF κ (filterP k).body s L = .ok (k.put s i ((k.view s i).filter (·.1 != x))) L' c ∧
+      c ≤ 50 + 90 * (k.view s i).length := by
+  set l := k.view s i
+  set n := l.length
+  have hvl : k.valid l = true := LK.valid_view s i k
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "n") (e := .llen k "i") (v := n)
+    (by simp [Exp.ev, hi, hir, l, n])
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := OM.Machine.State.upd L "n" n) (x := "w") (e := (0 : Exp))
+    (v := 0) rfl
+  set L2 := OM.Machine.State.upd (OM.Machine.State.upd L "n" n) "w" 0
+  -- compaction
+  obtain ⟨S', L', c, he, hc, hS', hi', hx', hn', hw'⟩ := evalF_loop (κ := κ) (x := "j") (n := .var "n")
+    (b := filterBody k) (s := s) (L := L2) (N := n) (by simp [Exp.ev, L2, OM.Machine.State.upd])
+    (fun j S L' => S = k.put s i (keepF l x j ++ l.drop (keepF l x j).length) ∧ L' "i" = i ∧ L' "x" = x ∧
+      L' "n" = n ∧ L' "w" = (keepF l x j).length) 40
+    ⟨by simp only [keepF, List.take_zero, List.filter_nil, List.length_nil, List.drop_zero, List.nil_append]
+        exact (LK.put_view hid).symm, by simp [L2, OM.Machine.State.upd, hi], by simp [L2, OM.Machine.State.upd, hx],
+      by simp [L2, OM.Machine.State.upd], by simp [L2, OM.Machine.State.upd, keepF]⟩
+    (by
+      intro j hj S L3 ⟨hS, h3i, h3x, h3n, h3w⟩
+      subst hS
+      set A := keepF l x j
+      have hAj : A.length ≤ j := (length_keepF_le l x j).trans (Nat.min_le_left _ _)
+      set V := A ++ l.drop A.length
+      have hvV : k.valid V = true := valid_append_drop hvl (valid_keepF hvl x j) _
+      have hVl : V.length = n := by simp [V]; omega
+      have hview := LK.view_put_self (s := s) (i := i) (k := k) hr hvV
+      set L4 := OM.Machine.State.upd L3 "j" j
+      have hc : (.lrd k false "i" "j" =ₑ "x" : Exp).ev κ (k.put s i V) L4 =
+          some (if l[j].1 = x then 1 else 0) := by
+        simp [Exp.ev, L4, OM.Machine.State.upd, h3i, h3x, hir, hview, hVl, hj, OM.Machine.BinOp.eval, V,
+          getElem_append_drop hAj hj]
+      by_cases hk : l[j].1 = x
+      · have hA' : keepF l x (j + 1) = A := by rw [keepF_succ hj]; simp [hk, A]
+        refine ⟨_, L4, _, evalF_ite_t (by rw [hc, if_pos hk]) one_ne_zero evalF_skip, by simp [Exp.cost], ?_⟩
+        rw [hA']
+        exact ⟨rfl, by simp [L4, OM.Machine.State.upd, h3i], by simp [L4, OM.Machine.State.upd, h3x],
+          by simp [L4, OM.Machine.State.upd, h3n], by simp [L4, OM.Machine.State.upd, h3w]⟩
+      · have hA' : keepF l x (j + 1) = A ++ [l[j] ] := by rw [keepF_succ hj]; simp [hk, A]
+        obtain ⟨c5, e5, hc5⟩ := mvS_ok (κ := κ) (k := k) (s := s) (L := L4) (i := i) (q := A.length) (q' := j)
+          (B := V) (dst := .var "w") (src := .var "j") (by simp [L4, OM.Machine.State.upd, h3i])
+          (fun _ => by simp [Exp.ev, L4, OM.Machine.State.upd, h3w]) (fun _ => by simp [Exp.ev, L4, OM.Machine.State.upd])
+          (by omega) (by omega) hr hir hvV (by rw [hVl]; exact hcap)
+        rw [getD_append_drop hAj hj, set_append_drop (by omega), ← hA'] at e5
+        have a6 := evalF_assign_ok (κ := κ) (s := k.put s i (keepF l x (j + 1) ++ l.drop (keepF l x (j + 1)).length))
+          (L := L4) (x := "w") (e := "w" + 1) (v := A.length + 1)
+          (by simp [Exp.ev, L4, OM.Machine.State.upd, h3w, OM.Machine.BinOp.eval])
+        refine ⟨_, _, _, evalF_ite_f (by rw [hc, if_neg hk]) (evalF_seq_ok2 e5 a6), ?_, rfl, ?_, ?_, ?_, ?_⟩
+        · simp [Exp.cost] at hc5 ⊢; omega
+        · simp [L4, OM.Machine.State.upd, h3i]
+        · simp [L4, OM.Machine.State.upd, h3x]
+        · simp [L4, OM.Machine.State.upd, h3n]
+        · simp [OM.Machine.State.upd, hA'])
+  subst hS'
+  set F := keepF l x n
+  have hF : F = l.filter (·.1 != x) := by simp [F, keepF, n]
+  have hFn : F.length ≤ n := (length_keepF_le l x n).trans (Nat.min_le_left _ _)
+  set D := l.drop F.length
+  have hFD : (F ++ D).length = n := by simp [D]; omega
+  have hvFD : k.valid (F ++ D) = true := valid_append_drop hvl (valid_keepF hvl x n) _
+  have a7 := evalF_assign_ok (κ := κ) (s := k.put s i (F ++ D)) (L := L') (x := "c") (e := .monus "n" "w")
+    (v := n - F.length) (Exp.ev_monus κ _ L' (by simp [Exp.ev, hn']) (by simp [Exp.ev, hw']))
+  set L7 := OM.Machine.State.upd L' "c" (n - F.length)
+  -- shrinking
+  obtain ⟨S'', L'', c', he', hc', hS'', -⟩ := evalF_loop (κ := κ) (x := "t") (n := .var "c") (b := .lshrink k "i")
+    (s := k.put s i (F ++ D)) (L := L7) (N := n - F.length) (by simp [Exp.ev, L7, OM.Machine.State.upd])
+    (fun t S L' => S = k.put s i ((F ++ D).take (n - t)) ∧ L' "i" = i) 6
+    ⟨by rw [Nat.sub_zero, List.take_of_length_le (by omega)], by simp [L7, OM.Machine.State.upd, hi']⟩
+    (by
+      intro t ht S L3 ⟨hS, h3i⟩
+      subst hS
+      set Y := (F ++ D).take (n - t)
+      have hvY : k.valid Y = true := by
+        rw [LK.valid_iff] at hvFD ⊢; exact fun z hz => hvFD z (List.mem_of_mem_take hz)
+      have hYl : Y.length = n - t := by simp [Y, hFD] <;> omega
+      have hso := LK.set_ok (κ := κ) (s := k.put s i Y) (i := i) (l := Y.dropLast) (k := k)
+        (by rw [LK.recOk_put]; exact hr)
+        (by rw [LK.valid_iff] at hvY ⊢; exact fun z hz => hvY z (List.mem_of_mem_dropLast hz))
+        (by simp [List.length_dropLast, hYl]; omega) hir
+      rw [LK.put_put] at hso
+      have hdl : Y.dropLast = (F ++ D).take (n - (t + 1)) := by
+        simp only [Y, List.dropLast_eq_take, List.take_take, List.length_take, hFD]; congr 1; omega
+      refine ⟨_, OM.Machine.State.upd L3 "t" t, _, ?_, le_refl _, by rw [← hdl], by simp [OM.Machine.State.upd, h3i]⟩
+      simp [evalF, Exp.ev, OM.Machine.State.upd, h3i, LK.view_put_self hr hvY, hYl, show n - t ≠ 0 by omega, hso,
+        Exp.cost])
+  subst hS''
+  have hfin : (F ++ D).take (n - (n - F.length)) = l.filter (·.1 != x) := by
+    rw [show n - (n - F.length) = F.length by omega, List.take_left' rfl, hF]
+  rw [hfin] at he'
+  refine ⟨L'', _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_seq_ok2 he (evalF_seq_ok2 a7 he'))), ?_⟩
+  have h1 : n * (1 + 40) = 41 * n := by ring
+  have h2 : (n - F.length) * (1 + 6) ≤ 7 * n := by
+    have := Nat.mul_le_mul_right (1 + 6) (show n - F.length ≤ n by omega); omega
+  simp only [Exp.cost, Exp.monus, Exp.max, Exp.sub_def, Exp.add_def, Exp.mul_def, Exp.ofNat_def] at hc hc' ⊢
+  omega
+
 end OM.Impl
