@@ -392,4 +392,119 @@ theorem groupSplitStepS_remove (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : 
   exact ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t hc one_ne_zero (evalF_seq_ok2 e2 (evalF_assign_ok (v := 0) rfl))),
     by simp [OM.Machine.State.upd], by simp [Exp.cost, Exp.gF] at hc2 ⊢; omega⟩
 
+/-! ### The drive loop -/
+
+def groupSplitStepP : Proc := { name := "groupSplitStep", params := ["g"], rets := ["ok"], body := groupSplitStepS }
+def driveBody : Stm :=
+  .ite ("dn" =ₑ 0) (groupSplitStepP.call [.var "g"] ["ok"] ;; .ite ("ok" =ₑ 0) ("dn" ::= 1) .skip) .skip
+/-- `driveGroupFrom g`: up to `K_G` split steps, stopping once `g` is removed. -/
+def driveGroupFromS : Stm := "dn" ::= 0 ;; .loop "jj" (.prm .KG) driveBody
+
+/-- A Level M split step that agrees with a Level F one (`b` = Level F's result). -/
+def StepAgree (κ : Caps) (p : Nat) (t t' : Core) (b : Bool) : Prop :=
+  ∀ L : Loc, L "g" = p → ∃ L' n, evalF κ groupSplitStepS t L = .ok t' L' n ∧ L' "ok" = b2n b ∧ n ≤ 350
+
+/-- The body of Level F's drive loop. -/
+def driveF (p : Nat) : Nat → Option Unit × Unit → CM (ForInStep (Option Unit × Unit)) :=
+  fun _ _ => do
+    let b ← groupSplitStep p
+    if (!b) = true then pure (ForInStep.done (some (), ())) else pure (ForInStep.yield (none, ()))
+
+theorem driveF_run_true {p j : Nat} {t t' : Core} {a : Option Unit × Unit} (h : (groupSplitStep p).run t = .ok true t') :
+    (driveF p j a).run t = .ok (.yield (none, ())) t' := by
+  simp only [driveF, OM.Proof.run_bind, h]; rfl
+
+theorem driveF_run_false {p j : Nat} {t t' : Core} {a : Option Unit × Unit} (h : (groupSplitStep p).run t = .ok false t') :
+    (driveF p j a).run t = .ok (.done (some (), ())) t' := by
+  simp only [driveF, OM.Proof.run_bind, h]; rfl
+
+theorem driveGroupFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g" = p)
+    (I : Nat → Core → Prop) (h0 : I 0 s)
+    (hstep : ∀ j t, I j t → j < s.P.K_G → ∃ b t', (groupSplitStep p).run t = .ok b t' ∧
+      (b = true → I (j + 1) t') ∧ StepAgree κ p t t' b) :
+    ∃ t' L' n, (driveGroupFrom p).run s = .ok () t' ∧ evalF κ driveGroupFromS s L = .ok t' L' n ∧
+      n ≤ 5 + s.P.K_G * 401 := by
+  set K := s.P.K_G
+  set R := fun (l : List Nat) (t : Core) => (forIn l ((none : Option Unit), ()) (driveF p)).run t
+  -- Level F's loop ends
+  have hF : ∀ (n j : Nat) (t : Core), I j t → j + n = K →
+      ∃ c tF, R ((List.range K).drop j) t = .ok c tF := by
+    intro n; induction n with
+    | zero =>
+      intro j t _ hj; refine ⟨(none, ()), t, ?_⟩
+      simp only [R, show j = K by omega]; rw [List.drop_of_length_le (by simp)]; rfl
+    | succ n ih =>
+      intro j t hI hj
+      have hjK : j < K := by omega
+      rw [List.drop_eq_getElem_cons (by simpa using hjK), List.getElem_range]
+      obtain ⟨b, t', hr, hI', -⟩ := hstep j t hI hjK
+      cases b
+      · exact ⟨_, _, by simp only [R, List.forIn_cons, OM.Proof.run_bind, driveF_run_false hr]; rfl⟩
+      · obtain ⟨c, tF, h⟩ := ih (j + 1) t' (hI' rfl) (by omega)
+        exact ⟨c, tF, by simp only [R, List.forIn_cons, OM.Proof.run_bind, driveF_run_true hr]; exact h⟩
+  obtain ⟨c0, tF, hR0⟩ := hF K 0 s h0 (by omega)
+  simp only [List.drop_zero] at hR0
+  -- Level F's result
+  have hFrun : (driveGroupFrom p).run s = .ok () tF := by
+    unfold driveGroupFrom
+    rw [OM.Proof.run_getP_bind, OM.Proof.run_bind]
+    have hR0' : (forIn (List.range s.P.K_G) ((none : Option Unit), ()) (fun (_ : Nat) (_ : Option Unit × Unit) => do
+        let b ← groupSplitStep p
+        if (!b) = true then pure (ForInStep.done (some (), ())) else pure (ForInStep.yield (none, ())))).run s =
+        .ok c0 tF := hR0
+    rw [hR0']
+    dsimp only
+    split <;> rfl
+  -- Level M's loop
+  have a1 := evalF_assign_ok (κ := κ) (s := s) (L := L) (x := "dn") (e := (0 : Exp)) (v := 0) rfl
+  obtain ⟨S', L', c, he, hc, -, hI⟩ := evalF_loop (κ := κ) (x := "jj") (n := .prm .KG) (b := driveBody) (s := s)
+    (L := upd L "dn" 0) (N := K) (by simp [Exp.ev, PF.get, K])
+    (fun j S L' => L' "g" = p ∧ ((L' "dn" = 0 ∧ I j S ∧ ∃ c, R ((List.range K).drop j) S = .ok c tF) ∨
+      (L' "dn" = 1 ∧ S = tF))) 400
+    ⟨by simp [OM.Machine.State.upd, hg], Or.inl ⟨by simp [OM.Machine.State.upd], h0, c0, by simpa using hR0⟩⟩
+    (by
+      intro j hj S L1 ⟨h1g, hcase⟩
+      set L2 := upd L1 "jj" j
+      have h2g : L2 "g" = p := by simp [L2, OM.Machine.State.upd, h1g]
+      rcases hcase with ⟨hdn, hIj, c1, hR⟩ | ⟨hdn, hSF⟩
+      · have hc0 : ("dn" =ₑ 0 : Exp).ev κ S L2 = some 1 := by simp [Exp.ev, OM.Machine.BinOp.eval, L2,
+          OM.Machine.State.upd, hdn]
+        obtain ⟨b, t', hr, hI', hSA⟩ := hstep j S hIj hj
+        obtain ⟨Lg, ng, eg, hok, hng⟩ := hSA (OM.Machine.State.setLocs (fun _ => 0) ["g"] [p])
+          (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+        have ec := evalF_call_ok (q := groupSplitStepP) (args := [.var "g"]) (ds := ["ok"]) (L := L2)
+          (by simp [evList, Exp.ev, h2g]) eg
+        set L3 := OM.Machine.State.setLocs L2 ["ok"] (groupSplitStepP.rets.map Lg)
+        have h3ok : L3 "ok" = b2n b := by simp [L3, groupSplitStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hok]
+        have h3g : L3 "g" = p := by simp [L3, groupSplitStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, h2g]
+        have h3dn : L3 "dn" = 0 := by simp [L3, L2, groupSplitStepP, OM.Machine.State.setLocs, OM.Machine.State.upd, hdn]
+        rw [List.drop_eq_getElem_cons (by simpa using hj), List.getElem_range] at hR
+        cases b
+        · simp only [R, List.forIn_cons, OM.Proof.run_bind, driveF_run_false hr] at hR
+          injection hR with _ hT; subst hT
+          have e4 := evalF_assign_ok (κ := κ) (s := t') (L := L3) (x := "dn") (e := (1 : Exp)) (v := 1) rfl
+          refine ⟨t', _, _, evalF_ite_t hc0 one_ne_zero (evalF_seq_ok2 ec (evalF_ite_t (v := 1)
+            (by simp [Exp.ev, OM.Machine.BinOp.eval, h3ok, b2n]) one_ne_zero e4)), ?_,
+            by simp [OM.Machine.State.upd, h3g], Or.inr ⟨by simp [OM.Machine.State.upd], rfl⟩⟩
+          simp [Exp.cost, costList] at hng ⊢; omega
+        · simp only [R, List.forIn_cons, OM.Proof.run_bind, driveF_run_true hr] at hR
+          refine ⟨t', _, _, evalF_ite_t hc0 one_ne_zero (evalF_seq_ok2 ec (evalF_ite_f
+            (by simp [Exp.ev, OM.Machine.BinOp.eval, h3ok, b2n]) evalF_skip)), ?_, h3g,
+            Or.inl ⟨h3dn, hI' rfl, c1, hR⟩⟩
+          simp [Exp.cost, costList] at hng ⊢; omega
+      · subst hSF
+        have hc0 : ("dn" =ₑ 0 : Exp).ev κ S L2 = some 0 := by simp [Exp.ev, OM.Machine.BinOp.eval, L2,
+          OM.Machine.State.upd, hdn]
+        exact ⟨S, L2, _, evalF_ite_f hc0 evalF_skip, by simp [Exp.cost], h2g,
+          Or.inr ⟨by simp [L2, OM.Machine.State.upd, hdn], rfl⟩⟩)
+  have hS' : S' = tF := by
+    rcases hI with ⟨hdn, hIK, c2, hR⟩ | ⟨hdn, h⟩
+    · rw [List.drop_of_length_le (by simp)] at hR
+      simp only [R] at hR
+      injection hR
+    · exact h
+  subst hS'
+  refine ⟨S', L', _, hFrun, evalF_seq_ok2 a1 he, ?_⟩
+  simp only [Exp.cost] at hc ⊢; omega
+
 end OM.Impl
