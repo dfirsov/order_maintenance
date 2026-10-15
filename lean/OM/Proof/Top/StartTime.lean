@@ -249,6 +249,32 @@ theorem slack_v : slack S' (some (drainJob j v (nd (ts s) v).livePar)) v = 0 := 
   · rw [if_neg (by omega)]; rfl
   · rfl
 
+/-- **The new nodes weigh between `λ_h` and `τ_h`** (Lemma T0). -/
+theorem tw_new_range (w : Nat) (hw : w = s.nodes.size ∨ w = s.nodes.size + 1) :
+    lamd s.P (Top.ht (ts s) v) ≤ tw S' cl w ∧ tw S' cl w ≤ taud s.P (Top.ht (ts s) v) := by
+  have hvlt := C.H.hv
+  obtain ⟨-, htw⟩ := C.tw_new w hw
+  rw [htw]
+  have hc : (nd S' w).children = if w = s.nodes.size then (nd (ts s) v).children.take (sK (wiC s v) v)
+      else (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+    rcases hw with rfl | rfl
+    · rw [C.children, if_neg (show ¬(s.nodes.size = v) by omega), if_pos rfl, if_pos rfl]
+    · rw [C.children, if_neg (show ¬(s.nodes.size + 1 = v) by omega),
+        if_neg (show ¬(s.nodes.size + 1 = s.nodes.size) by omega), if_pos rfl,
+        if_neg (show ¬(s.nodes.size + 1 = s.nodes.size) by omega)]
+  rw [hc]
+  by_cases h1 : Top.ht (ts s) v = 1
+  · obtain ⟨-, -, -, a1, a2, a3, a4⟩ := sd_cut1 C.pc C.v0 C.I C.lp h1 C.of C.W
+    rw [if_pos h1]; rw [h1]
+    split
+    · exact ⟨a1, a2⟩
+    · exact ⟨a3, a4⟩
+  · obtain ⟨-, -, -, -, a1, a2, a3, a4⟩ := sd_cut2 C.pc C.v0 C.I C.lp C.TP (by have := C.h1; omega) C.of C.W
+    rw [if_neg h1]
+    split
+    · exact ⟨a1, a2⟩
+    · exact ⟨a3, a4⟩
+
 end SDCtx
 
 end OM.Proof.Top
