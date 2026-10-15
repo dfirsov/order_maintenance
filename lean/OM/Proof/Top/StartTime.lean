@@ -755,6 +755,25 @@ theorem room : Room S' cl (drSD dr (nd (ts s) v).inTables s.nodes.size)
       simp only [Nat.mul_zero, Nat.zero_add]
       omega
 
+/-- **The running job after a drain starts.** -/
+theorem job : JobOK S' cl (drainJob j v (nd (ts s) v).livePar) := by
+  have hvlt := C.H.hv
+  have hvn := C.nN v C.vl.1
+  have hvnn : ¬(v = s.nodes.size ∨ v = s.nodes.size + 1) := fun h => h.elim hvn.1 hvn.2
+  have hht : Top.ht S' v = Top.ht (ts s) v := by rw [C.ht v, if_neg hvnn]
+  have hH := C.hH
+  refine ⟨(C.I.job j rfl).pos, ?_⟩
+  show Top.ghostN S' v ∧
+      (Top.anc S' j.y (Top.ht S' v) = (nd S' v).t1 ∨ Top.anc S' j.y (Top.ht S' v) = (nd S' v).t2) ∧
+      (nd (ts s) v).livePar = Top.anc S' j.y (Top.ht S' v + 1)
+  rw [hht, C.H.t1, C.H.t2, if_pos rfl, if_pos rfl]
+  refine ⟨(C.ghostN v).mpr (Or.inr rfl), ?_, ?_⟩
+  · rw [C.anc C.y_mem _ (by omega), if_pos ⟨rfl, C.vy.symm⟩]
+    split
+    · exact Or.inl rfl
+    · exact Or.inr rfl
+  · rw [C.anc C.y_mem _ (by omega), if_neg (fun h => by omega), anc_succ _ _ C.h1, ← C.vy]
+
 end SDCtx
 
 end OM.Proof.Top
