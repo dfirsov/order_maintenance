@@ -165,6 +165,8 @@ structure Timing (s : TS) (cl : List Nat) (oj : Option Job) : Prop where
   wD : ∀ v, liveN s v → s.P.H < v → lamd s.P (ht s v) ≤ tw s cl v
   /-- Targets are not chain nodes. -/
   big : ∀ t, liveN s t → srcOf s t ≠ NIL → s.P.H < t
+  /-- The chain nodes of the initial structure: node `u ≤ H` has height `u`. -/
+  chain : ∀ u, isN s u → u ≤ s.P.H → ht s u = u
 
 /-! ### Label room -/
 

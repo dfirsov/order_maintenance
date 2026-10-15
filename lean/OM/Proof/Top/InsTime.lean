@@ -212,7 +212,7 @@ theorem ins_time (hTP : TopParams s.P) :
   have hs3 := hTP.s3
   have eP : (ts s).P = s.P := rfl
   refine ⟨fun v hv => ?_, fun v hv hp hs => ?_, fun v hv => ?_, fun v hv => ?_, fun v hv => ?_,
-    fun v hv => ?_, fun v hv hH => ?_, fun u hu hs => ?_⟩
+    fun v hv => ?_, fun v hv hH => ?_, fun u hu hs => ?_, ?_⟩
   · rw [F.liveN] at hv
     have h1 := (S.htN v hv.1).1
     have hw := Ti.wts v hv
@@ -279,6 +279,7 @@ theorem ins_time (hTP : TopParams s.P) :
     rw [eP] at this
     omega
   · rw [F.liveN] at hu; rw [F.srcOf] at hs; rw [F.P]; exact Ti.big u hu hs
+  · intro u hu hH; rw [F.isN] at hu; rw [F.P] at hH; rw [F.ht]; exact Ti.chain u hu hH
 
 theorem ins_ew_ge {u : Nat} (hu : isN (ts s) u) :
     ew (ts s) cl u ≤ ew t (clIns cl x s.C.size (s.C.size + 1)) u := by

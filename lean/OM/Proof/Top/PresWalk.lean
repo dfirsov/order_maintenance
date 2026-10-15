@@ -175,7 +175,7 @@ theorem inv_winc {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
     rw [hW u, if_neg hu]
   refine ⟨SH, ?_, ?_, ?_, by rw [hP]; exact hI.cap⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
-      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
+      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_⟩
     · rw [T.liveN] at hu
       rw [hpnew, T.tw]
       have := Ti.wts u hu
@@ -269,6 +269,7 @@ theorem inv_winc {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Na
       · rw [if_neg (fun h => hf (hfe.mp h))]; rw [if_neg hf] at this; exact this
     · rw [T.liveN] at hu; rw [hP] at hu'; rw [T.tw, T.ht, hP]; exact Ti.wD u hu hu'
     · rw [T.liveN] at hu; rw [T.srcOf] at hs; rw [hP]; exact Ti.big u hu hs
+    · intro u hu hH; rw [T.isN] at hu; rw [hP] at hH; rw [T.ht]; exact Ti.chain u hu hH
   · have Ro := hI.room
     refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1' => ?_, fun X hX h2' => ?_⟩
     · rw [T.isN] at hX; rw [T.labs, hP]; exact Ro.gaps X hX

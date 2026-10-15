@@ -829,7 +829,7 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
   have Ro := hI.room
   refine ⟨SH, ?_, ?_, ?_, by rw [T.P]; exact hI.cap⟩
   · refine ⟨fun u hu => ?_, fun u hu hp hs => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
-      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_⟩
+      fun u hu => ?_, fun u hu hu' => ?_, fun u hu hs => ?_, ?_⟩
     · rw [T.liveN] at hu; rw [hW, T.pend_fund j w up v k (k + 1), T.tw]; exact Ti.wts u hu
     · rw [T.liveN] at hu; rw [T.livePar] at hp; rw [T.srcOf] at hs
       rw [hW, T.ht, T.P]; exact Ti.wA u hu hp hs
@@ -860,6 +860,7 @@ theorem inv_drainMove {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0
         rw [if_neg hf] at this; exact this
     · rw [T.liveN] at hu; rw [T.P] at hu'; rw [T.tw, T.ht, T.P]; exact Ti.wD u hu hu'
     · rw [T.liveN] at hu; rw [T.srcOf] at hs; rw [T.P]; exact Ti.big u hu hs
+    · intro u hu hH; rw [T.isN] at hu; rw [T.P] at hH; rw [T.ht]; exact Ti.chain u hu hH
   · refine ⟨fun X hX => ?_, fun X hX => ?_, fun X hX h1 => ?_, fun X hX h2 => ?_⟩
     · rw [T.isN] at hX; rw [T.labs, T.P]; exact Ro.gaps X hX
     · rw [T.isN] at hX; rw [T.ht, T.P]; exact Ro.n0le X hX
