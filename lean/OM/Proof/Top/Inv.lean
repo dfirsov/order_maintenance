@@ -45,7 +45,7 @@ def n0max (h : Nat) : Nat :=
 
 /-- Insertion events a table of height `h` can see (from the potential of `Room`). -/
 def Dmax (h : Nat) : Nat :=
-  if h ≤ 1 then Pid P 1 / 2 else n0max P h + (Pid P h + 2) / gamd P (h - 1)
+  if h ≤ 1 then Pid P 1 / 2 else n0max P h + Pid P h / gamd P (h - 1) + 1
 
 end consts
 
@@ -61,6 +61,8 @@ structure TopParams (P : Params) : Prop where
   room : ∀ h, 1 ≤ h → 2 ^ Dmax P h * (n0max P h + 1) ≤ 2 ^ P.beta
   /-- A drain's targets weigh less than a node about to drain at the height above (`Π_{h-1} ≤ W_h`). -/
   piW : ∀ h, 2 ≤ h → Pid P (h - 1) ≤ Wd P h
+  /-- Draining one level down frees room: `γ_h ≥ 1`. -/
+  gam1 : ∀ h, 1 ≤ h → 1 ≤ gamd P h
 
 /-! ### The copy phase -/
 
