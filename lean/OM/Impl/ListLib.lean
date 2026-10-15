@@ -6,6 +6,7 @@ import OM.Impl.Loop
 Procedures on list `k` of record `i`, each with its agreement lemma:
 * `findP k`: the position of the first element with key `x` (`List.findIdx`), or the length.
 * `assocSetP k`: `assocSet` with key `x` and value `y`.
+* `lookupP k`: `lookup` of key `x` (found flag `f`, value `v`).
 -/
 
 namespace OM.Impl
@@ -390,5 +391,73 @@ theorem assocSetP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i x y : Nat} 
     refine ⟨L', _, evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_seq_ok2 he
       (evalF_ite_t (by simp [Exp.ev, OM.Machine.BinOp.eval, hf']) one_ne_zero hg))), ?_⟩
     simp [Exp.cost] at hc ⊢; omega
+
+/-! ### `lookup` -/
+
+def lookupP (k : LK) : Proc where
+  name := "lookup"
+  params := ["i", "x"]
+  rets := ["f", "v"]
+  body :=
+    (findP k).call [.var "i", .var "x"] ["r"] ;; "n" ::= .llen k "i" ;; "f" ::= ("r" <ₑ "n") ;;
+    .ite "f" ("v" ::= .lrd k true "i" "r") ("v" ::= 0)
+
+theorem lookup_findIdx (l : List (Nat × Nat)) (x : Nat) :
+    lookup l x = if h : l.findIdx (·.1 == x) < l.length then some l[l.findIdx (·.1 == x)].2 else none := by
+  unfold lookup
+  rw [List.find?_eq_getElem?_findIdx]
+  split
+  · next h => rw [List.getElem?_eq_getElem h]; rfl
+  · next h => rw [List.getElem?_eq_none (by omega)]; rfl
+
+/-- **`lookupP` computes `lookup`.** -/
+theorem lookupP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i x : Nat} (hi : L "i" = i) (hx : L "x" = x)
+    (hir : i < κ.lrec k) :
+    ∃ L' c, evalF κ (lookupP k).body s L = .ok s L' c ∧
+      L' "f" = (if (lookup (k.view s i) x).isSome then 1 else 0) ∧ L' "v" = (lookup (k.view s i) x).getD 0 ∧
+      L' "i" = i ∧ L' "x" = x ∧ c ≤ 60 + 20 * (k.view s i).length := by
+  set l := k.view s i
+  obtain ⟨L1, c1, e1, hr1, hc1⟩ := findP_agree κ k s (OM.Machine.State.setLocs (fun _ => 0) ["i", "x"] [i, x])
+    (i := i) (x := x) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hir
+  have ec := evalF_call_ok (q := findP k) (args := [.var "i", .var "x"]) (ds := ["r"]) (L := L)
+    (by simp [evList, Exp.ev, hi, hx]) e1
+  set L2 := OM.Machine.State.setLocs L ["r"] ((findP k).rets.map L1)
+  have hL2 : ∀ r, r ≠ "r" → L2 r = L r := fun r h => by
+    simp [L2, findP, OM.Machine.State.setLocs, OM.Machine.State.upd, h]
+  have hr2 : L2 "r" = l.findIdx (·.1 == x) := by
+    simp [L2, findP, OM.Machine.State.setLocs, OM.Machine.State.upd, hr1, l]
+  have a2 := evalF_assign_ok (κ := κ) (s := s) (L := L2) (x := "n") (e := .llen k "i") (v := l.length)
+    (by simp [Exp.ev, hL2 "i" (by decide), hi, hir, l])
+  set L3 := OM.Machine.State.upd L2 "n" l.length
+  set fv := if l.findIdx (·.1 == x) < l.length then 1 else 0
+  have a3 := evalF_assign_ok (κ := κ) (s := s) (L := L3) (x := "f") (e := ("r" <ₑ "n")) (v := fv)
+    (by simp [Exp.ev, OM.Machine.BinOp.eval, L3, OM.Machine.State.upd, hr2, fv])
+  set L4 := OM.Machine.State.upd L3 "f" fv
+  have hL4 : ∀ r, r ≠ "r" → r ≠ "n" → r ≠ "f" → L4 r = L r := fun r h1 h2 h3 => by
+    simp only [L4, L3, OM.Machine.State.upd, if_neg h2, if_neg h3]; exact hL2 r h1
+  have hr4 : L4 "r" = l.findIdx (·.1 == x) := by simp [L4, L3, OM.Machine.State.upd, hr2]
+  by_cases hf : l.findIdx (·.1 == x) < l.length
+  · have a4 := evalF_assign_ok (κ := κ) (s := s) (L := L4) (x := "v") (e := .lrd k true "i" "r")
+      (v := l[l.findIdx (·.1 == x)].2) (by
+        simp [Exp.ev, hL4 "i" (by decide) (by decide) (by decide), hi, hr4, hir, hf, l]
+        )
+    refine ⟨_, _, evalF_seq_ok2 ec (evalF_seq_ok2 a2 (evalF_seq_ok2 a3
+      (evalF_ite_t (v := 1) (by simp [Exp.ev, L4, OM.Machine.State.upd, fv, hf]) one_ne_zero a4))), ?_, ?_, ?_, ?_, ?_⟩
+    · rw [lookup_findIdx, dif_pos hf]; simp [OM.Machine.State.upd, L4, fv, hf]
+    · rw [lookup_findIdx, dif_pos hf]; simp [OM.Machine.State.upd]
+    · simp only [OM.Machine.State.upd]; simp; exact (hL4 "i" (by decide) (by decide) (by decide)).trans hi
+    · simp only [OM.Machine.State.upd]; simp; exact (hL4 "x" (by decide) (by decide) (by decide)).trans hx
+    · have : (k.view s i).length = l.length := rfl
+      simp [Exp.cost, costList] at hc1 ⊢; omega
+  · have a4 := evalF_assign_ok (κ := κ) (s := s) (L := L4) (x := "v") (e := (0 : Exp)) (v := 0) rfl
+    refine ⟨_, _, evalF_seq_ok2 ec (evalF_seq_ok2 a2 (evalF_seq_ok2 a3
+      (evalF_ite_f (by simp [Exp.ev, L4, OM.Machine.State.upd, fv, hf]) a4))), ?_, ?_, ?_, ?_, ?_⟩
+    · rw [lookup_findIdx, dif_neg hf]; simp [OM.Machine.State.upd, L4, fv, hf]
+    · rw [lookup_findIdx, dif_neg hf]; simp [OM.Machine.State.upd]
+    · simp only [OM.Machine.State.upd]; simp; exact (hL4 "i" (by decide) (by decide) (by decide)).trans hi
+    · simp only [OM.Machine.State.upd]; simp; exact (hL4 "x" (by decide) (by decide) (by decide)).trans hx
+    · have : (k.view s i).length = l.length := rfl
+      simp [Exp.cost, costList] at hc1 ⊢; omega
 
 end OM.Impl
