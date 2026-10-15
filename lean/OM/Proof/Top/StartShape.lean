@@ -662,6 +662,81 @@ theorem right_par {e : Nat} (he : e ∈ sRight (wiC s v) v side) :
     · exact hnot e h
   · rw [if_pos ⟨h2, hd⟩]; exact hnot _ ht1
 
+theorem ent_cases {k e : Nat} (he : Ent O' k e) :
+    (e ∈ ord k) ∨ (k = Top.ht (ts s) v ∧ (e = s.nodes.size ∨ e = s.nodes.size + 1)) := (C.ord_mem k e).mp he
+
+theorem sh_tabsIff : ∀ k e X, Ent O' k e →
+    (X ∈ tabs S' k e ↔ Top.isN S' X ∧ Top.ht S' X = k + 1 ∧ e ∈ Top.order S' X) := by
+  intro k e X he
+  have hvlt := C.H.hv
+  have hP' := C.H.P
+  rcases C.ent_cases he with he' | ⟨rfl, hen⟩
+  · have hk : k ≤ s.P.H := by
+      by_contra hk; have := C.S.ordHigh k (by show s.P.H < k; omega); rw [this] at he'; simp at he'
+    rw [C.tabs_old he' hk]
+    simp only [List.mem_append, List.mem_ite_nil_right, List.mem_singleton]
+    rw [C.S.tabsIff k e X he', C.isN, C.ht, C.order_mem]
+    constructor
+    · rintro ((⟨hX, hXh, heX⟩ | ⟨⟨rfl, hl⟩, rfl⟩) | ⟨⟨rfl, hr⟩, rfl⟩)
+      · have hXn := C.nN X hX
+        exact ⟨Or.inl hX, by rw [if_neg (fun h => h.elim hXn.1 hXn.2)]; exact hXh,
+          Or.inr (Or.inr ⟨hXn.1, hXn.2, Or.inl heX⟩)⟩
+      · exact ⟨Or.inr (Or.inl rfl), by rw [if_pos (Or.inl rfl)]; have := C.h1; omega, Or.inl ⟨rfl, hl⟩⟩
+      · exact ⟨Or.inr (Or.inr rfl), by rw [if_pos (Or.inr rfl)]; have := C.h1; omega, Or.inr (Or.inl ⟨rfl, hr⟩)⟩
+    · rintro ⟨hX, hXh, heX⟩
+      rcases heX with ⟨rfl, hl⟩ | ⟨rfl, hr⟩ | ⟨h1, h2, heX⟩
+      · rw [if_pos (Or.inl rfl)] at hXh; exact Or.inl (Or.inr ⟨⟨by omega, hl⟩, rfl⟩)
+      · rw [if_pos (Or.inr rfl)] at hXh; exact Or.inr ⟨⟨by omega, hr⟩, rfl⟩
+      · have hX' : Top.isN (ts s) X := by rcases hX with h | h | h; exact h; exact absurd h h1; exact absurd h h2
+        rw [if_neg (fun h => h.elim h1 h2)] at hXh
+        rcases heX with heX | ⟨hT, hen⟩
+        · exact Or.inl (Or.inl ⟨hX', hXh, heX⟩)
+        · exfalso
+          have := (C.inTab X hT).2.1
+          have hkh : k = Top.ht (ts s) v := by omega
+          subst hkh
+          have := C.fresh C.h1 (by have := C.hH; omega) he'
+          omega
+  · rw [C.tabs_new hen, C.isN, C.ht, C.order_mem]
+    constructor
+    · intro hT
+      obtain ⟨hX, hXh, -⟩ := C.inTab X hT
+      have hXn := C.nN X hX
+      exact ⟨Or.inl hX, by rw [if_neg (fun h => h.elim hXn.1 hXn.2)]; exact hXh,
+        Or.inr (Or.inr ⟨hXn.1, hXn.2, Or.inr ⟨hT, hen⟩⟩)⟩
+    · rintro ⟨hX, hXh, heX⟩
+      rcases heX with ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨h1, h2, heX⟩
+      · rw [if_pos (Or.inl rfl)] at hXh; omega
+      · rw [if_pos (Or.inr rfl)] at hXh; omega
+      · have hX' : Top.isN (ts s) X := by rcases hX with h | h | h; exact h; exact absurd h h1; exact absurd h h2
+        rw [if_neg (fun h => h.elim h1 h2)] at hXh
+        rcases heX with heX | ⟨hT, -⟩
+        · exfalso
+          have hent := C.S.tabEnt X hX' e heX
+          rw [hXh, Nat.add_sub_cancel] at hent
+          have := C.fresh C.h1 (by have := C.hH; omega) hent
+          omega
+        · exact hT
+
+theorem sh_tabsNodup : ∀ k e, Ent O' k e → (tabs S' k e).Nodup := by
+  intro k e he
+  have hvlt := C.H.hv
+  rcases C.ent_cases he with he' | ⟨rfl, hen⟩
+  · have hk : k ≤ s.P.H := by
+      by_contra hk; have := C.S.ordHigh k (by show s.P.H < k; omega); rw [this] at he'; simp at he'
+    rw [C.tabs_old he' hk]
+    have hnd := C.S.tabsNodup k e he'
+    have hfr : ∀ X ∈ tabs (ts s) k e, X < s.nodes.size := fun X hX => ((C.S.tabsIff k e X he').mp hX).1.2.1
+    rw [List.nodup_append, List.nodup_append]
+    refine ⟨⟨hnd, by split <;> simp, ?_⟩, by split <;> simp, ?_⟩
+    · intro a ha b hb e; subst e; split at hb <;> simp at hb; have := hfr a ha; omega
+    · intro a ha b hb e; subst e
+      split at hb <;> simp at hb
+      rcases List.mem_append.mp ha with ha | ha
+      · have := hfr _ ha; omega
+      · split at ha <;> simp at ha; omega
+  · rw [C.tabs_new hen]; exact C.H.tnd
+
 end SDCtx
 
 end OM.Proof.Top
