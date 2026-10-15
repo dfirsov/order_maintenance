@@ -295,6 +295,34 @@ theorem sw_kid {e : Nat} (he : e ∈ (nd (ts s) v).children) :
   · have hP : e ∉ P := fun h => ht (hiff.mpr h)
     rw [if_neg hP, if_pos (by tauto), if_neg ht]
 
+/-- **A drain's targets among the children are not separated.** -/
+theorem sw_nosep' (h2 : 2 ≤ ht (ts s) v) {a b g : Nat} (hinf : [a, b] <:+: (nd (ts s) v).children)
+    (hg : g ≠ NIL) (ha : srcOf (ts s) a = g) (hb : srcOf (ts s) b = g) :
+    a ∈ (nd (ts s) v).children.take (sK (wiC s v) v) ↔ b ∈ (nd (ts s) v).children.take (sK (wiC s v) v) := by
+  have S := hI.shape
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  obtain ⟨hnd, -, -⟩ := S.kids v hvl
+  obtain ⟨-, -, -, hsep, -⟩ := sd_cut2 hpc hv0 hI hlp hTP h2 hof hW
+  obtain ⟨i, hi, e1, e2⟩ := infix_pair_idx hinf
+  rw [← e1, ← e2]
+  set k := sK (wiC s v) v
+  by_cases hik : i + 1 < k
+  · exact ⟨fun _ => getD_mem_take hi hik, fun _ => getD_mem_take (by omega) (by omega)⟩
+  · by_cases hik' : k ≤ i
+    · exact ⟨fun h => absurd h (getD_not_mem_take hnd (by omega) hik'),
+        fun h => absurd h (getD_not_mem_take hnd hi (by omega))⟩
+    · exfalso
+      have hk : k = i + 1 := by omega
+      have : sPr (wiC s v) v k = true := by
+        unfold sPr drainPr sameDrainN
+        rw [sd_kids_eq, hk, Nat.add_sub_cancel, e1, e2]
+        have o1 : ((wiC s v).nodes.getX a).overflowOf = g := by
+          rw [show ((wiC s v).nodes.getX a).overflowOf = _ from (wiC_sameTree s v).overflowOf _]; exact ha
+        have o2 : ((wiC s v).nodes.getX b).overflowOf = g := by
+          rw [show ((wiC s v).nodes.getX b).overflowOf = _ from (wiC_sameTree s v).overflowOf _]; exact hb
+        rw [o1, o2]; simp [hg]
+      rw [hsep] at this; exact absurd this (by simp)
+
 /-- **Pairs are not separated.** -/
 theorem sw_nosep (h2 : 2 ≤ ht (ts s) v) {g : Nat} (hg : g ∈ order (ts s) v)
     (hgd : (nd (ts s) g).draining = true) :

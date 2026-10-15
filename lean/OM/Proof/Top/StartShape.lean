@@ -290,6 +290,137 @@ theorem sh_src : ∀ t, Top.liveN S' t → Top.srcOf S' t ≠ NIL →
   · rw [C.srcOf _, if_pos (Or.inr rfl)]
     exact ⟨(C.ghostN v).mpr (Or.inr rfl), Or.inr (by rw [C.H.t2, if_pos rfl])⟩
 
+theorem sh_ghost : ∀ g, Top.ghostN S' g →
+    Top.liveN S' (nd S' g).t1 ∧ Top.liveN S' (nd S' g).t2 ∧ Top.ht S' (nd S' g).t1 = Top.ht S' g ∧
+      Top.ht S' (nd S' g).t2 = Top.ht S' g ∧ Top.srcOf S' (nd S' g).t1 = g ∧ Top.srcOf S' (nd S' g).t2 = g ∧
+      (nd S' g).livePar = NIL ∧ (nd S' g).children = [] ∧ Top.srcOf S' g = NIL ∧
+      Top.ht S' g < (ts (sdS (wiC s v) v side)).P.H ∧
+      (nd S' (nd S' g).t1).livePar = (nd S' (nd S' g).t2).livePar ∧
+      [(nd S' g).t1, (nd S' g).t2] <:+: (nd S' (nd S' (nd S' g).t1).livePar).children ∧
+      [(nd S' g).t1, g, (nd S' g).t2] <:+: O' (Top.ht S' g) := by
+  intro g hg
+  have hvlt := C.H.hv
+  have hP' := C.H.P
+  have hvn := C.nN v C.vl.1
+  have hvnn : ¬(v = s.nodes.size ∨ v = s.nodes.size + 1) := fun h => h.elim hvn.1 hvn.2
+  obtain ⟨hl, hlh, hvL⟩ := C.up
+  have hLn := C.nN _ hl.1
+  have hLv : (nd (ts s) v).livePar ≠ v := C.H.hLv
+  obtain ⟨P, Q, hPQ, hvP, hvQ, hkL⟩ := C.kidsL
+  rw [C.ghostN] at hg
+  rcases hg with hg | hgv'
+  · have hgv : g ≠ v := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [C.vl.2]; simp)
+    have hgn := C.nN g hg.1
+    have hgnn : ¬(g = s.nodes.size ∨ g = s.nodes.size + 1) := fun h => h.elim hgn.1 hgn.2
+    obtain ⟨g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13⟩ := C.S.ghost g hg
+    rw [C.H.t1, C.H.t2, if_neg hgv, if_neg hgv, if_neg hgnn, if_neg hgnn]
+    have ht1v : (nd (ts s) g).t1 ≠ v := fun e => by rw [e] at g5; rw [show Top.srcOf (ts s) v = NIL from C.of] at g5; exact hg.1.1 g5.symm
+    have ht2v : (nd (ts s) g).t2 ≠ v := fun e => by rw [e] at g6; rw [show Top.srcOf (ts s) v = NIL from C.of] at g6; exact hg.1.1 g6.symm
+    have h1n := C.nN _ g1.1
+    have h2n := C.nN _ g2.1
+    have h1nn : ¬((nd (ts s) g).t1 = s.nodes.size ∨ (nd (ts s) g).t1 = s.nodes.size + 1) := fun h => h.elim h1n.1 h1n.2
+    have h2nn : ¬((nd (ts s) g).t2 = s.nodes.size ∨ (nd (ts s) g).t2 = s.nodes.size + 1) := fun h => h.elim h2n.1 h2n.2
+    have hgL : g ≠ (nd (ts s) v).livePar := fun e => by rw [e] at hg; exact absurd hg.2 (by rw [hl.2]; simp)
+    have hgk : Top.ht (ts s) v ≠ 1 → g ∉ (nd (ts s) v).children := fun h1 hk => by
+      obtain ⟨-, -, hkk⟩ := C.S.kids v C.vl
+      have := (hkk g hk).2 (by have := C.h1; omega); exact absurd hg.2 (by rw [this.2]; simp)
+    have hp1l := (C.S.up _ g1 (by rw [g3]; exact g10)).1
+    have hab : (nd S' (nd (ts s) g).t1).livePar = (nd S' (nd (ts s) g).t2).livePar ∧
+        [(nd (ts s) g).t1, (nd (ts s) g).t2] <:+: (nd S' (nd S' (nd (ts s) g).t1).livePar).children := by
+      by_cases hk : Top.ht (ts s) v ≠ 1 ∧ (nd (ts s) g).t1 ∈ (nd (ts s) v).children
+      · -- targets among the children of `v`
+        have hp1 : (nd (ts s) (nd (ts s) g).t1).livePar = v := by
+          obtain ⟨-, hp⟩ := (C.S.mem_children C.vl).mp hk.2
+          rw [par_live (Or.inr g1), if_neg (by
+            have := ((C.S.mem_children C.vl).mp hk.2).1; rw [if_neg hk.1] at this; have := C.h1; omega)] at hp
+          exact hp
+        have g12' := g12
+        rw [hp1] at g12'
+        have hk2 : (nd (ts s) g).t2 ∈ (nd (ts s) v).children := g12'.subset (by simp)
+        have hns := sw_nosep' C.pc C.v0 C.I C.lp C.TP C.of C.W C.look (by have := C.h1; omega) g12' hg.1.1 g5 g6
+        obtain ⟨hknd, -, -⟩ := C.S.kids v C.vl
+        rw [C.livePar _, if_neg ht1v, if_neg h1nn, C.livePar (nd (ts s) g).t2, if_neg ht2v, if_neg h2nn]
+        rcases C.kids_split hk.2 with ⟨a, b⟩ | ⟨a, b⟩
+        · have a2 := hns.mp a
+          have b2 : (nd (ts s) g).t2 ∉ (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+            rcases C.kids_split hk2 with ⟨-, h⟩ | ⟨h, -⟩
+            · exact h
+            · exact absurd a2 h
+          rw [if_neg (fun h => b h.2), if_pos ⟨hk.1, a⟩, if_neg (fun h => b2 h.2), if_pos ⟨hk.1, a2⟩]
+          refine ⟨rfl, ?_⟩
+          rw [C.children, if_neg (by omega), if_pos rfl]
+          exact infix_take hknd g12' a2
+        · have a2 : (nd (ts s) g).t2 ∉ (nd (ts s) v).children.take (sK (wiC s v) v) := fun h => a (hns.mpr h)
+          have b2 : (nd (ts s) g).t2 ∈ (nd (ts s) v).children.drop (sK (wiC s v) v) := by
+            rcases C.kids_split hk2 with ⟨h, -⟩ | ⟨-, h⟩
+            · exact absurd h a2
+            · exact h
+          rw [if_pos ⟨hk.1, b⟩, if_pos ⟨hk.1, b2⟩]
+          refine ⟨rfl, ?_⟩
+          rw [C.children, if_neg (by omega), if_neg (by omega), if_pos rfl]
+          exact infix_drop hknd g12' b
+      · have hk2 : Top.ht (ts s) v ≠ 1 → (nd (ts s) g).t2 ∉ (nd (ts s) v).children := by
+          intro h1 hk2
+          apply hk; refine ⟨h1, (C.S.mem_children C.vl).mpr ⟨?_, ?_⟩⟩
+          · rw [if_neg h1]
+            have := ((C.S.mem_children C.vl).mp hk2).1; rw [if_neg h1] at this
+            exact ⟨g1, by rw [g3, ← g4]; exact this.2⟩
+          · have := ((C.S.mem_children C.vl).mp hk2).2
+            have hh : Top.ht (ts s) v - 1 ≠ 0 := by have := C.h1; omega
+            rw [par_live (Or.inr g2), if_neg hh] at this
+            rw [par_live (Or.inr g1), if_neg hh, g11]; exact this
+        rw [C.livePar_old g1.1 ht1v (fun h1 h => hk ⟨h1, h⟩), C.livePar_old g2.1 ht2v hk2]
+        refine ⟨g11, ?_⟩
+        have hpv : (nd (ts s) (nd (ts s) g).t1).livePar ≠ v := by
+          intro e
+          by_cases h1 : Top.ht (ts s) v = 1
+          · obtain ⟨-, hh, -⟩ := C.S.up _ g1 (by rw [g3]; exact g10)
+            rw [e, h1] at hh; have := (C.S.htN _ g1.1).1; omega
+          · apply hk; refine ⟨h1, (C.S.mem_children C.vl).mpr ⟨?_, ?_⟩⟩
+            · rw [if_neg h1]
+              obtain ⟨-, hh, -⟩ := C.S.up _ g1 (by rw [g3]; exact g10)
+              rw [e] at hh; exact ⟨g1, by omega⟩
+            · rw [par_live (Or.inr g1), if_neg (by have := C.h1; omega), e]
+        have hpn := C.nN _ hp1l.1
+        rw [C.children, if_neg hpv, if_neg hpn.1, if_neg hpn.2]
+        split
+        · next he => rw [← he]; exact infix_replace1 g12 (by simp [ht1v, ht2v, Ne.symm ht1v, Ne.symm ht2v])
+        · exact g12
+    refine ⟨(C.liveN _).mpr (Or.inl ⟨g1, ht1v⟩), (C.liveN _).mpr (Or.inl ⟨g2, ht2v⟩),
+      by rw [C.ht _, if_neg h1nn, C.ht g, if_neg hgnn]; exact g3,
+      by rw [C.ht _, if_neg h2nn, C.ht g, if_neg hgnn]; exact g4,
+      by rw [C.srcOf _, if_neg h1nn]; exact g5, by rw [C.srcOf _, if_neg h2nn]; exact g6,
+      by rw [C.livePar_old hg.1 hgv hgk]; exact g7,
+      by rw [C.children, if_neg hgv, if_neg hgn.1, if_neg hgn.2, if_neg hgL]; exact g8,
+      by rw [C.srcOf g, if_neg hgnn]; exact g9,
+      by rw [C.ht g, if_neg hgnn, hP']; exact g10, hab.1, hab.2, ?_⟩
+    -- the triple in the order
+    rw [C.ht g, if_neg hgnn]
+    unfold ordSD
+    split
+    · next he =>
+      rw [he] at g13
+      exact infix_replace1 g13 (by simp [ht1v, hgv, ht2v, Ne.symm ht1v, Ne.symm hgv, Ne.symm ht2v])
+    · exact g13
+  · -- the new ghost `v`
+    rw [hgv']
+    obtain ⟨A, B, hAB, hA, hB, h'⟩ := C.ordh
+    have hN : Top.liveN S' s.nodes.size := (C.liveN _).mpr (Or.inr (Or.inl rfl))
+    have hN1 : Top.liveN S' (s.nodes.size + 1) := (C.liveN _).mpr (Or.inr (Or.inr rfl))
+    rw [C.H.t1, C.H.t2, if_pos rfl, if_pos rfl]
+    have lN : (nd S' s.nodes.size).livePar = (nd (ts s) v).livePar := by
+      rw [C.livePar, if_neg (by omega), if_pos (Or.inl rfl)]
+    have lN1 : (nd S' (s.nodes.size + 1)).livePar = (nd (ts s) v).livePar := by
+      rw [C.livePar, if_neg (by omega), if_pos (Or.inr rfl)]
+    refine ⟨hN, hN1, by rw [C.ht _, if_pos (Or.inl rfl), C.ht v, if_neg hvnn],
+      by rw [C.ht _, if_pos (Or.inr rfl), C.ht v, if_neg hvnn],
+      by rw [C.srcOf _, if_pos (Or.inl rfl)], by rw [C.srcOf _, if_pos (Or.inr rfl)],
+      by rw [C.livePar, if_pos rfl], by rw [C.children, if_pos rfl],
+      by rw [C.srcOf v, if_neg hvnn]; exact C.of,
+      by rw [C.ht v, if_neg hvnn, hP']; exact C.hH, by rw [lN, lN1], ?_, ?_⟩
+    · rw [lN, hkL]; exact ⟨P, Q, by simp⟩
+    · rw [C.ht v, if_neg hvnn, h']; exact ⟨A, B, by simp⟩
+
 end SDCtx
 
 end OM.Proof.Top
