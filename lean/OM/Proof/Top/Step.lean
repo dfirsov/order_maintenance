@@ -336,7 +336,7 @@ theorem finS_noncopy (t : TS) {j : Job} (h : ∀ l, j.pc ≠ .copy l) : finS t (
   unfold finS
   cases hj : j.pc with
   | copy l => exact absurd hj (h l)
-  | _ => rfl
+  | _ => simp only [hj]
 
 theorem job_eta {j : Job} {p : JobPc} (h : j.pc = p) : j = { j with pc := p } := by
   cases j; simp only at h; subst h; rfl
