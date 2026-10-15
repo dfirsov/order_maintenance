@@ -781,4 +781,47 @@ theorem fundS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up src k D : N
     refine ⟨_, _, evalF_ite_f (by simp [Exp.ev, hd, OM.Machine.BinOp.eval, PF.get, hk]) e', ?_⟩
     simp [Exp.cost]
 
+/-- `afterDrain` (locals `av au` = `v up`). -/
+def afSetS : Stm := "ja" ::= .var "av" ;; "jb" ::= .var "au" ;; "jc" ::= .var "src" ;; "jd" ::= 0
+def afterDS : Stm := "src" ::= .rd (.n .overflow) "av" ;; .ite ("src" =ₑ 0) (.pcSet 2 "au" 0 0 0) (afSetS ;; fundS)
+
+theorem afterDS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up D : Nat} (hjob : S.resJob = some j)
+    (hv : L "av" = v) (hu : L "au" = up) (hvN : v < κ.tbl .N)
+    (hds : DSAgree κ S (S.nodes.getX v).overflowOf D)
+    {r : Option Job} {S' : Core} (h : (afterDrain j v up).run S = .ok r S') :
+    ∃ L' c, evalF κ afterDS S L = .ok { S' with resJob := r } L' c ∧ c ≤ D + 120 := by
+  unfold afterDrain at h
+  simp only [run_getN_bind] at h
+  set src := (S.nodes.getX v).overflowOf
+  have a1 := evalF_assign_ok (κ := κ) (s := S) (L := L) (x := "src") (e := .rd (.n .overflow) "av") (v := src)
+    (by simp [Exp.ev, hv, hvN, Fld.cap, Fld.get, NF.get, src])
+  set L1 := upd L "src" src
+  by_cases h0 : src = 0
+  · rw [if_neg (by simp [h0, NIL])] at h
+    simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    have e' : evalF κ (.pcSet 2 "au" 0 0 0) S L1 = .ok { S with resJob := some { j with pc := .walk (some up) } } L1 21 := by
+      simp [evalF, evList, Exp.ev, hjob, L1, OM.Machine.State.upd, hu, pcDec, costList, Exp.cost]
+    refine ⟨_, _, evalF_seq_ok2 a1 (evalF_ite_t (v := 1) (by simp [Exp.ev, L1, OM.Machine.State.upd, h0,
+      OM.Machine.BinOp.eval]) one_ne_zero e'), by simp [Exp.cost]⟩
+  · rw [if_pos (by simpa [NIL] using h0)] at h
+    set L2 := upd (upd (upd (upd L1 "ja" v) "jb" up) "jc" src) "jd" 0
+    have e2 : evalF κ afSetS S L1 = .ok S L2 8 := by
+      have b1 := evalF_assign_ok (κ := κ) (s := S) (L := L1) (x := "ja") (e := .var "av") (v := v)
+        (by simp [Exp.ev, L1, OM.Machine.State.upd, hv])
+      have b2 := evalF_assign_ok (κ := κ) (s := S) (L := upd L1 "ja" v) (x := "jb") (e := .var "au") (v := up)
+        (by simp [Exp.ev, L1, OM.Machine.State.upd, hu])
+      have b3 := evalF_assign_ok (κ := κ) (s := S) (L := upd (upd L1 "ja" v) "jb" up) (x := "jc") (e := .var "src")
+        (v := src) (by simp [Exp.ev, L1, OM.Machine.State.upd])
+      have b4 := evalF_assign_ok (κ := κ) (s := S) (L := upd (upd (upd L1 "ja" v) "jb" up) "jc" src) (x := "jd")
+        (e := (0 : Exp)) (v := 0) rfl
+      exact evalF_seq_ok2 b1 (evalF_seq_ok2 b2 (evalF_seq_ok2 b3 b4))
+    obtain ⟨L3, c3, e3, hc3⟩ := fundS_agree (κ := κ) (S := S) (L := L2) (j := j) (v := v) (up := up) (src := src) (k := 0)
+      (D := D) hjob (by simp [L2, OM.Machine.State.upd]) (by simp [L2, OM.Machine.State.upd])
+      (by simp [L2, OM.Machine.State.upd]) (by simp [L2, OM.Machine.State.upd]) hds h
+    have hc : ("src" =ₑ 0 : Exp).ev κ S L1 = some 0 := by
+      simp [Exp.ev, L1, OM.Machine.State.upd, h0, OM.Machine.BinOp.eval]
+    have e4 := evalF_ite_f (t := .pcSet 2 "au" 0 0 0) hc (evalF_seq_ok2 e2 e3)
+    exact ⟨_, _, evalF_seq_ok2 a1 e4, by simp [Exp.cost]; omega⟩
+
 end OM.Impl
