@@ -4,9 +4,10 @@ import OM.Proof.Cost.Fresh
 # Parameters for the cost proof
 
 `proofParams N` follows `docs/PROOF.md` §2.9: `L = max 8 (bits of N)`, `G = 2L`, `T = 3L²`,
-`θ = 2L²`, all `K = 4`. The label widths are chosen so that the label conditions hold by
+`θ = 2L²`, `K_G = K_C = 4`. The label widths are chosen so that the label conditions hold by
 construction: `D = 2^(halvings)` and `B = halvings + pushes + 2`. All widths are `O(L)`.
-The top structure's own parameters (`a`, `s`, `β`, `H`) are placeholders until M5.
+The top structure: `a = 8`, `s = 11`, `β = 64`, `H = ⌊L/3⌋ + 1`, and `K_R = 8` reservation steps
+per insertion (M5; `docs/LEAN.md` §14).
 -/
 
 namespace OM.Proof
@@ -33,8 +34,8 @@ def proofParams (N : Nat) : Params :=
   let HC := 2 * (csB + rsB)
   let PC := 3 * Mu + rsB + csB
   { N := N, L := L, G := G, T := T, theta := 2 * L * L, B_e := UG + (G + kG) + 2,
-    B_g := HC + PC + 2, D_e := 2 ^ UG, D_g := 2 ^ HC, K_G := 4, K_C := 4, K_R := 4, a := 8,
-    s := 11, beta := 48, H := L + 2 }
+    B_g := HC + PC + 2, D_e := 2 ^ UG, D_g := 2 ^ HC, K_G := 4, K_C := 4, K_R := 8, a := 8,
+    s := 11, beta := 64, H := L / 3 + 1 }
 
 theorem pL_ge (N : Nat) : 8 ≤ pL N := le_max_left _ _
 
