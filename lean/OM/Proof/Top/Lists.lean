@@ -240,6 +240,50 @@ theorem infix_erase {l t : List Nat} {v : Nat} (hl : l.Nodup) (h : t <:+: l) (hv
   · rw [List.append_assoc, List.erase_append_right _ hu, List.erase_append_right _ hv]
     exact ⟨u, w.erase v, by simp⟩
 
+/-! ### Inserting around an element in a list and a superlist -/
+
+theorem sublist_split_mid {A B P Q : List Nat} {x : Nat} (h : (A ++ x :: B).Sublist (P ++ x :: Q))
+    (hP : x ∉ P) (hQ : x ∉ Q) : A.Sublist P ∧ B.Sublist Q := by
+  induction P generalizing A with
+  | nil =>
+    simp only [List.nil_append] at h
+    cases A with
+    | nil =>
+      simp only [List.nil_append] at h
+      rw [List.cons_sublist_cons] at h
+      exact ⟨List.Sublist.slnil, h⟩
+    | cons a A' =>
+      exfalso
+      simp only [List.cons_append] at h
+      rcases List.sublist_cons_iff.mp h with h' | ⟨r, hr, h'⟩
+      · exact hQ (h'.subset (by simp))
+      · simp only [List.cons.injEq] at hr
+        obtain ⟨rfl, rfl⟩ := hr
+        exact hQ (h'.subset (by simp))
+  | cons p P' ih =>
+    simp only [List.mem_cons, not_or] at hP
+    simp only [List.cons_append] at h
+    cases A with
+    | nil =>
+      simp only [List.nil_append] at h ⊢
+      rcases List.sublist_cons_iff.mp h with h' | ⟨r, hr, h'⟩
+      · exact ⟨List.nil_sublist _, (ih (A := []) (by simpa using h') hP.2).2⟩
+      · simp only [List.cons.injEq] at hr; exact absurd hr.1 hP.1
+    | cons a A' =>
+      simp only [List.cons_append] at h
+      rcases List.sublist_cons_iff.mp h with h' | ⟨r, hr, h'⟩
+      · obtain ⟨h1, h2⟩ := ih (A := a :: A') (by simpa using h') hP.2
+        exact ⟨h1.cons p, h2⟩
+      · simp only [List.cons.injEq] at hr
+        obtain ⟨rfl, rfl⟩ := hr
+        obtain ⟨h1, h2⟩ := ih h' hP.2
+        exact ⟨h1.cons_cons a, h2⟩
+
+theorem sublist_around {A B P Q : List Nat} {x y z : Nat} (h : (A ++ x :: B).Sublist (P ++ x :: Q))
+    (hP : x ∉ P) (hQ : x ∉ Q) : (A ++ y :: x :: z :: B).Sublist (P ++ y :: x :: z :: Q) := by
+  obtain ⟨h1, h2⟩ := sublist_split_mid h hP hQ
+  exact h1.append ((h2.cons_cons z).cons_cons x |>.cons_cons y)
+
 /-! ### Infix triples -/
 
 theorem before_of_infix2 {l : List Nat} {a b : Nat} (h : [a, b] <:+: l) : Before l a b :=
