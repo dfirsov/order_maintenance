@@ -790,7 +790,7 @@ def afterDS : Stm := "src" ::= .rd (.n .overflow) "av" ;; .ite ("src" =ₑ 0) (.
 
 theorem afterDS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up D : Nat} (hjob : S.resJob = some j)
     (hv : L "av" = v) (hu : L "au" = up) (hvN : v < κ.tbl .N)
-    (hds : DSAgree κ S (S.nodes.getX v).overflowOf D)
+    (hds : (S.nodes.getX v).overflowOf ≠ NIL → DSAgree κ S (S.nodes.getX v).overflowOf D)
     {r : Option Job} {S' : Core} (h : (afterDrain j v up).run S = .ok r S') :
     ∃ L' c, evalF κ afterDS S L = .ok { S' with resJob := r } L' c ∧ c ≤ D + 120 := by
   unfold afterDrain at h
@@ -821,7 +821,7 @@ theorem afterDS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up D : Nat} 
       exact evalF_seq_ok2 b1 (evalF_seq_ok2 b2 (evalF_seq_ok2 b3 b4))
     obtain ⟨L3, c3, e3, hc3⟩ := fundS_agree (κ := κ) (S := S) (L := L2) (j := j) (v := v) (up := up) (src := src) (k := 0)
       (D := D) hjob (by simp [L2, OM.Machine.State.upd]) (by simp [L2, OM.Machine.State.upd])
-      (by simp [L2, OM.Machine.State.upd]) (by simp [L2, OM.Machine.State.upd]) hds h
+      (by simp [L2, OM.Machine.State.upd]) (by simp [L2, OM.Machine.State.upd]) (hds (by simpa [NIL] using h0)) h
     have hc : ("src" =ₑ 0 : Exp).ev κ S L1 = some 0 := by
       simp [Exp.ev, L1, OM.Machine.State.upd, h0, OM.Machine.BinOp.eval]
     have e4 := evalF_ite_f (t := .pcSet 2 "au" 0 0 0) hc (evalF_seq_ok2 e2 e3)
@@ -864,7 +864,9 @@ def walkS : Stm :=
 
 theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (hjob : S.resJob = some j)
     (hv : L "wv" = v) (hvs : v ≠ 0 → v < S.nodes.size) (hvN : v ≠ 0 → v < κ.tbl .N)
-    (hsd : SDAgree κ (wiC S v) v D1) (hds : DSAgree κ (wiC S v) (S.nodes.getX v).overflowOf D2)
+    (hsd : v ≠ NIL → ((S.nodes.getX v).livePar != NIL && !(S.nodes.getX v).draining && (S.nodes.getX v).overflowOf == NIL &&
+      decide ((S.nodes.getX v).weight + 2 > 2 * S.P.a ^ (S.nodes.getX v).height)) = true → SDAgree κ (wiC S v) v D1)
+    (hds : v ≠ NIL → (S.nodes.getX v).overflowOf ≠ NIL → DSAgree κ (wiC S v) (S.nodes.getX v).overflowOf D2)
     (ha : S.P.a = 2 ^ Nat.log2 S.P.a)
     {r : Option Job} {S' : Core} (h : (walkBody j v).run S = .ok r S') :
     ∃ L' c, evalF κ walkS S L = .ok { S' with resJob := r } L' c ∧ c ≤ D1 + D2 + 250 := by
@@ -918,7 +920,7 @@ theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (
       obtain ⟨u, S1, h1, h2⟩ := run_bind_ok h
       simp at h2
       obtain ⟨rfl, rfl⟩ := h2
-      obtain ⟨Ls, cs, es, hcs, hjs⟩ := hsd S1 h1
+      obtain ⟨Ls, cs, es, hcs, hjs⟩ := hsd (by simpa [NIL] using h0) hc S1 h1
       have e7 := evalF_call_ok (q := sdP) (args := [.var "wv"]) (ds := []) (L := L6)
         (by simp [evList, Exp.ev, h6 "wv" (by decide) (by decide), h5v]) es
       have e8 : evalF κ (.pcSet 3 "wv" "up" 0 0) S1 (OM.Machine.State.setLocs L6 [] (sdP.rets.map Ls)) =
@@ -957,7 +959,7 @@ theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (
         (v := V.livePar) (by simp [Exp.ev, OM.Machine.State.upd, h6 "up" (by decide) (by decide), L5])
       obtain ⟨L8, c8, e8, hc8⟩ := afterDS_agree (κ := κ) (S := wiC S v) (L := L7) (j := j) (v := v) (up := V.livePar)
         (D := D2) hjob' (by simp [L7, OM.Machine.State.upd]) (by simp [L7, OM.Machine.State.upd]) hvN'
-        (by rw [hov]; exact hds) h
+        (fun hne => by rw [hov] at hne ⊢; exact hds (by simpa [NIL] using h0) hne) h
       exact ⟨_, _, evalF_ite_f (by simp [Exp.ev, hv, h0, OM.Machine.BinOp.eval]) (evalF_seq_ok2 e1 (evalF_seq_ok2 e2
         (evalF_seq_ok2 e6 (evalF_ite_f hcv (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 e8)))))),
         by simp [Exp.cost, walkC] at hc6 ⊢; omega⟩
@@ -1025,8 +1027,12 @@ theorem jobStepS_walkNone {κ : Caps} {s : Core} {L : Loc} {j : Job} {D1 D2 : Na
     (hpc : j.pc = .walk none) (hya : j.y < κ.arr .lpar)
     (hvs : s.lpar.getX j.y ≠ 0 → s.lpar.getX j.y < s.nodes.size)
     (hvN : s.lpar.getX j.y ≠ 0 → s.lpar.getX j.y < κ.tbl .N)
-    (hsd : SDAgree κ (wiC s (s.lpar.getX j.y)) (s.lpar.getX j.y) D1)
-    (hds : DSAgree κ (wiC s (s.lpar.getX j.y)) (s.nodes.getX (s.lpar.getX j.y)).overflowOf D2)
+    (hsd : s.lpar.getX j.y ≠ NIL → ((s.nodes.getX (s.lpar.getX j.y)).livePar != NIL && !(s.nodes.getX (s.lpar.getX j.y)).draining &&
+      (s.nodes.getX (s.lpar.getX j.y)).overflowOf == NIL && decide ((s.nodes.getX (s.lpar.getX j.y)).weight + 2 >
+        2 * s.P.a ^ (s.nodes.getX (s.lpar.getX j.y)).height)) = true →
+      SDAgree κ (wiC s (s.lpar.getX j.y)) (s.lpar.getX j.y) D1)
+    (hds : s.lpar.getX j.y ≠ NIL → (s.nodes.getX (s.lpar.getX j.y)).overflowOf ≠ NIL →
+      DSAgree κ (wiC s (s.lpar.getX j.y)) (s.nodes.getX (s.lpar.getX j.y)).overflowOf D2)
     (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
     {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
     ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧ c ≤ D1 + D2 + 300 := by
@@ -1043,7 +1049,9 @@ theorem jobStepS_walkNone {κ : Caps} {s : Core} {L : Loc} {j : Job} {D1 D2 : Na
 
 theorem jobStepS_walkSome {κ : Caps} {s : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (hjob : s.resJob = some j)
     (hpc : j.pc = .walk (some v)) (hvs : v ≠ 0 → v < s.nodes.size) (hvN : v ≠ 0 → v < κ.tbl .N)
-    (hsd : SDAgree κ (wiC s v) v D1) (hds : DSAgree κ (wiC s v) (s.nodes.getX v).overflowOf D2)
+    (hsd : v ≠ NIL → ((s.nodes.getX v).livePar != NIL && !(s.nodes.getX v).draining && (s.nodes.getX v).overflowOf == NIL &&
+      decide ((s.nodes.getX v).weight + 2 > 2 * s.P.a ^ (s.nodes.getX v).height)) = true → SDAgree κ (wiC s v) v D1)
+    (hds : v ≠ NIL → (s.nodes.getX v).overflowOf ≠ NIL → DSAgree κ (wiC s v) (s.nodes.getX v).overflowOf D2)
     (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
     {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
     ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧ c ≤ D1 + D2 + 300 := by
@@ -1060,7 +1068,8 @@ theorem jobStepS_walkSome {κ : Caps} {s : Core} {L : Loc} {j : Job} {v D1 D2 : 
   simp [Exp.cost]; omega
 
 theorem jobStepS_after {κ : Caps} {s : Core} {L : Loc} {j : Job} {v up D : Nat} (hjob : s.resJob = some j)
-    (hpc : j.pc = .afterDrain v up) (hvN : v < κ.tbl .N) (hds : DSAgree κ s (s.nodes.getX v).overflowOf D)
+    (hpc : j.pc = .afterDrain v up) (hvN : v < κ.tbl .N)
+    (hds : (s.nodes.getX v).overflowOf ≠ NIL → DSAgree κ s (s.nodes.getX v).overflowOf D)
     {r : Option Job} {s' : Core} (h : (jobStep j).run s = .ok r s') :
     ∃ L' c, evalF κ jobStepS s L = .ok { s' with resJob := r } L' c ∧ c ≤ D + 200 := by
   obtain ⟨Lr, er, -, -, -, ht, ha, hb, -, -⟩ := jobRdS_ok (κ := κ) (L := L) hjob

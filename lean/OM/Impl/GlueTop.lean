@@ -1,4 +1,5 @@
 import OM.Impl.Job
+import OM.Impl.Reservation
 import OM.Proof.Top.PresDrain
 import OM.Proof.Top.PresFinish
 import OM.Proof.Top.StartRun
@@ -432,5 +433,155 @@ theorem dsAgree_fund {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List 
   by_cases hne : rng (ts s) cl src = []
   · exact dsAgree_finishI S hI.len hg hne hcl K
   · exact dsAgree_moveI S hI.len hg hne hcl hprep K
+
+theorem SDAgree.mono {κ : Caps} {S : Core} {v D D' : Nat} (h : SDAgree κ S v D) (hD : D ≤ D') :
+    SDAgree κ S v D' := fun S' e => by
+  obtain ⟨L', c, a, b, d⟩ := h S' e; exact ⟨L', c, a, by omega, d⟩
+
+theorem DSAgree.mono {κ : Caps} {S : Core} {v D D' : Nat} (h : DSAgree κ S v D) (hD : D ≤ D') :
+    DSAgree κ S v D' := fun b S' e => by
+  obtain ⟨L', c, a, b1, b2, d⟩ := h b S' e; exact ⟨L', c, a, b1, by omega, d⟩
+
+theorem TopCaps.wiC {κ : Caps} {s : Core} (K : TopCaps κ s) (v : Nat) : TopCaps κ (OM.Proof.Top.wiC s v) := by
+  have h : (OM.Proof.Top.wiC s v).nodes.size = s.nodes.size := by simp [OM.Proof.Top.wiC]
+  obtain ⟨a, b, c, d, e, f, g, i, k, l, m, n, o, p, q⟩ := K
+  exact ⟨by rw [h]; exact a, b, c, by rw [h]; exact d, by rw [h]; exact e, by rw [h]; exact f, by rw [h]; exact g,
+    by rw [h]; exact i, by rw [h]; exact k, l, m, n, o, p, q⟩
+
+/-- **The walk step's agreements**, at node `v` of the walk: `startDrain` where the walk starts a
+drain, and the sweep step of the funding loop where `v` has an overflow source. -/
+theorem walkAgree {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    {j : Job} {v : Nat} (hpc : j.pc = .walk (some v)) (hTP : TopParams s.P) (hcl : CLok s cl)
+    (hprep : s.prep = none) (hI : InvJ (ts s) cl ord dr n0 (some j)) (K : TopCaps κ s) :
+    (v ≠ NIL → ((s.nodes.getX v).livePar != NIL && !(s.nodes.getX v).draining &&
+      (s.nodes.getX v).overflowOf == NIL &&
+      decide ((s.nodes.getX v).weight + 2 > 2 * s.P.a ^ (s.nodes.getX v).height)) = true →
+        SDAgree κ (wiC s v) v sdBound) ∧
+    (v ≠ NIL → (s.nodes.getX v).overflowOf ≠ NIL → DSAgree κ (wiC s v) (s.nodes.getX v).overflowOf dsBound) := by
+  refine ⟨fun hv0 hc => ?_, fun hv0 hov => ?_⟩
+  · simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at hc
+    obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hc
+    obtain ⟨side, hside, hlook⟩ := sp_side hpc hv0 hI h1 hTP h3 (by unfold Wd ht; exact h4)
+    obtain ⟨D, hD, hA⟩ := sdAgree_walk hpc hv0 hI h1 hTP h3 (by unfold Wd ht; exact h4) hside hlook hcl K
+    exact hA.mono hD
+  · have hno : ¬ ((nd (ts s) v).livePar ≠ NIL ∧ (nd (ts s) v).draining = false ∧
+        (nd (ts s) v).overflowOf = NIL ∧ Wd s.P (ht (ts s) v) < (nd (ts s) v).weight + 2) :=
+      fun h => hov h.2.2.1
+    have hI' := inv_winc hpc hv0 hI hno
+    have hn : walkNext (ts s) j v = { j with pc := .fund v (nd (ts s) v).livePar (srcOf (ts s) v) 0 } := by
+      simp only [walkNext]; rw [if_neg (show srcOf (ts s) v ≠ NIL from hov)]
+    rw [hn] at hI'
+    obtain ⟨D, hD, hA⟩ := dsAgree_fund (hcl.topRel (wiC_topRel s v)) hprep hI' (K.wiC v)
+    exact hA.mono hD
+
+/-- A copy step keeps the node count and the path of the chunk copied from. -/
+theorem copyS_frame (t : TS) (j : Job) (l : Nat) (hxy : j.x ≠ j.y) (hxz : j.x ≠ j.z) :
+    (OM.Proof.Top.copyS t j l).nodes.size = t.nodes.size ∧ (OM.Proof.Top.copyS t j l).path.getX j.x = t.path.getX j.x := by
+  unfold OM.Proof.Top.copyS; dsimp only
+  split_ifs <;> simp [Array.getX_setX, Ne.symm hxy, Ne.symm hxz, hxy, hxz]
+
+theorem copyRest_frame (j : Job) (H : Nat) (hxy : j.x ≠ j.y) (hxz : j.x ≠ j.z) : ∀ k t l, H + 1 - l = k →
+    (copyRest j H t l).nodes.size = t.nodes.size ∧ (copyRest j H t l).path.getX j.x = t.path.getX j.x := by
+  intro k
+  induction k with
+  | zero => intro t l hk; unfold copyRest; rw [if_neg (by omega)]; exact ⟨rfl, rfl⟩
+  | succ k ih =>
+    intro t l hk; unfold copyRest; rw [if_pos (by omega)]
+    obtain ⟨a, b⟩ := ih (OM.Proof.Top.copyS t j l) (l + 1) (by omega)
+    obtain ⟨c, d⟩ := copyS_frame t j l hxy hxz
+    exact ⟨a.trans c, b.trans d⟩
+
+/-- The running job's chunks: in the chunk list, distinct, not `NIL`. -/
+theorem job_chunks {t : TS} {s : Core} {cl : List Nat} {j : Job} (hcl : CLok s cl) (hJ : JobOK t cl j) :
+    j.x ∈ cl ∧ j.y ∈ cl ∧ j.z ∈ cl ∧ j.x ≠ j.y ∧ j.x ≠ j.z ∧ j.y ≠ j.z := by
+  obtain ⟨A, B, e⟩ := hJ.pos
+  have hnd := hcl.1.nodup
+  rw [e] at hnd ⊢
+  simp only [List.nodup_append, List.nodup_cons, List.mem_cons, List.not_mem_nil, or_false] at hnd
+  refine ⟨by simp, by simp, by simp, fun h => ?_, fun h => ?_, fun h => ?_⟩ <;> simp_all
+
+/-- **A copy step agrees.** -/
+theorem copyAgree {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    {j : Job} {l : Nat} (hpc : j.pc = .copy l) (hres : s.resJob = some j) (hcl : CLok s cl) (hprep : s.prep = none)
+    (hI : InvJ (finS (ts s) (some j)) cl ord dr n0 (some j)) (K : TopCaps κ s) : JobAgree κ s j 140 := by
+  intro r t1 h
+  rw [jobStep_copy hpc] at h
+  injection h with hr ht; subst hr; subst ht
+  have hJ := hI.job j rfl
+  obtain ⟨hx, hy, hz, hxy, hxz, hyz⟩ := job_chunks hcl hJ
+  have hat := hJ.at_
+  simp only [JobAt, hpc] at hat
+  obtain ⟨hl1, hlH, -⟩ := hat
+  have hfin : finS (ts s) (some j) = copyRest j s.P.H (ts s) l := by simp only [finS, hpc]; rfl
+  have hP : (finS (ts s) (some j)).P = s.P := by rw [hfin]; exact copyRest_P j _ _ _ _ rfl
+  rw [hP] at hlH
+  obtain ⟨hsz, hpx⟩ := copyRest_frame j s.P.H hxy hxz _ (ts s) l rfl
+  have hN := (hI.shape.toShapeT.isN_pp hx hl1 (by rw [hP]; exact hlH)).1.2.1
+  unfold pp pth at hN; rw [if_neg (by omega)] at hN
+  rw [← hfin] at hsz hpx
+  rw [hpx, hsz] at hN
+  have hC : ∀ c ∈ cl, c < κ.tbl .C := fun c hc => by have := ((hcl.2 c).mp hc).2; have := K.C; omega
+  have hnp : ∀ c, notPrep s c := fun c => by simp [notPrep, hprep]
+  obtain ⟨L', c, e, hc⟩ := jobStepS_copy (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) hres hpc
+    (fun h => hcl.1.nonil (h ▸ hx)) hyz (hnp _) (hnp _) (hnp _) (hC _ hx) (hC _ hy) (hC _ hz)
+    (by rw [K.pw]; omega) (by have := K.N; have hN' : (s.path.getX j.x).getX l < s.nodes.size := hN; omega)
+  exact ⟨L', c, e, hc⟩
+
+/-- The cost bound of one job step at Level M. -/
+def jobBound : Nat := sdBound + dsBound + 300
+
+/-- **Every job step agrees**, under the top invariant, outside a preparation, with the capacities. -/
+theorem jobAgree {κ : Caps} {s : Core} {j : Job} (hT : TopInv s) (hres : s.resJob = some j) (hprep : s.prep = none)
+    (hpow : s.P.a = 2 ^ Nat.log2 s.P.a) (K : TopCaps κ s) : JobAgree κ s j jobBound := by
+  obtain ⟨hTP, cl, ord, dr, n0, hL, hC, hI⟩ := hT
+  rw [hres] at hI
+  have hcl : CLok s cl := ⟨hL, hC⟩
+  intro r t1 h
+  cases hpc : j.pc with
+  | copy l =>
+    obtain ⟨L', c, e, hc⟩ := copyAgree hpc hres hcl hprep hI K r t1 h
+    exact ⟨L', c, e, by unfold jobBound; omega⟩
+  | walk ov =>
+    have hfin : finS (ts s) (some j) = ts s := by simp only [finS, hpc]
+    rw [hfin] at hI
+    cases ov with
+    | none =>
+      obtain ⟨hI', hl, -⟩ := walkNone_inv hpc hI
+      obtain ⟨hsd, hds⟩ := walkAgree (j := { j with pc := .walk (some (lpr (ts s) j.y)) }) rfl hTP hcl hprep hI' K
+      have hy := (job_chunks hcl (hI.job j rfl)).2.1
+      have hyC := ((hcl.2 _).mp hy).2
+      have hls : s.lpar.getX j.y < s.nodes.size := hl.1.2.1
+      obtain ⟨L', c, e, hc⟩ := jobStepS_walkNone (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] [])
+        hres hpc (by have := K.alp; omega) (fun _ => hls) (fun _ => by have := K.N; omega) hsd hds hpow h
+      exact ⟨L', c, e, by unfold jobBound; omega⟩
+    | some v =>
+      obtain ⟨hsd, hds⟩ := walkAgree hpc hTP hcl hprep hI K
+      have hat := (hI.job j rfl).at_
+      simp only [JobAt, hpc] at hat
+      have hvs : v ≠ 0 → v < s.nodes.size := fun h0 => by
+        rcases hat with e | ⟨hl, -⟩
+        · exact absurd e h0
+        · exact hl.1.2.1
+      obtain ⟨L', c, e, hc⟩ := jobStepS_walkSome (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] [])
+        hres hpc hvs (fun h0 => by have := hvs h0; have := K.N; omega) hsd hds hpow h
+      exact ⟨L', c, e, by unfold jobBound; omega⟩
+  | afterDrain v up =>
+    have hfin : finS (ts s) (some j) = ts s := by simp only [finS, hpc]
+    rw [hfin] at hI
+    have hat := (hI.job j rfl).at_
+    simp only [JobAt, hpc] at hat
+    obtain ⟨hg, -, -⟩ := hat
+    obtain ⟨-, -, -, -, -, -, -, -, hgs, -⟩ := hI.shape.ghost v hg
+    have hvs : v < s.nodes.size := hg.1.2.1
+    obtain ⟨L', c, e, hc⟩ := jobStepS_after (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) (D := 0)
+      hres hpc (by have := K.N; omega) (fun hne => absurd hgs hne) h
+    exact ⟨L', c, e, by unfold jobBound; omega⟩
+  | fund v up src k =>
+    have hfin : finS (ts s) (some j) = ts s := by simp only [finS, hpc]
+    rw [hfin] at hI
+    rw [job_eta hpc] at hI
+    obtain ⟨D, hD, hA⟩ := dsAgree_fund hcl hprep hI K
+    obtain ⟨L', c, e, hc⟩ := jobStepS_fund (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) [] []) hres hpc hA h
+    exact ⟨L', c, e, by unfold jobBound; omega⟩
 
 end OM.Impl
