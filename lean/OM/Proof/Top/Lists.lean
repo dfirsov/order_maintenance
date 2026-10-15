@@ -284,6 +284,61 @@ theorem sublist_around {A B P Q : List Nat} {x y z : Nat} (h : (A ++ x :: B).Sub
   obtain ⟨h1, h2⟩ := sublist_split_mid h hP hQ
   exact h1.append ((h2.cons_cons z).cons_cons x |>.cons_cons y)
 
+theorem before_dedup {L1 L2 : List Nat} {x a b : Nat} (h : Before (L1 ++ x :: x :: L2) a b)
+    (hab : a ≠ b) : Before (L1 ++ x :: L2) a b := by
+  unfold Before at *
+  induction L1 with
+  | nil =>
+    simp only [List.nil_append] at h ⊢
+    rcases List.sublist_cons_iff.mp h with h' | ⟨r, hr, h'⟩
+    · exact h'
+    · simp only [List.cons.injEq] at hr
+      obtain ⟨rfl, rfl⟩ := hr
+      apply List.Sublist.cons_cons
+      rw [List.singleton_sublist] at h' ⊢
+      simp only [List.mem_cons] at h'
+      rcases h' with e | e
+      · exact absurd e.symm hab
+      · exact e
+  | cons l L1' ih =>
+    simp only [List.cons_append] at h ⊢
+    rcases List.sublist_cons_iff.mp h with h' | ⟨r, hr, h'⟩
+    · exact (ih h').cons l
+    · simp only [List.cons.injEq] at hr
+      obtain ⟨rfl, rfl⟩ := hr
+      apply List.Sublist.cons_cons
+      rw [List.singleton_sublist] at h' ⊢
+      simp only [List.mem_append, List.mem_cons] at h' ⊢
+      tauto
+
+/-- Collapsing `y` and `z` onto `x` maps the order `A, y, x, z, B` onto `A, x, B`. -/
+theorem before_proj {A B : List Nat} {x y z c d : Nat} (hyA : y ∉ A) (hzA : z ∉ A) (hyB : y ∉ B)
+    (hzB : z ∉ B) (h : Before (A ++ y :: x :: z :: B) c d) :
+    let p := fun e => if e = y ∨ e = z then x else e
+    p c = p d ∨ Before (A ++ x :: B) (p c) (p d) := by
+  intro p
+  by_cases e : p c = p d
+  · exact Or.inl e
+  right
+  have hm : (A ++ y :: x :: z :: B).map p = A ++ x :: x :: x :: B := by
+    have hA : A.map p = A := by
+      conv_rhs => rw [← List.map_id A]
+      apply List.map_congr_left
+      intro a ha
+      have : ¬(a = y ∨ a = z) := by rintro (rfl | rfl) <;> contradiction
+      simp only [p, if_neg this, id]
+    have hB : B.map p = B := by
+      conv_rhs => rw [← List.map_id B]
+      apply List.map_congr_left
+      intro a ha
+      have : ¬(a = y ∨ a = z) := by rintro (rfl | rfl) <;> contradiction
+      simp only [p, if_neg this, id]
+    have hx : p x = x := by simp only [p]; split <;> rfl
+    simp only [List.map_append, List.map_cons, hA, hB, hx, p, true_or, or_true, if_true]
+  have h1 : Before (A ++ x :: x :: x :: B) (p c) (p d) := by
+    rw [← hm]; exact h.map p
+  exact before_dedup (before_dedup h1 e) e
+
 /-! ### Infix triples -/
 
 theorem before_of_infix2 {l : List Nat} {a b : Nat} (h : [a, b] <:+: l) : Before l a b :=

@@ -73,6 +73,18 @@ theorem ins_sub : cl.Sublist (clIns cl x s.C.size (s.C.size + 1)) := by
   rw [hcl', hcl]
   exact (List.Sublist.refl A).append (((List.sublist_cons_self _ _).cons_cons x).cons _)
 
+/-- The split chunk's level-1 path node holds `x`. -/
+theorem ins_pp1 : pp (ts s) x 1 ∈ s.cin.getX x := by
+  have S := hI.shape
+  have hent : Ent ord 0 x := by unfold Ent; rw [S.ord0]; exact hx
+  have h3 := S.H3
+  have hw := S.W3 x hx 1 le_rfl (by omega)
+  have he := S.pathEnt x hx 1 (by omega)
+  have hm := (S.ordMem 1 le_rfl (by omega) _).mp he
+  have : pp (ts s) x 1 ∈ tabs (ts s) 0 x :=
+    (S.tabsIff 0 x _ hent).mpr ⟨hm.1, hm.2, hw⟩
+  unfold tabs at this; rw [if_pos rfl] at this; exact this
+
 variable {f1x i1 : Nat} {t : TS} (F : InsFrame s x f1x i1 t)
 include F
 
@@ -120,6 +132,110 @@ theorem ins_order_sup (hTP : TopParams s.P) (X e : Nat) (he : e ∈ order (ts s)
     simp only [List.map_append, List.map_cons, List.mem_append, List.mem_cons] at he' ⊢
     tauto
   · rw [ins_order_old hI hcs hx F hX]; exact he
+
+/-- **The tag-ordering part of the invariant after the split.** -/
+theorem ins_shapeT (hTP : TopParams s.P) :
+    ShapeT t (clIns cl x s.C.size (s.C.size + 1)) (ordIns ord cl x s.C.size (s.C.size + 1)) := by
+  have S := hI.shape
+  have h3 := S.H3
+  have eP : (ts s).P = s.P := rfl
+  rw [eP] at h3
+  obtain ⟨A, B, hcl, hA, hB, hcl'⟩ := ins_cl hI hcs hx
+  obtain ⟨hy, hz⟩ := ins_fresh hI hcs hx
+  have hnd : cl.Nodup := S.ord0 ▸ S.ordNodup 0
+  have hmem : ∀ c, c ∈ clIns cl x s.C.size (s.C.size + 1) ↔ c ∈ cl ∨ c = s.C.size ∨ c = s.C.size + 1 := by
+    intro c; rw [hcl', hcl]; simp only [List.mem_append, List.mem_cons]; tauto
+  have hord : ∀ k, 1 ≤ k → ordIns ord cl x s.C.size (s.C.size + 1) k = ord k := fun k hk => by
+    unfold ordIns; rw [if_neg (by omega)]
+  -- the chunk standing for `c` before the split
+  have hpp : ∀ c ∈ clIns cl x s.C.size (s.C.size + 1), ∀ j, 1 ≤ j → j ≤ s.P.H →
+      pp t c j = pp (ts s) (if c = s.C.size ∨ c = s.C.size + 1 then x else c) j := by
+    intro c _ j hj1 hj
+    by_cases hc : c = s.C.size ∨ c = s.C.size + 1
+    · rw [if_pos hc]; exact F.pp_new c hc j hj1 hj
+    · rw [if_neg hc]; push_neg at hc; exact F.pp_old c hc.1 hc.2 j
+  have hproj : ∀ c ∈ clIns cl x s.C.size (s.C.size + 1),
+      (if c = s.C.size ∨ c = s.C.size + 1 then x else c) ∈ cl := by
+    intro c hc; split
+    · exact hx
+    · rcases (hmem c).mp hc with h | h | h
+      · exact h
+      all_goals tauto
+  refine ⟨by rw [F.P]; exact h3, rfl, fun k => ?_, fun k hk1 hk v => ?_, fun k hk => ?_, fun v hv => ?_,
+    ⟨?_, ?_, ?_⟩, fun c hc j hj => ?_, fun c hc j hj1 hj => ?_, fun j hj c d hcd => ?_,
+    fun X hX => ?_, fun X hX => ?_⟩
+  · by_cases hk : k = 0
+    · unfold ordIns; rw [if_pos hk]; exact ins_cl_nodup hI hcs hx
+    · rw [hord k (by omega)]; exact S.ordNodup k
+  · rw [F.P] at hk
+    rw [hord k hk1, S.ordMem k hk1 hk, F.isN, F.ht]
+  · rw [F.P] at hk
+    rw [hord k (by omega)]; exact S.ordHigh k hk
+  · rw [F.isN] at hv; rw [F.ht, F.P]; exact S.htN v hv
+  · rw [F.P, hord _ (by omega)]; exact S.root.1
+  · rw [F.P, F.liveN]; exact S.root.2.1
+  · rw [F.P, F.livePar]; exact S.root.2.2
+  · rw [F.P] at hj
+    by_cases hj0 : j = 0
+    · subst hj0; simp only [Ent, ordIns, pp, ↓reduceIte]; exact hc
+    · show _ ∈ _; rw [hord j (by omega), hpp c hc j (by omega) hj]
+      exact S.pathEnt _ (hproj c hc) j hj
+  · rw [F.P] at hj
+    by_cases hj2 : 2 ≤ j
+    · rw [hpp c hc j hj1 hj, hpp c hc (j - 1) (by omega) (by omega)]
+      exact ins_order_sup hI hcs hx F hTP _ _ (S.W3 _ (hproj c hc) j hj1 hj)
+    · have e1 : j = 1 := by omega
+      subst e1
+      by_cases hcn : c = s.C.size ∨ c = s.C.size + 1
+      · rw [F.pp_new c hcn 1 le_rfl (by omega)]
+        show c ∈ order t (pp (ts s) x 1)
+        obtain ⟨A', le, Bs, a, b, -, -, htab', -⟩ := ins_table hI hcs hx F hTP (ins_pp1 hI hcs hx)
+        unfold order Node.order; rw [htab']
+        simp only [List.map_append, List.map_cons, List.mem_append, List.mem_cons]
+        omega
+      · have hc0 : c ∈ cl := by have := hproj c hc; rwa [if_neg hcn] at this
+        rw [hpp c hc 1 le_rfl (by omega), if_neg hcn]
+        push_neg at hcn
+        rw [F.pp_old c hcn.1 hcn.2 0]
+        exact ins_order_sup hI hcs hx F hTP _ _ (S.W3 c hc0 1 le_rfl hj)
+  · rw [F.P] at hj
+    by_cases hj0 : j = 0
+    · subst hj0; right; unfold pp; rw [if_pos rfl, if_pos rfl]; unfold ordIns; rw [if_pos rfl]; exact hcd
+    · rw [hord j (by omega), hpp c hcd.mem_left j (by omega) hj, hpp d hcd.mem_right j (by omega) hj]
+      rw [hcl'] at hcd
+      have hyA : s.C.size ∉ A := fun h => hy (by rw [hcl]; simp [h])
+      have hzA : s.C.size + 1 ∉ A := fun h => hz (by rw [hcl]; simp [h])
+      have hyB : s.C.size ∉ B := fun h => hy (by rw [hcl]; simp [h])
+      have hzB : s.C.size + 1 ∉ B := fun h => hz (by rw [hcl]; simp [h])
+      rcases before_proj hyA hzA hyB hzB hcd with e | e <;> simp only at e
+      · left; rw [e]
+      · rw [← hcl] at e; exact S.O2 j hj _ _ e
+  · rw [F.isN] at hX
+    rw [F.ht]
+    by_cases hXc : X ∈ s.cin.getX x
+    · have hent : Ent ord 0 x := by unfold Ent; rw [S.ord0]; exact hx
+      have hT' : X ∈ tabs (ts s) 0 x := by unfold tabs; rw [if_pos rfl]; exact hXc
+      have hX1 := ((S.tabsIff 0 x X hent).mp hT').2.1
+      obtain ⟨A', le, Bs, a, b, htab, hA', htab', -⟩ := ins_table hI hcs hx F hTP hXc
+      have hO := S.O1 X hX
+      rw [hX1, S.ord0] at hO
+      unfold order Node.order at hO ⊢
+      rw [htab']; rw [show (nd (ts s) X).table = A' ++ (x, le) :: Bs from htab] at hO
+      rw [hX1]; simp only [Nat.sub_self]; unfold ordIns; rw [if_pos rfl, hcl']
+      rw [hcl] at hO hnd
+      simp only [List.map_append, List.map_cons] at hO ⊢
+      exact sublist_around hO hA hB
+    · rw [ins_order_old hI hcs hx F hXc]
+      by_cases h1 : ht (ts s) X - 1 = 0
+      · rw [h1]; unfold ordIns; rw [if_pos rfl]
+        exact (h1 ▸ S.O1 X hX).trans (S.ord0 ▸ ins_sub hI hcs hx)
+      · rw [hord _ (by omega)]; exact S.O1 X hX
+  · rw [F.isN] at hX
+    rw [F.P]
+    by_cases hXc : X ∈ s.cin.getX x
+    · obtain ⟨A', le, Bs, a, b, -, -, htab', hg, h1, -⟩ := ins_table hI hcs hx F hTP hXc
+      unfold labs; rw [htab']; exact gapsGe_mono h1 hg
+    · rw [ins_labs_old hI hcs hx F hXc]; exact S.labsOk X hX
 
 end shape
 
