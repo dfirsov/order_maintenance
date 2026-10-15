@@ -209,6 +209,20 @@ theorem predOf_infix {l r : List Nat} {y z : Nat} (hl : l.Nodup) (h : r ++ [z, y
   have : u ++ (r ++ [z, y]) ++ w = (u ++ r ++ [z]) ++ y :: w := by simp
   rw [this] at hl ⊢; rw [predOf_mid hl]; simp
 
+theorem headD_append_cons (L R : List Nat) (a d : Nat) :
+    (L ++ a :: R).headD d = if L = [] then a else L.headD d := by
+  cases L <;> simp
+
+theorem getLastD_append_cons (L R : List Nat) (a d : Nat) :
+    (L ++ a :: R).getLastD d = if R = [] then a else R.getLastD d := by
+  by_cases hR : R = []
+  · subst hR; simp [List.getLastD_eq_getLast?]
+  · rw [if_neg hR, List.getLastD_eq_getLast?, List.getLastD_eq_getLast?,
+      List.getLast?_eq_getLast hR]
+    rw [List.getLast?_eq_getLast (by simp)]
+    simp only [List.getLast_append_of_ne_nil _ (List.cons_ne_nil a R)]
+    rw [List.getLast_cons hR]
+
 theorem headD_ne_nil' {l : List Nat} (hnil : NIL ∉ l) (hl : l ≠ []) : l.headD NIL ≠ NIL :=
   fun e => hnil (e ▸ headD_mem hl NIL)
 
@@ -338,6 +352,29 @@ theorem before_proj {A B : List Nat} {x y z c d : Nat} (hyA : y ∉ A) (hzA : z 
   have h1 : Before (A ++ x :: x :: x :: B) (p c) (p d) := by
     rw [← hm]; exact h.map p
   exact before_dedup (before_dedup h1 e) e
+
+/-- Order in `A, x, B` lifts to `A, y, x, z, B` through the collapse of `y`, `z` onto `x`. -/
+theorem before_lift {A B : List Nat} {x y z c d : Nat} (hnd : (A ++ y :: x :: z :: B).Nodup)
+    (hc : c ∈ A ++ y :: x :: z :: B) (hd : d ∈ A ++ y :: x :: z :: B)
+    (hne : (if c = y ∨ c = z then x else c) ≠ (if d = y ∨ d = z then x else d))
+    (h : Before (A ++ x :: B) (if c = y ∨ c = z then x else c) (if d = y ∨ d = z then x else d)) :
+    Before (A ++ y :: x :: z :: B) c d := by
+  have hnd' := List.nodup_append.mp hnd
+  have hyA : y ∉ A := fun hy => hnd'.2.2 y hy y (by simp) rfl
+  have hzA : z ∉ A := fun hz => hnd'.2.2 z hz z (by simp) rfl
+  have h2 := hnd'.2.1
+  simp only [List.nodup_cons, List.mem_cons, not_or] at h2
+  have hyB : y ∉ B := h2.1.2.2
+  have hzB : z ∉ B := h2.2.2.1
+  have hcd : c ≠ d := fun e => hne (by rw [e])
+  rcases before_total hc hd hcd with h' | h'
+  · exact h'
+  · exfalso
+    have hsmall : (A ++ x :: B).Nodup :=
+      hnd.sublist ((List.Sublist.refl A).append ((((List.Sublist.refl B).cons z).cons_cons x).cons y))
+    rcases before_proj hyA hzA hyB hzB h' with e | e <;> simp only at e
+    · exact hne e.symm
+    · exact h.asymm hsmall e
 
 /-! ### Infix triples -/
 

@@ -35,6 +35,27 @@ theorem lookup_map_replace {β : Type} (l : List (Nat × β)) (k k' : Nat) (v : 
     · simp only [show (p.1 == k) = false by simpa using hp, Bool.false_eq_true, if_false]
       split <;> [rfl; exact ih]
 
+theorem lookup_assocSet_eq {β : Type} (l : List (Nat × β)) (k : Nat) (v : β) :
+    lookup (assocSet l k v) k = some v := by
+  unfold assocSet lookup
+  split
+  · rename_i h
+    induction l with
+    | nil => simp at h
+    | cons p r ih =>
+      obtain ⟨a, b⟩ := p
+      by_cases hak : a = k
+      · subst hak; simp
+      · have h' : r.any (·.1 == k) = true := by simpa [hak] using h
+        have := ih h'
+        simpa [hak] using this
+  · rename_i h
+    have hn : List.find? (fun x => x.1 == k) l = none := by
+      rw [List.find?_eq_none]; intro x hx
+      simp only [List.any_eq_true, beq_iff_eq, not_exists, not_and] at h
+      simpa using h x hx
+    simp [List.find?_append, hn]
+
 theorem lookup_assocSet_ne {β : Type} (l : List (Nat × β)) (k k' : Nat) (v : β) (h : k' ≠ k) :
     lookup (assocSet l k v) k' = lookup l k' := by
   unfold assocSet lookup

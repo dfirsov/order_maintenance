@@ -85,6 +85,13 @@ theorem ins_pp1 : pp (ts s) x 1 ∈ s.cin.getX x := by
     (S.tabsIff 0 x _ hent).mpr ⟨hm.1, hm.2, hw⟩
   unfold tabs at this; rw [if_pos rfl] at this; exact this
 
+/-- A table holding `x`: height 1. -/
+theorem ins_cinX {X : Nat} (hX : X ∈ s.cin.getX x) :
+    isN (ts s) X ∧ ht (ts s) X = 1 ∧ x ∈ order (ts s) X := by
+  have hent : Ent ord 0 x := by unfold Ent; rw [hI.shape.ord0]; exact hx
+  have hT' : X ∈ tabs (ts s) 0 x := by unfold tabs; rw [if_pos rfl]; exact hX
+  exact (hI.shape.tabsIff 0 x X hent).mp hT'
+
 variable {f1x i1 : Nat} {t : TS} (F : InsFrame s x f1x i1 t)
 include F
 
@@ -153,7 +160,7 @@ theorem ins_shapeT (hTP : TopParams s.P) :
     intro c _ j hj1 hj
     by_cases hc : c = s.C.size ∨ c = s.C.size + 1
     · rw [if_pos hc]; exact F.pp_new c hc j hj1 hj
-    · rw [if_neg hc]; push_neg at hc; exact F.pp_old c hc.1 hc.2 j
+    · rw [if_neg hc]; push Not at hc; exact F.pp_old c hc.1 hc.2 j
   have hproj : ∀ c ∈ clIns cl x s.C.size (s.C.size + 1),
       (if c = s.C.size ∨ c = s.C.size + 1 then x else c) ∈ cl := by
     intro c hc; split
@@ -195,7 +202,7 @@ theorem ins_shapeT (hTP : TopParams s.P) :
         omega
       · have hc0 : c ∈ cl := by have := hproj c hc; rwa [if_neg hcn] at this
         rw [hpp c hc 1 le_rfl (by omega), if_neg hcn]
-        push_neg at hcn
+        push Not at hcn
         rw [F.pp_old c hcn.1 hcn.2 0]
         exact ins_order_sup hI hcs hx F hTP _ _ (S.W3 c hc0 1 le_rfl hj)
   · rw [F.P] at hj
@@ -236,6 +243,476 @@ theorem ins_shapeT (hTP : TopParams s.P) :
     · obtain ⟨A', le, Bs, a, b, -, -, htab', hg, h1, -⟩ := ins_table hI hcs hx F hTP hXc
       unfold labs; rw [htab']; exact gapsGe_mono h1 hg
     · rw [ins_labs_old hI hcs hx F hXc]; exact S.labsOk X hX
+
+/-! ### Further views -/
+
+theorem ins_order_mem (hTP : TopParams s.P) {X : Nat} (hX : X ∈ s.cin.getX x) (e : Nat) :
+    e ∈ order t X ↔ e ∈ order (ts s) X ∨ e = s.C.size ∨ e = s.C.size + 1 := by
+  obtain ⟨A', le, Bs, a, b, htab, -, htab', -⟩ := ins_table hI hcs hx F hTP hX
+  unfold order Node.order
+  rw [htab', show (nd (ts s) X).table = A' ++ (x, le) :: Bs from htab]
+  simp only [List.map_append, List.map_cons, List.mem_append, List.mem_cons]
+  tauto
+
+/-- **The order invariant after the split.** -/
+theorem ins_shape (hTP : TopParams s.P) :
+    Shape t (clIns cl x s.C.size (s.C.size + 1)) (ordIns ord cl x s.C.size (s.C.size + 1)) := by
+  have S := hI.shape
+  have ST := ins_shapeT hI hcs hx F hTP
+  have h3 := S.H3
+  have eP : (ts s).P = s.P := rfl
+  rw [eP] at h3
+  obtain ⟨A, B, hcl, hA, hB, hcl'⟩ := ins_cl hI hcs hx
+  obtain ⟨hy, hz⟩ := ins_fresh hI hcs hx
+  have hnd : cl.Nodup := S.ord0 ▸ S.ordNodup 0
+  have hnd' := ins_cl_nodup hI hcs hx
+  have hmem : ∀ c, c ∈ clIns cl x s.C.size (s.C.size + 1) ↔ c ∈ cl ∨ c = s.C.size ∨ c = s.C.size + 1 := by
+    intro c; rw [hcl', hcl]; simp only [List.mem_append, List.mem_cons]; tauto
+  have hord : ∀ k, 1 ≤ k → ordIns ord cl x s.C.size (s.C.size + 1) k = ord k := fun k hk => by
+    unfold ordIns; rw [if_neg (by omega)]
+  have hord0 : ordIns ord cl x s.C.size (s.C.size + 1) 0 = clIns cl x s.C.size (s.C.size + 1) := rfl
+  have hproj : ∀ c ∈ clIns cl x s.C.size (s.C.size + 1),
+      (if c = s.C.size ∨ c = s.C.size + 1 then x else c) ∈ cl := by
+    intro c hc; split
+    · exact hx
+    · rcases (hmem c).mp hc with h | h | h
+      · exact h
+      all_goals tauto
+  have hlpr : ∀ c, lpr t c = lpr (ts s) (if c = s.C.size ∨ c = s.C.size + 1 then x else c) := by
+    intro c; rw [F.lpar]; split <;> rfl
+  have hpp : ∀ c, ∀ j, 1 ≤ j → j ≤ s.P.H →
+      pp t c j = pp (ts s) (if c = s.C.size ∨ c = s.C.size + 1 then x else c) j := by
+    intro c j hj1 hj
+    by_cases hc : c = s.C.size ∨ c = s.C.size + 1
+    · rw [if_pos hc]; exact F.pp_new c hc j hj1 hj
+    · rw [if_neg hc]; push Not at hc; exact F.pp_old c hc.1 hc.2 j
+  have hanc : ∀ c, ∀ j, 1 ≤ j →
+      anc t c j = anc (ts s) (if c = s.C.size ∨ c = s.C.size + 1 then x else c) j := by
+    intro c j hj1
+    by_cases hc : c = s.C.size ∨ c = s.C.size + 1
+    · rw [if_pos hc]; exact F.anc_new c hc j hj1
+    · rw [if_neg hc]; push Not at hc; exact F.anc_old c hc.1 hc.2 j
+  -- nodes of height at least 2 do not hold `x`
+  have hnot : ∀ X, isN (ts s) X → 2 ≤ ht (ts s) X → X ∉ s.cin.getX x := fun X _ h2 hX => by
+    have := (ins_cinX hI hcs hx hX).2.1; omega
+  have hlx := S.lp x hx
+  have hlxs : lpr (ts s) x < s.nodes.size := hlx.1.1.2.1
+  have hchild : ∀ u, (nd t u).children = if u = lpr (ts s) x then
+      (nd (ts s) u).children.replace1 x [s.C.size, x, s.C.size + 1] else (nd (ts s) u).children := by
+    intro u; rw [F.children]
+    by_cases hu : u = lpr (ts s) x
+    · rw [if_pos ⟨hu, hu ▸ hlxs⟩, if_pos hu]; rfl
+    · rw [if_neg (fun h => hu h.1), if_neg hu]; rfl
+  -- the children of `x`'s parent
+  obtain ⟨P', Q', hkx, hxP, hxQ⟩ : ∃ P' Q', (nd (ts s) (lpr (ts s) x)).children = P' ++ x :: Q' ∧
+      x ∉ P' ∧ x ∉ Q' := by
+    obtain ⟨P', Q', e⟩ := List.mem_iff_append.mp hlx.2.2
+    have hn := (S.kids _ hlx.1).1
+    rw [e] at hn
+    have h1 := List.nodup_append.mp hn
+    exact ⟨P', Q', e, fun h => h1.2.2 x h x (by simp) rfl, (List.nodup_cons.mp h1.2.1).1⟩
+  have hkx' : (nd t (lpr (ts s) x)).children = P' ++ s.C.size :: x :: (s.C.size + 1) :: Q' := by
+    rw [hchild, if_pos rfl, hkx, replace1_split _ hxP]; simp
+  have hkids_cl : ∀ e ∈ (nd (ts s) (lpr (ts s) x)).children, e ∈ cl := by
+    intro e he
+    have := (S.kids _ hlx.1).2.1.subset he
+    rwa [hlx.2.1, S.ord0] at this
+  refine ⟨ST, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · -- up
+    intro v hv hH
+    rw [F.liveN] at hv; rw [F.ht, F.P] at hH
+    obtain ⟨h1, h2, h3'⟩ := S.up v hv hH
+    have hne : (nd (ts s) v).livePar ≠ lpr (ts s) x := by
+      intro e; rw [e, hlx.2.1] at h2; have := (S.htN v hv.1).1; omega
+    simp only [F.livePar, F.liveN, F.ht]
+    rw [hchild, if_neg hne]
+    exact ⟨h1, h2, h3'⟩
+  · -- lp
+    intro c hc
+    have hc0 := hproj c hc
+    rw [hlpr, F.liveN, F.ht]
+    refine ⟨(S.lp _ hc0).1, (S.lp _ hc0).2.1, ?_⟩
+    by_cases hcn : c = s.C.size ∨ c = s.C.size + 1
+    · rw [if_pos hcn, hkx']
+      simp only [List.mem_append, List.mem_cons]; omega
+    · rw [if_neg hcn] at hc0 ⊢
+      have hm := (S.lp c hc0).2.2
+      by_cases hl : lpr (ts s) c = lpr (ts s) x
+      · rw [hl, hkx']; rw [hl, hkx] at hm
+        simp only [List.mem_append, List.mem_cons] at hm ⊢; tauto
+      · rw [hchild, if_neg hl]; exact hm
+  · -- kids
+    intro u hu
+    rw [F.liveN] at hu
+    obtain ⟨k1, k2, k3⟩ := S.kids u hu
+    rw [F.ht]
+    by_cases hu' : u = lpr (ts s) x
+    · subst hu'
+      rw [hkx']
+      have hh1 : ht (ts s) (lpr (ts s) x) - 1 = 0 := by rw [hlx.2.1]
+      rw [hh1, hord0]
+      rw [hkx] at k1 k2 hkids_cl
+      rw [hh1, S.ord0, hcl] at k2
+      refine ⟨?_, ?_, fun e he => ⟨?_, fun h => by rw [hlx.2.1] at h; omega⟩⟩
+      · have hy' : s.C.size ∉ P' ++ x :: Q' := fun h => hy (hkids_cl _ h)
+        have hz' : s.C.size + 1 ∉ P' ++ x :: Q' := fun h => hz (hkids_cl _ h)
+        have h1 := List.nodup_append.mp k1
+        simp only [List.mem_append, List.mem_cons, not_or] at hy' hz'
+        rw [List.nodup_append]
+        refine ⟨h1.1, ?_, ?_⟩
+        · simp only [List.nodup_cons, List.mem_cons, not_or]
+          exact ⟨⟨by omega, by omega, hy'.2.2⟩, ⟨by omega, hxQ⟩, hz'.2.2, (List.nodup_cons.mp h1.2.1).2⟩
+        · intro a ha b hb e; subst e
+          simp only [List.mem_cons] at hb
+          rcases hb with rfl | rfl | rfl | hb
+          · exact hy'.1 ha
+          · exact hxP ha
+          · exact hz'.1 ha
+          · exact h1.2.2 a ha a (by simp [hb]) rfl
+      · rw [hcl']; exact sublist_around k2 hA hB
+      · rw [F.par_zero, hlpr]
+        simp only [List.mem_append, List.mem_cons] at he
+        by_cases hen : e = s.C.size ∨ e = s.C.size + 1
+        · rw [if_pos hen]
+        · rw [if_neg hen]
+          have he' : e ∈ P' ++ x :: Q' := by simp only [List.mem_append, List.mem_cons]; tauto
+          have := (k3 e (by rw [hkx]; exact he')).1
+          rw [hlx.2.1] at this; simpa [par] using this
+    · rw [hchild, if_neg hu']
+      refine ⟨k1, ?_, fun e he => ?_⟩
+      · by_cases h1 : ht (ts s) u - 1 = 0
+        · rw [h1, hord0]; rw [h1, S.ord0] at k2; exact k2.trans (ins_sub hI hcs hx)
+        · rw [hord _ (by omega)]; exact k2
+      · obtain ⟨k4, k5⟩ := k3 e he
+        by_cases h1 : ht (ts s) u - 1 = 0
+        · rw [h1, F.par_zero, hlpr]
+          have hecl : e ∈ cl := by have := k2.subset he; rwa [h1, S.ord0] at this
+          have hen : ¬(e = s.C.size ∨ e = s.C.size + 1) := by
+            rintro (rfl | rfl)
+            · exact hy hecl
+            · exact hz hecl
+          rw [if_neg hen]; rw [h1] at k4
+          exact ⟨by simpa [par] using k4, fun h2 => absurd h2 (by omega)⟩
+        · rw [F.par_pos (by omega), F.liveN]; exact ⟨k4, k5⟩
+  · -- OT
+    intro h hh1 hh u u' e e' hu hu' huu he he' hpe hpe'
+    unfold Ent at he he'
+    rw [F.P] at hh; rw [F.liveN] at hu hu'
+    rw [hord h hh1] at huu
+    by_cases h2 : 2 ≤ h
+    · rw [hord _ (by omega)] at he he' ⊢
+      rw [F.par_pos (by omega)] at hpe hpe'
+      exact S.OT h hh1 hh u u' e e' hu hu' huu he he' hpe hpe'
+    · have e1 : h = 1 := by omega
+      subst e1
+      simp only [Nat.sub_self] at he he' hpe hpe' ⊢
+      rw [hord0] at he he' ⊢
+      rw [F.par_zero, hlpr] at hpe hpe'
+      have hb := S.OT 1 le_rfl hh u u' _ _ hu hu' huu (by show _ ∈ ord 0; rw [S.ord0]; exact hproj e he)
+        (by show _ ∈ ord 0; rw [S.ord0]; exact hproj e' he')
+        (by simpa [par] using hpe) (by simpa [par] using hpe')
+      rw [S.ord0] at hb
+      have hne : (if e = s.C.size ∨ e = s.C.size + 1 then x else e) ≠
+          (if e' = s.C.size ∨ e' = s.C.size + 1 then x else e') := by
+        intro eq; rw [eq] at hpe; rw [hpe] at hpe'
+        exact huu.ne (S.ordNodup 1) hpe'
+      rw [hcl'] at he he' hnd' ⊢
+      rw [hcl] at hb
+      exact before_lift hnd' he he' hne hb
+  · -- ghost
+    intro v hv
+    rw [F.ghostN] at hv
+    have hv1 := (S.htN v hv.1).1
+    have hvx : v ≠ lpr (ts s) x := fun e => by
+      rw [e] at hv; exact absurd hv.2 (by rw [hlx.1.2]; simp)
+    obtain ⟨g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13⟩ := S.ghost v hv
+    obtain ⟨-, hup, -⟩ := S.up _ g1 (by rw [g3]; exact g10)
+    have hne : (nd (ts s) (nd (ts s) v).t1).livePar ≠ lpr (ts s) x := by
+      intro e; rw [e, hlx.2.1, g3] at hup; omega
+    simp only [F.liveN, F.ht, F.t1, F.t2, F.srcOf, F.livePar, F.P]
+    rw [hchild, hchild, if_neg hvx, if_neg hne, hord _ hv1]
+    exact ⟨g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13⟩
+  · -- src
+    intro u hu hs
+    rw [F.liveN] at hu; rw [F.srcOf] at hs ⊢
+    rw [F.ghostN, F.t1, F.t2]; exact S.src u hu hs
+  · -- tabEnt
+    intro X hX e he
+    rw [F.isN] at hX; rw [F.ht]; unfold Ent
+    by_cases hXc : X ∈ s.cin.getX x
+    · obtain ⟨-, hX1, -⟩ := ins_cinX hI hcs hx hXc
+      rw [hX1, Nat.sub_self, hord0, hmem]
+      rcases (ins_order_mem hI hcs hx F hTP hXc e).mp he with h | h | h
+      · have := S.tabEnt X hX e h; unfold Ent at this; rw [hX1, Nat.sub_self, S.ord0] at this
+        exact Or.inl this
+      · exact Or.inr (Or.inl h)
+      · exact Or.inr (Or.inr h)
+    · rw [ins_order_old hI hcs hx F hXc] at he
+      have := S.tabEnt X hX e he
+      unfold Ent at this
+      by_cases h1 : ht (ts s) X - 1 = 0
+      · rw [h1, hord0]; rw [h1, S.ord0] at this; exact (ins_sub hI hcs hx).subset this
+      · rw [hord _ (by omega)]; exact this
+  · -- tabsIff
+    intro h e X he
+    unfold Ent at he
+    rw [F.isN, F.ht]
+    by_cases h0 : h = 0
+    · subst h0
+      rw [hord0] at he
+      unfold tabs; rw [if_pos rfl, F.cin]
+      by_cases hen : e = s.C.size ∨ e = s.C.size + 1
+      · rw [if_pos hen]
+        change X ∈ s.cin.getX x ↔ _
+        constructor
+        · intro hXc
+          obtain ⟨a1, a2, -⟩ := ins_cinX hI hcs hx hXc
+          exact ⟨a1, a2, (ins_order_mem hI hcs hx F hTP hXc e).mpr (Or.inr hen)⟩
+        · rintro ⟨a1, a2, a3⟩
+          by_contra hXc
+          rw [ins_order_old hI hcs hx F hXc] at a3
+          have := (S.O1 X a1).subset a3
+          rw [a2, Nat.add_sub_cancel, S.ord0] at this
+          rcases hen with rfl | rfl
+          · exact hy this
+          · exact hz this
+      · rw [if_neg hen]
+        have hecl : e ∈ cl := by
+          rcases (hmem e).mp he with h | h | h
+          · exact h
+          all_goals exact absurd (by tauto) hen
+        have hent : Ent ord 0 e := by unfold Ent; rw [S.ord0]; exact hecl
+        have hiff := S.tabsIff 0 e X hent
+        unfold tabs at hiff; rw [if_pos rfl] at hiff
+        rw [hiff]
+        have : e ∈ order t X ↔ e ∈ order (ts s) X := by
+          by_cases hXc : X ∈ s.cin.getX x
+          · rw [ins_order_mem hI hcs hx F hTP hXc]; tauto
+          · rw [ins_order_old hI hcs hx F hXc]
+        rw [this]
+    · rw [hord h (by omega)] at he
+      unfold tabs; rw [if_neg h0, F.inTables]
+      have hiff := S.tabsIff h e X he
+      unfold tabs at hiff; rw [if_neg h0] at hiff
+      rw [hiff]
+      constructor
+      · rintro ⟨a1, a2, a3⟩
+        refine ⟨a1, a2, ?_⟩
+        rw [ins_order_old hI hcs hx F (hnot X a1 (by omega))]; exact a3
+      · rintro ⟨a1, a2, a3⟩
+        refine ⟨a1, a2, ?_⟩
+        rw [ins_order_old hI hcs hx F (hnot X a1 (by omega))] at a3; exact a3
+  · -- tabsNodup
+    intro h e he
+    unfold Ent at he
+    by_cases h0 : h = 0
+    · subst h0
+      rw [hord0] at he
+      have hp := hproj e he
+      unfold tabs; rw [if_pos rfl, F.cin]
+      have := S.tabsNodup 0 _ (show _ ∈ ord 0 by rw [S.ord0]; exact hp)
+      unfold tabs at this; rw [if_pos rfl] at this
+      by_cases hen : e = s.C.size ∨ e = s.C.size + 1
+      · rw [if_pos hen] at this ⊢; exact this
+      · rw [if_neg hen] at this ⊢; exact this
+    · rw [hord h (by omega)] at he
+      unfold tabs; rw [if_neg h0, F.inTables]
+      have := S.tabsNodup h e he
+      unfold tabs at this; rw [if_neg h0] at this; exact this
+  · -- Q
+    intro h e X he hX
+    unfold Ent at he
+    by_cases h0 : h = 0
+    · subst h0
+      rw [hord0] at he
+      have hp := hproj e he
+      unfold tabs at hX; rw [if_pos rfl, F.cin] at hX
+      rw [F.par_zero, F.srcOf, hlpr]
+      have hQ := S.Q 0 _ X (show _ ∈ ord 0 by rw [S.ord0]; exact hp)
+      unfold tabs par at hQ; simp only [if_pos rfl] at hQ
+      by_cases hen : e = s.C.size ∨ e = s.C.size + 1
+      · rw [if_pos hen] at hQ hX ⊢; exact hQ hX
+      · rw [if_neg hen] at hQ hX ⊢; exact hQ hX
+    · rw [hord h (by omega)] at he
+      unfold tabs at hX; rw [if_neg h0, F.inTables] at hX
+      rw [F.par_pos (by omega), F.srcOf]
+      exact S.Q h e X he (by unfold tabs; rw [if_neg h0]; exact hX)
+  · -- W1
+    intro v hv X hX
+    rw [F.ghostN] at hv
+    have hv1 := (S.htN v hv.1).1
+    rw [F.ht] at hX
+    unfold tabs at hX; rw [if_neg (by omega), F.inTables] at hX
+    have hent : Ent ord (ht (ts s) v) v :=
+      (S.ordMem _ hv1 (S.htN v hv.1).2 v).mpr ⟨hv.1, rfl⟩
+    have hX' : X ∈ tabs (ts s) (ht (ts s) v) v := by unfold tabs; rw [if_neg (by omega)]; exact hX
+    obtain ⟨a1, a2, -⟩ := (S.tabsIff _ v X hent).mp hX'
+    rw [F.t1, F.t2, ins_order_old hI hcs hx F (hnot X a1 (by omega))]
+    exact S.W1 v hv X hX'
+  · -- side
+    intro v hv e he
+    rw [F.ghostN] at hv
+    have hv1 := (S.htN v hv.1).1
+    rw [F.side, F.ht, F.t1]
+    by_cases hXc : v ∈ s.cin.getX x
+    · obtain ⟨-, hX1, hxv⟩ := ins_cinX hI hcs hx hXc
+      have hvs : v < s.nodes.size := hv.1.2.1
+      rw [if_pos ⟨hXc, hvs⟩, hX1, Nat.sub_self, F.par_zero, hlpr]
+      unfold sideAround
+      have hdr : (s.nodes.getX v).draining = true := hv.2
+      rw [if_pos hdr]
+      have hsx := S.side v hv x hxv
+      rw [hX1, Nat.sub_self] at hsx
+      have hsx' : lookup (s.nodes.getX v).side x =
+          some (if par (ts s) 0 x = (nd (ts s) v).t1 then Side.left else Side.right) := hsx
+      rcases (ins_order_mem hI hcs hx F hTP hXc e).mp he with h | h | h
+      · have hen : ¬(e = s.C.size ∨ e = s.C.size + 1) := by
+          rintro (rfl | rfl)
+          · have := (S.O1 v hv.1).subset h; rw [hX1, Nat.sub_self, S.ord0] at this; exact hy this
+          · have := (S.O1 v hv.1).subset h; rw [hX1, Nat.sub_self, S.ord0] at this; exact hz this
+        rw [if_neg hen]
+        push Not at hen
+        rw [lookup_assocSet_ne _ _ _ _ hen.2, lookup_assocSet_ne _ _ _ _ hen.1]
+        have := S.side v hv e h
+        rw [hX1, Nat.sub_self, show par (ts s) 0 e = lpr (ts s) e by simp [par]] at this
+        exact this
+      · subst h
+        rw [if_pos (Or.inl rfl), lookup_assocSet_ne _ _ _ _ (by omega), lookup_assocSet_eq, hsx']
+        simp [par]
+      · subst h
+        rw [if_pos (Or.inr rfl), lookup_assocSet_eq, hsx']
+        simp [par]
+    · have hvs := ins_order_old hI hcs hx F hXc
+      rw [if_neg (fun h => hXc h.1)]
+      rw [hvs] at he
+      have := S.side v hv e he
+      by_cases h1 : ht (ts s) v - 1 = 0
+      · rw [h1, F.par_zero, hlpr]
+        have hecl : e ∈ cl := by have := (S.O1 v hv.1).subset he; rwa [h1, S.ord0] at this
+        have hen : ¬(e = s.C.size ∨ e = s.C.size + 1) := by
+          rintro (rfl | rfl)
+          · exact hy hecl
+          · exact hz hecl
+        rw [if_neg hen]; rw [h1, show par (ts s) 0 e = lpr (ts s) e by simp [par]] at this
+        exact this
+      · rw [F.par_pos (by omega)]; exact this
+  · -- pathSize
+    intro c hc
+    rw [F.P]
+    by_cases hcn : c = s.C.size ∨ c = s.C.size + 1
+    · exact F.psize c hcn
+    · have hc0 := hproj c hc
+      rw [if_neg hcn] at hc0
+      push Not at hcn
+      rw [F.pother c hcn.1 hcn.2]
+      exact S.pathSize c hc0
+  · -- P
+    intro c hc j hj1 hj
+    rw [F.P] at hj
+    simp only [hpp c j hj1 hj, hanc c j hj1, F.ghostN, F.t1, F.t2]
+    exact S.P _ (hproj c hc) j hj1 hj
+  · -- Sr
+    intro c hc j hj1 hj hg
+    rw [F.P] at hj
+    rw [hpp c j hj1 hj, F.ghostN] at hg
+    rw [hanc c j hj1]
+    by_cases hj2 : 2 ≤ j
+    · rw [hpp c (j - 1) (by omega) (by omega)]
+      exact ins_order_sup hI hcs hx F hTP _ _ (S.Sr _ (hproj c hc) j hj1 hj hg)
+    · have e1 : j = 1 := by omega
+      subst e1
+      have hsr := S.Sr _ (hproj c hc) 1 le_rfl hj hg
+      change c ∈ order t (anc (ts s) _ 1)
+      by_cases hcn : c = s.C.size ∨ c = s.C.size + 1
+      · rw [if_pos hcn] at hsr ⊢
+        change x ∈ order (ts s) (lpr (ts s) x) at hsr
+        have hent : Ent ord 0 x := by unfold Ent; rw [S.ord0]; exact hx
+        have hlc : lpr (ts s) x ∈ tabs (ts s) 0 x := (S.tabsIff 0 x _ hent).mpr ⟨hlx.1.1, hlx.2.1, hsr⟩
+        unfold tabs at hlc; rw [if_pos rfl] at hlc
+        exact (ins_order_mem hI hcs hx F hTP hlc c).mpr (Or.inr hcn)
+      · rw [if_neg hcn] at hsr ⊢
+        exact ins_order_sup hI hcs hx F hTP _ _ hsr
+  · -- ends
+    have hxs := (hcs x).mp hx
+    have hxy : x ≠ s.C.size := by omega
+    have hxz : x ≠ s.C.size + 1 := by omega
+    have hfr : ∀ c ∈ A ++ B, c ≠ s.C.size ∧ c ≠ s.C.size + 1 := fun c hc => by
+      have : c ∈ cl := by rw [hcl]; simp only [List.mem_append, List.mem_cons] at hc ⊢; tauto
+      exact ⟨fun e => hy (e ▸ this), fun e => hz (e ▸ this)⟩
+    intro u hu
+    rw [F.isN] at hu
+    obtain ⟨e1, e2⟩ := S.ends u hu
+    obtain ⟨hh1, hhH⟩ := S.htN u hu
+    have hpt : ∀ c, decide (pp t c (ht (ts s) u) = u) =
+        decide (pp (ts s) (if c = s.C.size ∨ c = s.C.size + 1 then x else c) (ht (ts s) u) = u) :=
+      fun c => by rw [hpp c _ hh1 hhH]
+    have eA : A.filter (fun c => decide (pp t c (ht (ts s) u) = u)) =
+        A.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) :=
+      List.filter_congr (fun c hc => by
+        rw [hpt, if_neg (by have := hfr c (by simp [hc]); omega)])
+    have eB : B.filter (fun c => decide (pp t c (ht (ts s) u) = u)) =
+        B.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) :=
+      List.filter_congr (fun c hc => by
+        rw [hpt, if_neg (by have := hfr c (by simp [hc]); omega)])
+    have hry : decide (pp t s.C.size (ht (ts s) u) = u) = decide (pp (ts s) x (ht (ts s) u) = u) := by
+      rw [hpt, if_pos (Or.inl rfl)]
+    have hrz : decide (pp t (s.C.size + 1) (ht (ts s) u) = u) = decide (pp (ts s) x (ht (ts s) u) = u) := by
+      rw [hpt, if_pos (Or.inr rfl)]
+    have hrx : decide (pp t x (ht (ts s) u) = u) = decide (pp (ts s) x (ht (ts s) u) = u) := by
+      rw [hpt, if_neg (by omega)]
+    unfold rng; rw [F.ht, hcl', F.first, F.last]
+    unfold rng at e1 e2; rw [hcl] at e1 e2
+    simp only [List.filter_append, List.filter_cons, eA, eB, hry, hrz, hrx] at e1 e2 ⊢
+    unfold insFirst insLast
+    have hfst : (s.nodes.getX u).first = (nd (ts s) u).first := rfl
+    have hlst : (s.nodes.getX u).last = (nd (ts s) u).last := rfl
+    rw [hfst, hlst, e1, e2]
+    have hAx : x ∉ A.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) :=
+      fun h => hA (List.mem_of_mem_filter h)
+    have hBx : x ∉ B.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) :=
+      fun h => hB (List.mem_of_mem_filter h)
+    by_cases hPx : pp (ts s) x (ht (ts s) u) = u
+    · have hcp : cpHit (insJob s x) s.P.H (ts s) 1 u = true := (cpHit_iff _ _ _ _ _).mpr
+        ⟨_, hh1, hhH, by
+          have := hPx; simp only [pp, show ht (ts s) u ≠ 0 by omega, if_false] at this; exact this.symm⟩
+      have hd : decide (pp (ts s) x (ht (ts s) u) = u) = true := decide_eq_true hPx
+      simp only [hd, if_true, hcp, true_and]
+      generalize List.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) A = LA at hAx ⊢
+      generalize List.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) B = LB at hBx ⊢
+      have k1 := headD_append_cons LA LB x NIL
+      have k2 := headD_append_cons LA (x :: (s.C.size + 1) :: LB) s.C.size NIL
+      have k3 := getLastD_append_cons LA LB x NIL
+      have k4 : (LA ++ s.C.size :: x :: (s.C.size + 1) :: LB).getLastD NIL =
+          if LB = [] then s.C.size + 1 else LB.getLastD NIL := by
+        rw [show LA ++ s.C.size :: x :: (s.C.size + 1) :: LB = (LA ++ [s.C.size, x]) ++ (s.C.size + 1) :: LB by
+          simp]
+        exact getLastD_append_cons _ _ _ _
+      rw [k1, k2, k3, k4]
+      constructor
+      · by_cases hLA : LA = []
+        · simp [hLA]
+        · rw [if_neg hLA, if_neg hLA, if_neg (fun (e : LA.headD NIL = x) => hAx (e ▸ headD_mem hLA _))]
+      · by_cases hLB : LB = []
+        · simp [hLB]
+        · rw [if_neg hLB, if_neg hLB, if_neg (fun (e : LB.getLastD NIL = x) => hBx (e ▸ getLastD_mem hLB _))]
+    · have hd : decide (pp (ts s) x (ht (ts s) u) = u) = false := decide_eq_false hPx
+      simp only [hd, Bool.false_eq_true, if_false]
+      generalize List.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) A = LA at hAx ⊢
+      generalize List.filter (fun c => decide (pp (ts s) c (ht (ts s) u) = u)) B = LB at hBx ⊢
+      have hx0 : x ≠ NIL := by simp [NIL]; omega
+      have hnx : x ∉ LA ++ LB := by simp only [List.mem_append, not_or]; exact ⟨hAx, hBx⟩
+      constructor
+      · rw [if_neg]
+        rintro ⟨-, e⟩
+        by_cases hL : LA ++ LB = []
+        · rw [hL] at e; exact hx0 e.symm
+        · exact hnx (e ▸ headD_mem hL _)
+      · rw [if_neg]
+        rintro ⟨-, e⟩
+        by_cases hL : LA ++ LB = []
+        · rw [hL] at e; exact hx0 e.symm
+        · exact hnx (e ▸ getLastD_mem hL _)
+  all_goals sorry
 
 end shape
 

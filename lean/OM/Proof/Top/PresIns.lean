@@ -170,6 +170,11 @@ theorem children (u : Nat) : (nd t u).children = if u = s.lpar.getX x ∧ u < s.
     (s.nodes.getX u).children.replace1 x [s.C.size, x, s.C.size + 1] else (s.nodes.getX u).children := by
   rw [F.node]; unfold insNode; split_ifs <;> rfl
 
+theorem par_pos {h : Nat} (hh : 1 ≤ h) (e : Nat) : par t h e = par (ts s) h e := by
+  unfold par; simp only [show h ≠ 0 by omega, if_false, F.draining, F.t1, F.livePar]
+
+theorem par_zero (e : Nat) : par t 0 e = lpr t e := by unfold par; rw [if_pos rfl]
+
 theorem ht (u : Nat) : Top.ht t u = Top.ht (ts s) u := F.height u
 theorem isN (u : Nat) : Top.isN t u ↔ Top.isN (ts s) u := by
   unfold Top.isN; rw [F.size, F.alive]; rfl
