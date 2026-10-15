@@ -824,4 +824,152 @@ theorem afterDS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up D : Nat} 
     have e4 := evalF_ite_f (t := .pcSet 2 "au" 0 0 0) hc (evalF_seq_ok2 e2 e3)
     exact ⟨_, _, evalF_seq_ok2 a1 e4, by simp [Exp.cost]; omega⟩
 
+/-- `startDrain v`. -/
+def sdP : Proc where
+  name := "startDrain"
+  params := ["v"]
+  rets := []
+  body := startDrainS
+
+/-- The program agrees with Level F's `startDrain v` from `S` (within `D` steps). -/
+def SDAgree (κ : Caps) (S : Core) (v D : Nat) : Prop :=
+  ∀ S', (startDrain v).run S = .ok () S' →
+    ∃ L' c, evalF κ sdP.body S (OM.Machine.State.setLocs (fun _ => 0) ["v"] [v]) = .ok S' L' c ∧ c ≤ D ∧
+      S'.resJob = S.resJob
+
+/-- `pw := a ^ ht`. -/
+def powS : Stm := "pw" ::= 1 ;; .loop "i" "ht" ("pw" ::= "pw" * .prm .a)
+
+theorem foldl_mul_pow (a : Nat) : ∀ n, (List.range n).foldl (fun acc _ => acc * a) 1 = a ^ n
+  | 0 => rfl
+  | n + 1 => by rw [List.range_succ, List.foldl_append, foldl_mul_pow a n]; simp [pow_succ]
+
+theorem powS_ok {κ : Caps} {S : Core} {L : Loc} {h : Nat} (hh : L "ht" = h) :
+    ∃ L' c, evalF κ powS S L = .ok S L' c ∧ L' "pw" = S.P.a ^ h ∧ c ≤ 10 + 7 * h ∧
+      ∀ r, r ≠ "pw" → r ≠ "i" → L' r = L r := by
+  have a1 := evalF_assign_ok (κ := κ) (s := S) (L := L) (x := "pw") (e := (1 : Exp)) (v := 1) rfl
+  obtain ⟨L', c, he, hc, hF, ha⟩ := evalF_loop_pure (κ := κ) (x := "i") (n := .var "ht") (b := "pw" ::= "pw" * .prm .a)
+    (s := S) (L := upd L "pw" 1) (N := h) (by simp [Exp.ev, OM.Machine.State.upd, hh])
+    (fun L' => ∀ r, r ≠ "pw" → r ≠ "i" → L' r = L r) (fun L' => L' "pw") (fun acc _ => acc * S.P.a) 6
+    (fun r h1 _ => by simp [OM.Machine.State.upd, h1])
+    (by
+      intro k _ L1 hF1
+      refine ⟨_, _, evalF_assign_ok (v := L1 "pw" * S.P.a) (by simp [Exp.ev, OM.Machine.State.upd,
+        OM.Machine.BinOp.eval, PF.get]), by simp [Exp.cost], fun r h1 h2 => ?_, by simp [OM.Machine.State.upd]⟩
+      simp [OM.Machine.State.upd, h1, h2]; exact hF1 r h1 h2)
+  simp only [OM.Machine.State.upd, if_true] at ha
+  rw [foldl_mul_pow] at ha
+  refine ⟨L', _, evalF_seq_ok2 a1 he, ha, ?_, hF⟩
+  simp [Exp.cost] at hc ⊢; omega
+
+def walkC : Exp := (!ₑ ("up" =ₑ 0)) &&ₑ ((!ₑ "dr") &&ₑ (("ov" =ₑ 0) &&ₑ (2 * "pw" <ₑ "wt" + 2)))
+def walkRd : Stm :=
+  "up" ::= .rd (.n .livePar) "wv" ;; "wt" ::= .rd (.n .weight) "wv" ;; "ht" ::= .rd (.n .height) "wv" ;;
+  "dr" ::= .rd (.n .draining) "wv" ;; "ov" ::= .rd (.n .overflow) "wv"
+/-- `walkBody` at node `wv`. -/
+def walkS : Stm :=
+  .ite ("wv" =ₑ 0) .jobClear
+    (walkRd ;; .wr (.n .weight) "wv" ("wt" + 2) ;; powS ;;
+     .ite walkC (sdP.call [.var "wv"] [] ;; .pcSet 3 "wv" "up" 0 0) ("av" ::= .var "wv" ;; "au" ::= .var "up" ;; afterDS))
+
+theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (hjob : S.resJob = some j)
+    (hv : L "wv" = v) (hvs : v ≠ 0 → v < S.nodes.size) (hvN : v ≠ 0 → v < κ.tbl .N)
+    (hsd : SDAgree κ (wiC S v) v D1) (hds : DSAgree κ (wiC S v) (S.nodes.getX v).overflowOf D2)
+    {r : Option Job} {S' : Core} (h : (walkBody j v).run S = .ok r S') :
+    ∃ L' c, evalF κ walkS S L = .ok { S' with resJob := r } L' c ∧
+      c ≤ D1 + D2 + 250 + 7 * (S.nodes.getX v).height := by
+  unfold walkBody at h
+  by_cases h0 : v = 0
+  · rw [if_pos (by simp [h0, NIL])] at h
+    simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨_, _, evalF_ite_t (v := 1) (by simp [Exp.ev, hv, h0, OM.Machine.BinOp.eval]) one_ne_zero
+      (show evalF κ .jobClear S L = .ok { S with resJob := none } L 27 from rfl), by simp [Exp.cost]; omega⟩
+  · rw [if_neg (by simpa [NIL] using h0)] at h
+    simp only [OM.Proof.run_getP_bind, run_getN_bind, run_modN_bind] at h
+    have hvs' := hvs h0
+    have hvN' := hvN h0
+    set V := S.nodes.getX v
+    -- the reads
+    set L5 := upd (upd (upd (upd (upd L "up" V.livePar) "wt" V.weight) "ht" V.height) "dr" (b2n V.draining)) "ov"
+      V.overflowOf
+    have e1 : evalF κ walkRd S L = .ok S L5 15 := by
+      have b1 := evalF_assign_ok (κ := κ) (s := S) (L := L) (x := "up") (e := .rd (.n .livePar) "wv") (v := V.livePar)
+        (by simp [Exp.ev, hv, hvN', Fld.cap, Fld.get, NF.get, V])
+      have b2 := evalF_assign_ok (κ := κ) (s := S) (L := upd L "up" V.livePar) (x := "wt") (e := .rd (.n .weight) "wv")
+        (v := V.weight) (by simp [Exp.ev, OM.Machine.State.upd, hv, hvN', Fld.cap, Fld.get, NF.get, V])
+      have b3 := evalF_assign_ok (κ := κ) (s := S) (L := upd (upd L "up" V.livePar) "wt" V.weight) (x := "ht")
+        (e := .rd (.n .height) "wv") (v := V.height)
+        (by simp [Exp.ev, OM.Machine.State.upd, hv, hvN', Fld.cap, Fld.get, NF.get, V])
+      have b4 := evalF_assign_ok (κ := κ) (s := S) (L := upd (upd (upd L "up" V.livePar) "wt" V.weight) "ht" V.height)
+        (x := "dr") (e := .rd (.n .draining) "wv") (v := b2n V.draining)
+        (by simp [Exp.ev, OM.Machine.State.upd, hv, hvN', Fld.cap, Fld.get, NF.get, V])
+      have b5 := evalF_assign_ok (κ := κ) (s := S)
+        (L := upd (upd (upd (upd L "up" V.livePar) "wt" V.weight) "ht" V.height) "dr" (b2n V.draining))
+        (x := "ov") (e := .rd (.n .overflow) "wv") (v := V.overflowOf)
+        (by simp [Exp.ev, OM.Machine.State.upd, hv, hvN', Fld.cap, Fld.get, NF.get, V])
+      exact evalF_seq_ok2 b1 (evalF_seq_ok2 b2 (evalF_seq_ok2 b3 (evalF_seq_ok2 b4 b5)))
+    have h5 : ∀ r, r ≠ "up" → r ≠ "wt" → r ≠ "ht" → r ≠ "dr" → r ≠ "ov" → L5 r = L r := fun r a b c d e => by
+      simp [L5, OM.Machine.State.upd, a, b, c, d, e]
+    have h5v : L5 "wv" = v := by rw [h5 _ (by decide) (by decide) (by decide) (by decide) (by decide), hv]
+    -- the weight
+    have e2 := evalF_wrN_ok (κ := κ) (s := S) (L := L5) (k := .weight) (i := .var "wv") (e := "wt" + 2) (j := v)
+      (w := V.weight + 2) (by simp [Exp.ev, h5v]) (by simp [Exp.ev, L5, OM.Machine.State.upd, OM.Machine.BinOp.eval])
+      hvs' hvN' rfl
+    have hW : ({ S with nodes := S.nodes.modify v (NF.set · (V.weight + 2) .weight) } : Core) = wiC S v := by
+      simp only [wiC]; congr 1; apply Array.modify_congr_getX; rfl
+    rw [hW] at e2
+    obtain ⟨L6, c6, e6, h6pw, hc6, hF6⟩ := powS_ok (κ := κ) (S := wiC S v) (L := L5) (h := V.height)
+      (by simp [L5, OM.Machine.State.upd])
+    have h6 : ∀ r, r ≠ "pw" → r ≠ "i" → L6 r = L5 r := hF6
+    have hjob' : (wiC S v).resJob = some j := hjob
+    by_cases hc : V.livePar != NIL && !V.draining && V.overflowOf == NIL && decide (V.weight + 2 > 2 * S.P.a ^ V.height)
+    · rw [if_pos hc] at h
+      obtain ⟨u, S1, h1, h2⟩ := run_bind_ok h
+      simp at h2
+      obtain ⟨rfl, rfl⟩ := h2
+      obtain ⟨Ls, cs, es, hcs, hjs⟩ := hsd S1 h1
+      have e7 := evalF_call_ok (q := sdP) (args := [.var "wv"]) (ds := []) (L := L6)
+        (by simp [evList, Exp.ev, h6 "wv" (by decide) (by decide), h5v]) es
+      have e8 : evalF κ (.pcSet 3 "wv" "up" 0 0) S1 (OM.Machine.State.setLocs L6 [] (sdP.rets.map Ls)) =
+          .ok { S1 with resJob := some { j with pc := .afterDrain v V.livePar } } L6 21 := by
+        simp [evalF, evList, Exp.ev, hjs, hjob', OM.Machine.State.setLocs, h6 "wv" (by decide) (by decide), h5v,
+          h6 "up" (by decide) (by decide), L5, OM.Machine.State.upd, pcDec, costList, Exp.cost]
+      have hcv : walkC.ev κ (wiC S v) L6 = some 1 := by
+        simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_eq_eq_not, Bool.not_true, beq_iff_eq,
+          decide_eq_true_eq] at hc
+        obtain ⟨⟨⟨hc1, hc2⟩, hc3⟩, hc4⟩ := hc
+        simp [walkC, Exp.ev, OM.Machine.BinOp.eval, OM.Machine.UnOp.eval, h6pw, h6 "up" (by decide) (by decide),
+          h6 "dr" (by decide) (by decide), h6 "ov" (by decide) (by decide), h6 "wt" (by decide) (by decide), L5,
+          OM.Machine.State.upd, b2n, hc2, hc3, NIL] at hc1 ⊢
+        exact ⟨hc1, hc4⟩
+      refine ⟨_, _, evalF_ite_f (by simp [Exp.ev, hv, h0, OM.Machine.BinOp.eval]) (evalF_seq_ok2 e1 (evalF_seq_ok2 e2
+        (evalF_seq_ok2 e6 (evalF_ite_t hcv one_ne_zero (evalF_seq_ok2 e7 e8))))), ?_⟩
+      simp [Exp.cost, costList, walkC] at hc6 ⊢
+      omega
+    · rw [if_neg hc] at h
+      have hcv : walkC.ev κ (wiC S v) L6 = some 0 := by
+        simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_eq_eq_not, Bool.not_true, beq_iff_eq,
+          decide_eq_true_eq, not_and] at hc
+        simp [walkC, Exp.ev, OM.Machine.BinOp.eval, OM.Machine.UnOp.eval, h6pw, h6 "up" (by decide) (by decide),
+          h6 "dr" (by decide) (by decide), h6 "ov" (by decide) (by decide), h6 "wt" (by decide) (by decide), L5,
+          OM.Machine.State.upd, b2n, NIL]
+        intro a b c
+        have := hc ⟨⟨a, b⟩, c⟩
+        show V.weight + 2 ≤ 2 * S.P.a ^ V.height
+        omega
+      have hov : ((wiC S v).nodes.getX v).overflowOf = V.overflowOf := by
+        simp only [wiC, getX_modify', hvs', and_self, if_true]; rfl
+      set L7 := upd (upd L6 "av" v) "au" V.livePar
+      have b1 := evalF_assign_ok (κ := κ) (s := wiC S v) (L := L6) (x := "av") (e := .var "wv") (v := v)
+        (by simp [Exp.ev, h6 "wv" (by decide) (by decide), h5v])
+      have b2 := evalF_assign_ok (κ := κ) (s := wiC S v) (L := upd L6 "av" v) (x := "au") (e := .var "up")
+        (v := V.livePar) (by simp [Exp.ev, OM.Machine.State.upd, h6 "up" (by decide) (by decide), L5])
+      obtain ⟨L8, c8, e8, hc8⟩ := afterDS_agree (κ := κ) (S := wiC S v) (L := L7) (j := j) (v := v) (up := V.livePar)
+        (D := D2) hjob' (by simp [L7, OM.Machine.State.upd]) (by simp [L7, OM.Machine.State.upd]) hvN'
+        (by rw [hov]; exact hds) h
+      exact ⟨_, _, evalF_ite_f (by simp [Exp.ev, hv, h0, OM.Machine.BinOp.eval]) (evalF_seq_ok2 e1 (evalF_seq_ok2 e2
+        (evalF_seq_ok2 e6 (evalF_ite_f hcv (evalF_seq_ok2 b1 (evalF_seq_ok2 b2 e8)))))),
+        by simp [Exp.cost, walkC] at hc6 ⊢; omega⟩
+
 end OM.Impl
