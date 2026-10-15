@@ -41,7 +41,8 @@ theorem Shape.drain_move_hyps {s : Core} {cl : List Nat} {ord : Nat → List Nat
     TagOK s (dsY s v) (dsTag s v pt tb pv vb) ∧
     1 ≤ (s.nodes.getX v).height ∧ (s.path.getX (dsY s v)).size = s.P.H + 1 ∧
     tb < 2 ^ s.P.beta ∧ vb < 2 ^ s.P.beta ∧ dsT s v ≠ v ∧ v < s.nodes.size ∧ dsT s v < s.nodes.size ∧
-    dsY s v ∈ cl ∧ (s.nodes.getX v).height < s.P.H := by
+    dsY s v ∈ cl ∧ (s.nodes.getX v).height < s.P.H ∧
+    (s.path.getX (dsY s v)).getX ((s.nodes.getX v).height + 1) < s.nodes.size := by
   intro y h pv vb pt tb
   obtain ⟨hvt, hv, htz, hlive, hht, hh1, hhH⟩ := S.ds_basics hg hne
   obtain ⟨hy, hanc, hLe, hRi, hside⟩ := S.pick hg hne
@@ -82,7 +83,7 @@ theorem Shape.drain_move_hyps {s : Core} {cl : List Nat} {ord : Nat → List Nat
   have hvb' : vb = ((nd (ts s) v).lab? (pp (ts s) y (h - 1))).getD 0 := by
     simp only [vb, digit]; rw [show pp (ts s) y h = v from hypp]
   refine ⟨hg.1.2.2, ?_, hside, ?_, getD_of_mem m1, ?_, (by rw [hpv]; exact getD_of_mem m3), ?_, ?_, ?_,
-    hh1, S.pathSize y hycl, htbl, hvbl, Ne.symm hvt, hv, htz, hycl, hhH⟩
+    hh1, S.pathSize y hycl, htbl, hvbl, Ne.symm hvt, hv, htz, hycl, hhH, ?_⟩
   · obtain ⟨hf, -⟩ := S.ends v hg.1
     show (nd (ts s) v).first ≠ NIL
     rw [hf]
@@ -124,6 +125,8 @@ theorem Shape.drain_move_hyps {s : Core} {cl : List Nat} {ord : Nat → List Nat
       rw [show (s.C.getX q).tag = (ts s).tag q from rfl, S.tags _ hpcl,
         ← S.ds_tagF_other hg hne tag _ (Ne.symm hpy)]
       exact lt_of_eq_of_lt hnew (ST.tagF_lt hb)
+  · have h2 := hXN.2.1
+    unfold pp at h2; rw [if_neg (by omega)] at h2; exact h2
 
 
 theorem len_le_two_of {l : List Nat} {a b : Nat} (hnd : l.Nodup) (h : ∀ x ∈ l, x = a ∨ x = b) : l.length ≤ 2 := by
@@ -321,5 +324,67 @@ theorem sdAgree_walk {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List 
   · rw [H.w_inTables] at hT
     obtain ⟨A, le, Bs, htab, hA, hsd, h1, h2, -⟩ := room_up hI hTP hvl.1 hT 0 0
     exact ⟨A, le, Bs, by rw [H.w_table]; exact htab, hA, by rw [H.w_draining, H.w_side]; exact hsd, h1, h2⟩
+
+/-- A chunk of the chunk list links to chunks of the list (or `NIL`). -/
+theorem CLok.links {s : Core} {cl : List Nat} (h : CLok s cl) {c : Nat} (hc : c ∈ cl) :
+    (s.C.getX c).next < s.C.size ∧ (s.C.getX c).prev < s.C.size := by
+  have hc' := (h.2 c).mp hc
+  have hn : (s.C.getX c).next = succOf cl c := h.1.next c hc
+  have hp : (s.C.getX c).prev = predOf cl c := h.1.prev c hc
+  constructor
+  · rw [hn]; rcases succOf_mem_or (l := cl) (x := c) with e | e
+    · exact ((h.2 _).mp e).2
+    · rw [e]; simp [NIL]; omega
+  · rw [hp]; rcases predOf_mem_or (l := cl) (x := c) with e | e
+    · exact ((h.2 _).mp e).2
+    · rw [e]; simp [NIL]; omega
+
+/-- **A sweep step that moves a chunk agrees** (outside a preparation). -/
+theorem dsAgree_moveI {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} (S : Shape (ts s) cl ord)
+    {v : Nat} (hg : ghostN (ts s) v) (hne : rng (ts s) cl v ≠ []) (hcl : CLok s cl) (hprep : s.prep = none)
+    (K : TopCaps κ s) : ∃ D, DSAgree κ s v D := by
+  obtain ⟨hal, hf, hside, hsz, hpt, htb, hpv, hvb, hold, hok, h1, hpsz, htbB, hvbB, htv, hvs, hts, hycl, hhH, hpr⟩ :=
+    S.drain_move_hyps hg hne hcl.1
+  have hfl : (s.nodes.getX v).first ∈ cl ∧ (s.nodes.getX v).last ∈ cl := by
+    obtain ⟨e1, e2⟩ := S.ends v hg.1
+    have e1' : (s.nodes.getX v).first = (rng (ts s) cl v).headD NIL := e1
+    have e2' : (s.nodes.getX v).last = (rng (ts s) cl v).getLastD NIL := e2
+    rw [e1', e2']
+    refine ⟨(S.rng_sub v).subset (headD_mem hne NIL), (S.rng_sub v).subset ?_⟩
+    rw [List.getLastD_eq_getLast?, List.getLast?_eq_getLast hne]; exact List.getLast_mem hne
+  have hfC := ((hcl.2 _).mp hfl.1).2
+  have hlC := ((hcl.2 _).mp hfl.2).2
+  obtain ⟨hyN, hyP⟩ := CLok.links hcl hycl
+  have hnp : ∀ c, notPrep s c := fun c => by simp [notPrep, hprep]
+  exact ⟨_, dsAgree_move hal hf hside hsz hpt htb hpv hvb hold hok h1 hpsz htbB hvbB htv hvs hts
+    (by have := ((hcl.2 _).mp hycl).2; exact this) (hnp _) (hnp _)
+    (by have := K.N; omega) (by have := K.N; omega) (by have := K.rs; omega) (by have := K.rt; omega)
+    (by have := K.rt; omega) (by have := K.rt; omega)
+    (by have := K.C; omega) (by have := K.C; omega) (by have := K.C; omega) (by have := K.C; omega)
+    (by rw [K.pw]; omega)⟩
+
+/-- **A sweep step that ends the drain agrees.** -/
+theorem dsAgree_finishI {κ : Caps} {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat}
+    (S : Shape (ts s) cl ord) (hTL : TabLen (ts s) dr n0)
+    {v : Nat} (hg : ghostN (ts s) v) (hemp : rng (ts s) cl v = []) (hcl : CLok s cl)
+    (K : TopCaps κ s) : ∃ D, DSAgree κ s v D := by
+  obtain ⟨hal, hf, hnd, hT, hv0, hvs, hvo, hTs, ht1, ht2, hE1, hE0⟩ := S.drain_finish_hyps hg hemp
+  exact ⟨_, dsAgree_finish (B := 160) hal hf hnd hT hv0 hvs hvo
+    (by have := K.N; omega) (by have := K.rt; omega) (by have := K.ri; omega)
+    (by have := K.N; omega) (by have := K.N; omega)
+    (fun e he => ⟨fun h0 => by
+        obtain ⟨a, b⟩ := hE0 e he h0
+        have := ((hcl.2 e).mp a).2
+        exact ⟨by have := K.rcin; omega, by have := K.lcin; omega, by omega⟩,
+      fun h0 => by
+        obtain ⟨a, b⟩ := hE1 e he h0
+        exact ⟨by have := K.ri; omega, by have := K.li; omega, by omega⟩⟩)
+    (fun T hT => by
+      have := hTs T hT
+      obtain ⟨a, b⟩ := tab_le_160 hTL T
+      have a' : (s.nodes.getX T).table.length ≤ 160 := a
+      have b' : (s.nodes.getX T).side.length ≤ 160 := b
+      have := K.lt; have := K.ls
+      exact ⟨by have := K.rt; omega, by have := K.rs; omega, by omega, by omega, a', b'⟩)⟩
 
 end OM.Impl
