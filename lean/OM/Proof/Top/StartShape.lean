@@ -1231,6 +1231,120 @@ theorem left_before_right {e e' : Nat} (he : Ent ord (Top.ht (ts s) v - 1) e)
     · rw [if_neg hd'] at hr'
       exact hcross _ _ hr (by simpa [if_neg hd'] using hrk') hr'
 
+theorem sh_OT : ∀ h', 1 ≤ h' → h' ≤ (ts (sdS (wiC s v) v side)).P.H → ∀ u u' e e',
+    Top.liveN S' u → Top.liveN S' u' → Before (O' h') u u' →
+    Ent O' (h' - 1) e → Ent O' (h' - 1) e' → par S' (h' - 1) e = u → par S' (h' - 1) e' = u' →
+    Before (O' (h' - 1)) e e' := by
+  intro h' h1 hH u u' e e' hu hu' huu he he' hpe hpe'
+  have hvlt := C.H.hv
+  have h1v := C.h1
+  have hHv := C.hHt
+  have hHs := C.hH
+  rw [C.H.P] at hH
+  have hHt : h' ≤ (ts s).P.H := hH
+  obtain ⟨A, B, hAB, hA, hB, h'AB⟩ := C.ordh
+  have hndh := C.S.ordNodup (Top.ht (ts s) v)
+  have hnd' : (A ++ s.nodes.size :: v :: (s.nodes.size + 1) :: B).Nodup := h'AB ▸ (C.shapeT.ordNodup _)
+  have hfr : ∀ x ∈ ord (Top.ht (ts s) v), x < s.nodes.size := fun x hx => C.fresh h1v (by omega) hx
+  have hyA : s.nodes.size ∉ A := fun h => by have := hfr s.nodes.size (by rw [hAB]; simp [h]); omega
+  have hzA : s.nodes.size + 1 ∉ A := fun h => by have := hfr (s.nodes.size + 1) (by rw [hAB]; simp [h]); omega
+  have hyB : s.nodes.size ∉ B := fun h => by have := hfr s.nodes.size (by rw [hAB]; simp [h]); omega
+  have hzB : s.nodes.size + 1 ∉ B := fun h => by have := hfr (s.nodes.size + 1) (by rw [hAB]; simp [h]); omega
+  unfold Ent at he he'
+  by_cases hh : h' = Top.ht (ts s) v
+  · -- children of `v1`, `v2` and the other nodes of `v`'s height
+    subst hh
+    have hO : O' (Top.ht (ts s) v - 1) = ord (Top.ht (ts s) v - 1) := by unfold ordSD; rw [if_neg (by omega)]
+    rw [hO] at he he' ⊢
+    -- the projection to the old parents
+    have hproj : ∀ x, x ∈ ord (Top.ht (ts s) v - 1) →
+        (if par S' (Top.ht (ts s) v - 1) x = s.nodes.size ∨ par S' (Top.ht (ts s) v - 1) x = s.nodes.size + 1
+          then v else par S' (Top.ht (ts s) v - 1) x) = par (ts s) (Top.ht (ts s) v - 1) x := by
+      intro x hx
+      by_cases hp : par (ts s) (Top.ht (ts s) v - 1) x = v
+      · obtain ⟨-, h'⟩ := C.par_v hx hp
+        rw [h', hp]; split <;> simp
+      · rw [C.par_keep hx (by omega) (fun h => hp h.2)]
+        have hl := C.S.par_liveN hx (by omega)
+        have hn := C.nN _ hl.1
+        rw [if_neg (fun h => h.elim hn.1 hn.2)]
+    rw [h'AB, ← hpe, ← hpe'] at huu
+    rcases before_proj hyA hzA hyB hzB huu with hc | hc <;> simp only at hc
+    · -- the same old parent: `v`, split into `v1, v2`
+      rw [hproj e he, hproj e' he'] at hc
+      by_cases hpv : par (ts s) (Top.ht (ts s) v - 1) e = v
+      · have hpv' : par (ts s) (Top.ht (ts s) v - 1) e' = v := hc ▸ hpv
+        obtain ⟨-, hp1⟩ := C.par_v he hpv
+        obtain ⟨-, hp2⟩ := C.par_v he' hpv'
+        have hNN : Before (A ++ s.nodes.size :: v :: (s.nodes.size + 1) :: B) s.nodes.size (s.nodes.size + 1) := by
+          rw [show A ++ s.nodes.size :: v :: (s.nodes.size + 1) :: B =
+            (A ++ [s.nodes.size, v]) ++ (s.nodes.size + 1) :: B by simp]
+          exact before_split (by simp)
+        by_cases hr : (if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e).draining = true then (nd (ts s) e).t1 else e) ∈
+            (nd (ts s) v).children.take (sK (wiC s v) v) <;>
+          by_cases hr' : (if 2 ≤ Top.ht (ts s) v ∧ (nd (ts s) e').draining = true then (nd (ts s) e').t1 else e') ∈
+            (nd (ts s) v).children.take (sK (wiC s v) v)
+        · rw [if_pos hr] at hp1; rw [if_pos hr'] at hp2; rw [hp1, hp2] at huu; exact absurd rfl (huu.ne hnd')
+        · exact C.left_before_right he he' hpv hpv' hr hr'
+        · rw [if_neg hr] at hp1; rw [if_pos hr'] at hp2; rw [hp1, hp2] at huu; exact absurd huu (hNN.asymm hnd')
+        · rw [if_neg hr] at hp1; rw [if_neg hr'] at hp2; rw [hp1, hp2] at huu; exact absurd rfl (huu.ne hnd')
+      · exfalso
+        rw [C.par_keep he (by omega) (fun h => hpv h.2), C.par_keep he' (by omega) (fun h => hpv (hc ▸ h.2)), hc] at huu
+        exact huu.ne hnd' rfl
+    · rw [hproj e he, hproj e' he', ← hAB] at hc
+      exact C.S.OT _ h1v (by omega) _ _ e e' (C.S.par_liveN he (by omega)) (C.S.par_liveN he' (by omega)) hc
+        he he' rfl rfl
+  · have hO : O' h' = ord h' := by unfold ordSD; rw [if_neg hh]
+    rw [hO] at huu
+    have hum : u ∈ ord h' := huu.mem_left
+    have hum' : u' ∈ ord h' := huu.mem_right
+    have hold : ∀ x ∈ ord h', Top.liveN S' x → Top.liveN (ts s) x := fun x hx hxl => by
+      have hxn := ((C.S.ordMem h' h1 hHt x).mp hx).1
+      have := C.nN x hxn
+      rcases (C.liveN x).mp hxl with ⟨h, -⟩ | h | h
+      · exact h
+      · exact absurd h this.1
+      · exact absurd h this.2
+    have hul := hold u hum hu
+    have hul' := hold u' hum' hu'
+    by_cases hh1 : h' = Top.ht (ts s) v + 1
+    · -- entries at `v`'s height: `v1, v2` stand for `v`
+      subst hh1
+      simp only [Nat.add_sub_cancel] at he he' hpe hpe' ⊢
+      rw [h'AB] at he he' ⊢
+      have hproj : ∀ x, x ∈ A ++ s.nodes.size :: v :: (s.nodes.size + 1) :: B →
+          (if x = s.nodes.size ∨ x = s.nodes.size + 1 then v else x) ∈ ord (Top.ht (ts s) v) ∧
+          par (ts s) (Top.ht (ts s) v) (if x = s.nodes.size ∨ x = s.nodes.size + 1 then v else x) =
+            par S' (Top.ht (ts s) v) x := by
+        intro x hx
+        have hpvL : par (ts s) (Top.ht (ts s) v) v = (nd (ts s) v).livePar := by
+          rw [par_live (Or.inr C.vl), if_neg (by omega)]
+        by_cases hxn : x = s.nodes.size ∨ x = s.nodes.size + 1
+        · rw [if_pos hxn]
+          refine ⟨by rw [hAB]; simp, ?_⟩
+          rw [hpvL, C.par_live' (by omega) ((C.liveN x).mpr (Or.inr hxn)), C.livePar, if_neg (by omega), if_pos hxn]
+        · rw [if_neg hxn]
+          have hxo : x ∈ ord (Top.ht (ts s) v) := by
+            rw [hAB]; simp only [List.mem_append, List.mem_cons] at hx ⊢; tauto
+          refine ⟨hxo, ?_⟩
+          exact (C.par_keep hxo (by omega) (fun h => by have := h.1; omega)).symm
+      obtain ⟨hpe1, hpe2⟩ := hproj e he
+      obtain ⟨hpe1', hpe2'⟩ := hproj e' he'
+      by_cases hc : (if e = s.nodes.size ∨ e = s.nodes.size + 1 then v else e) =
+          (if e' = s.nodes.size ∨ e' = s.nodes.size + 1 then v else e')
+      · exfalso
+        have : u = u' := by rw [← hpe, ← hpe', ← hpe2, ← hpe2', hc]
+        exact huu.ne (C.S.ordNodup _) this
+      · refine before_lift hnd' he he' hc ?_
+        rw [← hAB]
+        exact C.S.OT _ (by omega) hHt u u' _ _ hul hul' huu hpe1 hpe1' (hpe2.trans hpe) (hpe2'.trans hpe')
+    · -- elsewhere nothing changed
+      have hO' : O' (h' - 1) = ord (h' - 1) := by unfold ordSD; rw [if_neg (by omega)]
+      rw [hO'] at he he' ⊢
+      rw [C.par_keep he (by omega) (fun h => by have := h.1; omega)] at hpe
+      rw [C.par_keep he' (by omega) (fun h => by have := h.1; omega)] at hpe'
+      exact C.S.OT h' h1 hHt u u' e e' hul hul' huu he he' hpe hpe'
+
 end SDCtx
 
 end OM.Proof.Top
