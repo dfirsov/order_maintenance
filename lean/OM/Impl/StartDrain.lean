@@ -1092,7 +1092,7 @@ theorem sd4_table_N1 (t : Core) (v : Nat) (side : List (Nat × Side)) (hv : v < 
   split_ifs <;> simp_all <;> omega
 
 theorem stage4S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
-    (hv : v < t.nodes.size) (hK : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
+    (hv : v < t.nodes.size) (hK : 1 < sH t v → ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
     (hLv1 : L "v1" = t.nodes.size) (hLv2 : L "v2" = t.nodes.size + 1) (hLh : L "h" = sH t v)
     (hwt : t.nodes.size + 1 < κ.lrec .table)
     (hE : ∀ e ∈ (t.nodes.getX v).table.map (·.1), (sH t v ≤ 1 → e < κ.lrec .cin) ∧ (1 < sH t v → e < κ.lrec .inTab))
@@ -1115,13 +1115,13 @@ theorem stage4S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
   have htl : ∀ e ∈ o, tabsLen S4 (sH t v - 1) e = tabsLen t (sH t v - 1) e := by
     intro e he; unfold tabsLen; split
     · rfl
-    · rw [sd4_inTables (hK e he)]
+    · next h0 => rw [sd4_inTables (hK (by omega) e he)]
   have a1 := evalF_assign_ok (κ := κ) (s := S4) (L := L) (x := "w") (e := .var "v1") (v := N) (by simp [Exp.ev, hLv1])
   obtain ⟨L2, c2, e2, hc2, hF2⟩ := atS_ok (κ := κ) (St := S4) (L := upd L "w" N) (w := N) (hh := sH t v)
     (l := sLeft t v side) (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd, hLh]) (by omega)
     (by omega) (by rw [sd4_table_N t v side hv, evenTable_keys])
     (fun e he => ⟨(hE e (hLsub e he)).1, fun h1 => ⟨(hE e (hLsub e he)).2 h1, by
-      have := hK e (hLsub e he); omega⟩⟩)
+      have := hK h1 e (hLsub e he); omega⟩⟩)
     (fun e he => by rw [htl e (hLsub e he)]; have := hcap e (hLsub e he); split at this <;> split <;> omega)
   set F1 := (sLeft t v side).foldl (fun s e => addTableS (sH t v - 1) N e s) S4
   have hfr2 : ∀ r, r ≠ "w" → r ≠ "nt" → r ≠ "j" → r ≠ "e" → L2 r = L r := fun r h1 h2 h3 h4 => by
@@ -1134,7 +1134,7 @@ theorem stage4S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
     (by rw [fold_addTableS_size]; omega) hwt
     (by rw [fold_addTableS_table, sd4_table_N1 t v side hv, evenTable_keys])
     (fun e he => ⟨(hE e (hRsub e he)).1, fun h1 => ⟨(hE e (hRsub e he)).2 h1, by
-      rw [fold_addTableS_size]; have := hK e (hRsub e he); omega⟩⟩)
+      rw [fold_addTableS_size]; have := hK h1 e (hRsub e he); omega⟩⟩)
     (fun e he => by
       have h1 : tabsLen F1 (sH t v - 1) e ≤ tabsLen S4 (sH t v - 1) e + (sLeft t v side).length :=
         fold_tabsLen (sH t v - 1) N e (sLeft t v side) S4
@@ -1191,13 +1191,18 @@ theorem fold_setParentS_fields (h u x : Nat) : ∀ (l : List Nat) (s : Core),
     obtain ⟨b1, b2, b3⟩ := setParentS_fields h u e x s
     exact ⟨a1.trans b1, a2.trans b2, a3.trans b3⟩
 
-theorem fold_setParentS_getX_notin {h u x : Nat} : ∀ (l : List Nat) (s : Core), x ∉ l →
+theorem setParentS_getX_one {u e x : Nat} {s : Core} : (setParentS 1 u e s).nodes.getX x = s.nodes.getX x := by
+  simp [setParentS]
+
+theorem fold_setParentS_getX_notin {h u x : Nat} : ∀ (l : List Nat) (s : Core), (h = 1 ∨ x ∉ l) →
     (l.foldl (fun s e => setParentS h u e s) s).nodes.getX x = s.nodes.getX x
   | [], _, _ => rfl
   | e :: l, s, hx => by
     simp only [List.foldl_cons]
-    rw [fold_setParentS_getX_notin l _ (fun h => hx (List.mem_cons_of_mem _ h)),
-      setParentS_getX_ne (fun h => hx (by simp [h]))]
+    rw [fold_setParentS_getX_notin l _ (hx.imp id (fun h' h => h' (List.mem_cons_of_mem _ h)))]
+    rcases hx with h1 | hx
+    · subst h1; exact setParentS_getX_one
+    · exact setParentS_getX_ne (fun h => hx (by simp [h]))
 
 theorem setParentS_size (h u e : Nat) (s : Core) : (setParentS h u e s).nodes.size = s.nodes.size := by
   unfold setParentS; split <;> simp
@@ -1208,13 +1213,14 @@ theorem fold_setParentS_size (h u : Nat) : ∀ (l : List Nat) (s : Core),
   | e :: l, s => by simp only [List.foldl_cons]; rw [fold_setParentS_size h u l, setParentS_size]
 
 /-- Setting a parent commutes with replacing the children of another node. -/
-theorem setParentS_put {h u e : Nat} {s : Core} {l : List (Nat × Nat)} (he : e ≠ u) :
+theorem setParentS_put {h u e : Nat} {s : Core} {l : List (Nat × Nat)} (he : h = 1 ∨ e ≠ u) :
     setParentS h u e (LK.put s u l .children) = LK.put (setParentS h u e s) u l .children := by
   unfold setParentS LK.put; split
   · rfl
-  · simp only
+  · next h1 =>
+    simp only
     congr 1
-    rw [Array.modify_comm _ (Ne.symm he)]
+    rw [Array.modify_comm _ (Ne.symm (he.resolve_left h1))]
 
 theorem put_getX_ne_c {St : Core} {w u : Nat} {l : List (Nat × Nat)} (h : u ≠ w) :
     (LK.put St w l .children).nodes.getX u = St.nodes.getX u := by
@@ -1222,11 +1228,13 @@ theorem put_getX_ne_c {St : Core} {w u : Nat} {l : List (Nat × Nat)} (h : u ≠
 
 theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat × Side)} {sd : Side}
     (hkids : (St.nodes.getX v).children = (t.nodes.getX v).children) (hside : (St.nodes.getX v).side = side)
-    (hwt : ∀ e ∈ (t.nodes.getX v).children, (St.nodes.getX e).weight = (t.nodes.getX e).weight)
+    (hwt : sH t v ≠ 1 → ∀ e ∈ (t.nodes.getX v).children, (St.nodes.getX e).weight = (t.nodes.getX e).weight)
     (hlp : (St.nodes.getX v).livePar = (t.nodes.getX v).livePar) (hu0 : (St.nodes.getX u).children = [])
-    (huv : u ≠ v) (huk : u ∉ (t.nodes.getX v).children) (hvk : v ∉ (t.nodes.getX v).children)
+    (huv : u ≠ v) (huk : sH t v ≠ 1 → u ∉ (t.nodes.getX v).children)
+    (hvk : sH t v ≠ 1 → v ∉ (t.nodes.getX v).children)
     (hus : u < St.nodes.size) (hvsz : v < St.nodes.size)
-    (hks : ∀ e ∈ (t.nodes.getX v).children, e < St.nodes.size ∧ e < κ.tbl .N ∧ e < κ.arr .lpar)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, (sH t v ≠ 1 → e < St.nodes.size ∧ e < κ.tbl .N) ∧
+      (sH t v = 1 → e < κ.arr .lpar))
     (hLv : L "v" = v) (hLu : L "u" = u) (hLh : L "h" = sH t v) (hLs : L "sd" = sideN sd)
     (hvc : v < κ.lrec .children) (hvs : v < κ.lrec .side) (huc : u < κ.lrec .children)
     (huN : u < κ.tbl .N) (hvN : v < κ.tbl .N) (hcap : (t.nodes.getX v).children.length ≤ κ.lcap .children) :
@@ -1255,12 +1263,12 @@ theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat
     rw [put_getX_ne_c huv.symm]
     obtain ⟨a, b, -⟩ := fold_setParentS_fields (sH t v) u v pre St
     exact ⟨a.trans hkids, b.trans hside⟩
-  have hfw : ∀ (pre : List Nat) (l : List (Nat × Nat)) e, e ∈ kids →
+  have hfw : sH t v ≠ 1 → ∀ (pre : List Nat) (l : List (Nat × Nat)) e, e ∈ kids →
       ((LK.put (pre.foldl F St) u l .children).nodes.getX e).weight = (t.nodes.getX e).weight := by
-    intro pre l e he
-    rw [put_getX_ne_c (fun h => huk (by rw [← h]; exact he))]
+    intro h1 pre l e he
+    rw [put_getX_ne_c (fun h => huk h1 (by rw [← h]; exact he))]
     obtain ⟨-, -, c⟩ := fold_setParentS_fields (sH t v) u e pre St
-    exact c.trans (hwt e he)
+    exact c.trans (hwt h1 e he)
   have hfs : ∀ (pre : List Nat) (l : List (Nat × Nat)),
       (LK.put (pre.foldl F St) u l .children).nodes.size = St.nodes.size := by
     intro pre l; simp [LK.put, F, fold_setParentS_size]
@@ -1278,7 +1286,7 @@ theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat
       set pre := (kids.take j).filter sel
       set S := LK.put (pre.foldl F St) u (pre.map fun e => (e, 0)) .children
       have hkj : kids[j] ∈ kids := List.getElem_mem hj
-      obtain ⟨hkS, hkN, hkA⟩ := hks _ hkj
+      obtain ⟨hkSN, hkA⟩ := hks _ hkj
       have hfr : ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" → r ≠ "ws" → r ≠ "nk" → L1 r = L r := by
         intro r h1 h2 h3 h4 h5 h6 h7; rw [hF1 r h1 h2 h3 h4 h5 h6, hL2 r h6 h7]
       have hv1 : L1 "v" = v := by
@@ -1320,17 +1328,21 @@ theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat
         have h4u : L4 "u" = u := by
           rw [hfr4 "u" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hLu]
         have h4e : L4 "e" = kids[j] := by simp [L4, L3, lookupP, OM.Machine.State.setLocs, OM.Machine.State.upd]
-        have hku : kids[j] ≠ u := fun h => huk (by rw [← h]; exact hkj)
+        have hku : sH t v = 1 ∨ kids[j] ≠ u := by
+          by_cases h1 : sH t v = 1
+          · exact Or.inl h1
+          · exact Or.inr (fun h => huk h1 (by rw [← h]; exact hkj))
         set S5 := setParentS (sH t v) u kids[j] S
         have e5 : ∃ c5, evalF κ setParS S L4 = .ok S5 L4 c5 ∧ c5 ≤ 7 := by
           by_cases h1 : sH t v = 1
           · have ew : evalF κ (.wr (.a .lpar) "e" "u") S L4 = .ok S5 L4 3 := by
-              simp only [evalF, Exp.ev, h4e, h4u, Fld.set, hkA, if_true, AF.set, AF.get, Exp.cost]
+              simp only [evalF, Exp.ev, h4e, h4u, Fld.set, hkA h1, if_true, AF.set, AF.get, Exp.cost]
               simp only [S5, setParentS, h1, if_true]
             exact ⟨_, evalF_ite_t (v := 1) (by simp [Exp.ev, OM.Machine.BinOp.eval, h4h, h1]) one_ne_zero ew,
               by simp [Exp.cost]⟩
           · have ew := evalF_wrN_ok (κ := κ) (s := S) (L := L4) (k := .livePar) (i := .var "e") (e := .var "u")
-              (j := kids[j]) (w := u) (by simp [Exp.ev, h4e]) (by simp [Exp.ev, h4u]) (by rw [hfs]; exact hkS) hkN rfl
+              (j := kids[j]) (w := u) (by simp [Exp.ev, h4e]) (by simp [Exp.ev, h4u]) (by rw [hfs]; exact (hkSN h1).1)
+              (hkSN h1).2 rfl
             have hs5 : { S with nodes := S.nodes.modify kids[j] (NF.set · u .livePar) } = S5 := by
               simp only [S5, setParentS, h1, if_false]; rfl
             rw [hs5] at ew
@@ -1357,11 +1369,12 @@ theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat
               hS5, LK.put_put]
             simp [S6]
           simp only [evalF, Exp.ev, h4u, h4e, hvU, hso, Exp.cost]
-        obtain ⟨c7, e7, hc7⟩ := wtS_ok (κ := κ) (s := S6) (L := L4) (h := sH t v) (e := kids[j]) h4h h4e hkN
+        obtain ⟨c7, e7, hc7⟩ := wtS_ok (κ := κ) (s := S6) (L := L4) (h := sH t v) (e := kids[j]) h4h h4e
+          (fun h1 => (hkSN h1).2)
         have hwj : drainWt S6.nodes (sH t v) kids[j] = sWt t v kids[j] := by
           simp only [sWt, drainWt]; split
           · rfl
-          · exact hfw _ _ _ hkj
+          · next h1 => exact hfw (by simpa using h1) _ _ _ hkj
         rw [hwj] at e7
         set L7 := upd L4 "w" (sWt t v kids[j])
         have e8 := evalF_assign_ok (κ := κ) (s := S6) (L := L7) (x := "ws") (e := "ws" + "w")
@@ -1416,7 +1429,10 @@ theorem chS_ok {κ : Caps} {St t : Core} {L : Loc} {v u : Nat} {side : List (Nat
   have w1 := evalF_wrN_ok (κ := κ) (s := S7) (L := L') (k := .weight) (i := .var "u") (e := .var "ws") (j := u)
     (w := (ch.map (sWt t v)).sum) (by simp [Exp.ev, hLu']) (by simp [Exp.ev, hws']) (by rw [hS7sz]; exact hus) huN rfl
   set S8 := { S7 with nodes := S7.nodes.modify u (NF.set · (ch.map (sWt t v)).sum .weight) }
-  have hvch : v ∉ ch := fun h => hvk (List.mem_of_mem_filter h)
+  have hvch : sH t v = 1 ∨ v ∉ ch := by
+    by_cases h1 : sH t v = 1
+    · exact Or.inl h1
+    · exact Or.inr (fun h => hvk h1 (List.mem_of_mem_filter h))
   have hS8v : (S8.nodes.getX v).livePar = (t.nodes.getX v).livePar := by
     simp only [S8, getX_modify']; rw [if_neg (fun h => huv h.1.symm)]
     rw [put_getX_ne_c huv.symm, fold_setParentS_getX_notin ch St hvch, hlp]
@@ -1507,7 +1523,7 @@ theorem sd1_getX_new' (t : Core) (v : Nat) {u : Nat} (hu : t.nodes.size ≤ u) (
   · rw [if_pos e]
   · rw [if_neg e, if_pos (by omega)]
 
-theorem chRes_getX_notin {h u v' lp ws x : Nat} {ch : List Nat} {X : Core} (hx : x ∉ ch) (hxu : x ≠ u) :
+theorem chRes_getX_notin {h u v' lp ws x : Nat} {ch : List Nat} {X : Core} (hx : h = 1 ∨ x ∉ ch) (hxu : x ≠ u) :
     (chRes h u v' lp ws ch X).nodes.getX x = X.nodes.getX x := by
   simp only [chRes, getX_modify']; rw [if_neg (fun e => hxu e.1), fold_setParentS_getX_notin ch X hx]
 
@@ -1532,8 +1548,9 @@ def stage56S : Stm :=
   "u" ::= .var "v1" ;; "sd" ::= 0 ;; chS ;; "u" ::= .var "v2" ;; "sd" ::= 1 ;; chS
 
 theorem stage56S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
-    (hv : v < t.nodes.size) (hvk : v ∉ (t.nodes.getX v).children)
-    (hks : ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size ∧ e < κ.tbl .N ∧ e < κ.arr .lpar)
+    (hv : v < t.nodes.size) (hvk : sH t v ≠ 1 → v ∉ (t.nodes.getX v).children)
+    (hks : ∀ e ∈ (t.nodes.getX v).children, (sH t v ≠ 1 → e < t.nodes.size ∧ e < κ.tbl .N) ∧
+      (sH t v = 1 → e < κ.arr .lpar))
     (hLv : L "v" = v) (hLv1 : L "v1" = t.nodes.size) (hLv2 : L "v2" = t.nodes.size + 1) (hLh : L "h" = sH t v)
     (hvc : v < κ.lrec .children) (hvs : v < κ.lrec .side) (huc : t.nodes.size + 1 < κ.lrec .children)
     (huN : t.nodes.size + 1 < κ.tbl .N) (hvN : v < κ.tbl .N)
@@ -1550,12 +1567,12 @@ theorem stage56S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat
       fun l hh w X => fold_addTableS_size hh w l X
     simp only [sd6, h1, sd4, Array.size_modify, ← sdJ_all, sdJ_size, N]
   have hS6sz : S6.nodes.size = N + 2 := by simp [S6, phiS, hsz6]
-  have hkN : ∀ e ∈ kids, e ≠ N ∧ e ≠ N + 1 ∧ e ≠ v := fun e he =>
-    ⟨by have := (hks e he).1; omega, by have := (hks e he).1; omega, fun h => hvk (h ▸ he)⟩
+  have hkN : sH t v ≠ 1 → ∀ e ∈ kids, e ≠ N ∧ e ≠ N + 1 ∧ e ≠ v := fun h1 e he =>
+    ⟨by have := ((hks e he).1 h1).1; omega, by have := ((hks e he).1 h1).1; omega, fun h => hvk h1 (h ▸ he)⟩
   have h6v : CWL ((sd6 t v side).nodes.getX v) (t.nodes.getX v) := by
     rw [← sd1_getX t v hv]; exact sd6_CWL t v side v
-  have h6e : ∀ e ∈ kids, ((sd6 t v side).nodes.getX e).weight = (t.nodes.getX e).weight := by
-    intro e he; rw [← sd1_getX t v (hks e he).1]; exact (sd6_CWL t v side e).2.1
+  have h6e : sH t v ≠ 1 → ∀ e ∈ kids, ((sd6 t v side).nodes.getX e).weight = (t.nodes.getX e).weight := by
+    intro h1 e he; rw [← sd1_getX t v ((hks e he).1 h1).1]; exact (sd6_CWL t v side e).2.1
   have h6N : ((sd6 t v side).nodes.getX N).children = [] := by
     rw [(sd6_CWL t v side N).1, sd1_getX_new' t v le_rfl (by omega)]
   have h6N1 : ((sd6 t v side).nodes.getX (N + 1)).children = [] := by
@@ -1568,10 +1585,10 @@ theorem stage56S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat
   have hL2 : ∀ r, r ≠ "u" → r ≠ "sd" → L2 r = L r := fun r h1 h2 => by simp [L2, OM.Machine.State.upd, h1, h2]
   obtain ⟨L3, c3, e3, hc3, hF3⟩ := chS_ok (κ := κ) (St := S6) (t := t) (L := L2) (v := v) (u := N) (side := side)
     (sd := .left) (by rw [phiS_getX_self hvsz6]; exact h6v.1) (by rw [phiS_getX_self hvsz6])
-    (fun e he => by rw [phiS_getX_ne (hkN e he).2.2]; exact h6e e he)
+    (fun h1 e he => by rw [phiS_getX_ne (hkN h1 e he).2.2]; exact h6e h1 e he)
     (by rw [phiS_getX_self hvsz6]; exact h6v.2.2) (by rw [phiS_getX_ne (by omega)]; exact h6N) (by omega)
-    (fun h => (hkN N h).1 rfl) hvk (by omega) (by omega)
-    (fun e he => ⟨by have := (hks e he).1; omega, (hks e he).2.1, (hks e he).2.2⟩)
+    (fun h1 h => (hkN h1 N h).1 rfl) hvk (by omega) (by omega)
+    (fun e he => ⟨fun h1 => ⟨by have := ((hks e he).1 h1).1; omega, ((hks e he).1 h1).2⟩, (hks e he).2⟩)
     (by rw [hL2 "v" (by decide) (by decide), hLv]) (by simp [L2, OM.Machine.State.upd])
     (by rw [hL2 "h" (by decide) (by decide), hLh]) (by simp [L2, OM.Machine.State.upd, sideN])
     hvc hvs (by omega) (by omega) hvN hcap
@@ -1580,7 +1597,10 @@ theorem stage56S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat
   have hfr3 : ∀ r, r ≠ "u" → r ≠ "sd" → r ≠ "ws" → r ≠ "nk" → r ≠ "j" → r ≠ "e" → r ≠ "f" → r ≠ "x" → r ≠ "w" →
       L3 r = L r := fun r h1 h2 h3 h4 h5 h6 h7 h8 h9 => by rw [hF3 r h3 h4 h5 h6 h7 h8 h9, hL2 r h1 h2]
   -- v2
-  have hch1 : ∀ x, x ∉ kids → x ∉ sCh1 t v side := fun x hx h => hx (List.mem_of_mem_filter h)
+  have hch1 : ∀ x, (sH t v ≠ 1 → x ∉ kids) → (sH t v = 1 ∨ x ∉ sCh1 t v side) := fun x hx => by
+    by_cases h1 : sH t v = 1
+    · exact Or.inl h1
+    · exact Or.inr (fun h => hx h1 (List.mem_of_mem_filter h))
   have h8v : (sd8 t v side).nodes.getX v = (sd6 t v side).nodes.getX v := by
     rw [sd8_eq, chRes_getX_notin (hch1 v hvk) (by omega)]
   have hsz8 : (sd8 t v side).nodes.size = N + 2 := by rw [sd8_eq, chRes_size, hsz6]
@@ -1595,13 +1615,14 @@ theorem stage56S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat
     simp only [L4, OM.Machine.State.upd, if_neg h1, if_neg h2]; exact hfr3 r h1 h2 h3 h4 h5 h6 h7 h8 h9
   obtain ⟨L5, c5, e5, hc5, hF5⟩ := chS_ok (κ := κ) (St := S8) (t := t) (L := L4) (v := v) (u := N + 1)
     (side := side) (sd := .right) (by rw [phiS_getX_self hvsz8, h8v]; exact h6v.1) (by rw [phiS_getX_self hvsz8])
-    (fun e he => by
-      rw [phiS_getX_ne (hkN e he).2.2, sd8_eq, chRes_weight (hkN e he).1]; exact h6e e he)
+    (fun h1 e he => by
+      rw [phiS_getX_ne (hkN h1 e he).2.2, sd8_eq, chRes_weight (hkN h1 e he).1]; exact h6e h1 e he)
     (by rw [phiS_getX_self hvsz8, h8v]; exact h6v.2.2)
-    (by rw [phiS_getX_ne (by omega), sd8_eq, chRes_getX_notin (hch1 _ (fun h => (hkN _ h).2.1 rfl)) (by omega)]
+    (by rw [phiS_getX_ne (by omega), sd8_eq, chRes_getX_notin (hch1 _ (fun h1 h => (hkN h1 _ h).2.1 rfl)) (by omega)]
         exact h6N1) (by omega)
-    (fun h => (hkN (N + 1) h).2.1 rfl) hvk (by simp [S8, phiS, hsz8]) (by simp [S8, phiS]; omega)
-    (fun e he => ⟨by simp [S8, phiS, hsz8]; have := (hks e he).1; omega, (hks e he).2.1, (hks e he).2.2⟩)
+    (fun h1 h => (hkN h1 (N + 1) h).2.1 rfl) hvk (by simp [S8, phiS, hsz8]) (by simp [S8, phiS]; omega)
+    (fun e he => ⟨fun h1 => ⟨by simp [S8, phiS, hsz8]; have := ((hks e he).1 h1).1; omega, ((hks e he).1 h1).2⟩,
+      (hks e he).2⟩)
     (by rw [hL4 "v" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide), hLv]) (by simp [L4, OM.Machine.State.upd])
     (by rw [hL4 "h" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
@@ -1649,12 +1670,12 @@ theorem chRes_children (h u v' lp ws x : Nat) (ch : List Nat) (X : Core) (hxu : 
   simp only [chRes, getX_modify']; rw [if_neg (fun e => hxu e.1)]
   exact (fold_setParentS_fields h u x ch X).1
 
-theorem chRes_livePar_notin {h u v' lp ws x : Nat} {ch : List Nat} {X : Core} (hx : x ∉ ch) (hxu : x ≠ u) :
+theorem chRes_livePar_notin {h u v' lp ws x : Nat} {ch : List Nat} {X : Core} (hx : h = 1 ∨ x ∉ ch) (hxu : x ≠ u) :
     ((chRes h u v' lp ws ch X).nodes.getX x).livePar = (X.nodes.getX x).livePar := by
   rw [chRes_getX_notin hx hxu]
 
 theorem stage7S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
-    (hv : v < t.nodes.size) (hvk : v ∉ (t.nodes.getX v).children)
+    (hv : v < t.nodes.size) (hvk : sH t v ≠ 1 → v ∉ (t.nodes.getX v).children)
     (hp : (t.nodes.getX v).livePar < t.nodes.size) (hpv : (t.nodes.getX v).livePar ≠ v)
     (hpar : v ∈ (t.nodes.getX (t.nodes.getX v).livePar).children)
     (hLv : L "v" = v) (hLv1 : L "v1" = t.nodes.size) (hLv2 : L "v2" = t.nodes.size + 1)
@@ -1678,8 +1699,14 @@ theorem stage7S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
     rw [phiS_getX_ne hpv, sd10_eq, chRes_children _ _ _ _ _ _ _ _ (by omega), sd8_eq,
       chRes_children _ _ _ _ _ _ _ _ (by omega), (sd6_CWL t v side p).1, sd1_getX t v hp]
   have hvlp : (S.nodes.getX v).livePar = p := by
-    have h1 : v ∉ sCh2 t v side := fun h => hvk (List.mem_of_mem_filter h)
-    have h2 : v ∉ sCh1 t v side := fun h => hvk (List.mem_of_mem_filter h)
+    have h1 : sH t v = 1 ∨ v ∉ sCh2 t v side := by
+      by_cases e : sH t v = 1
+      · exact Or.inl e
+      · exact Or.inr (fun h => hvk e (List.mem_of_mem_filter h))
+    have h2 : sH t v = 1 ∨ v ∉ sCh1 t v side := by
+      by_cases e : sH t v = 1
+      · exact Or.inl e
+      · exact Or.inr (fun h => hvk e (List.mem_of_mem_filter h))
     rw [phiS_getX_self hvsz]
     show ((sd10 t v side).nodes.getX v).livePar = p
     rw [sd10_eq, chRes_livePar_notin h1 (by omega), sd8_eq, chRes_livePar_notin h2 (by omega),
@@ -1836,9 +1863,11 @@ theorem startDrainS_ok {κ : Caps} {t : Core} {L : Loc} {v B : Nat} {side : List
     (hroom : ∀ T ∈ (t.nodes.getX v).inTables, RoomOK t v T) (hnd : (t.nodes.getX v).inTables.Nodup)
     (hpar : v ∈ (t.nodes.getX (t.nodes.getX v).livePar).children) (hv : v < t.nodes.size)
     -- the shape around `v`
-    (hvT : v ∉ (t.nodes.getX v).inTables) (hvk : v ∉ (t.nodes.getX v).children)
-    (hK : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
-    (hks : ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size)
+    (hvT : v ∉ (t.nodes.getX v).inTables) (hvk : sH t v ≠ 1 → v ∉ (t.nodes.getX v).children)
+    (hK : sH t v - 1 ≠ 0 → ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
+    (hKN : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < κ.tbl .N ∧ (sH t v - 1 = 0 → e < κ.lrec .cin))
+    (hks : sH t v ≠ 1 → ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size)
+    (hksl : sH t v = 1 → ∀ e ∈ (t.nodes.getX v).children, e < κ.arr .lpar)
     (hp : (t.nodes.getX v).livePar < t.nodes.size) (hpv : (t.nodes.getX v).livePar ≠ v)
     (hB : ∀ T ∈ (t.nodes.getX v).inTables, (t.nodes.getX T).table.length ≤ B ∧ (t.nodes.getX T).side.length ≤ B)
     -- capacities
@@ -1866,8 +1895,8 @@ theorem startDrainS_ok {κ : Caps} {t : Core} {L : Loc} {v B : Nat} {side : List
   have hvs : v < κ.lrec .side := by omega
   have hvt : v < κ.lrec .table := by omega
   have hvi : v < κ.lrec .inTab := by omega
-  have hkN : ∀ e ∈ kids, e < κ.tbl .N := fun e he => by have := hks e he; omega
-  have hTN : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < κ.tbl .N := fun e he => by have := hK e he; omega
+  have hkN : sH t v ≠ 1 → ∀ e ∈ kids, e < κ.tbl .N := fun h1 e he => by have := hks h1 e he; omega
+  have hTN : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < κ.tbl .N := fun e he => (hKN e he).1
   -- the prefix
   have a1 := evalF_assign_ok (κ := κ) (s := t) (L := L) (x := "h") (e := .rd (.n .height) "v") (v := sH t v)
     (by simp [Exp.ev, hLv, hvN, Fld.cap, Fld.get, NF.get, sH])
@@ -1948,16 +1977,17 @@ theorem startDrainS_ok {κ : Caps} {t : Core} {L : Loc} {v B : Nat} {side : List
       exact hF9 _ (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
         (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
   -- the entries
-  obtain ⟨L10, c10, e10, hc10, hF10⟩ := stage4S_ok (κ := κ) (t := t) (L := L9) (v := v) (side := side) hv hK
+  obtain ⟨L10, c10, e10, hc10, hF10⟩ := stage4S_ok (κ := κ) (t := t) (L := L9) (v := v) (side := side) hv
+    (fun h1 => hK (by omega))
     (by rw [k9 "v1" (by simp), h8v1]) (by rw [k9 "v2" (by simp), h8v2]) (by rw [k9 "h" (by simp), h8h]) (by omega)
-    (fun e he => ⟨fun _ => by have := hK e he; omega, fun _ => by have := hK e he; omega⟩) hc4
+    (fun e he => ⟨fun h1 => (hKN e he).2 (by omega), fun h1 => by have := hK (by omega) e he; omega⟩) hc4
   have k10 : ∀ r, r = "v" ∨ r = "h" ∨ r = "v1" ∨ r = "v2" → L10 r = L8 r := by
     rintro r hr
     rw [hF10 r (by rcases hr with rfl | rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl | rfl <;> decide)
       (by rcases hr with rfl | rfl | rfl | rfl <;> decide) (by rcases hr with rfl | rfl | rfl | rfl <;> decide), k9 r hr]
   -- the children
   obtain ⟨L11, c11, e11, hc11, hF11⟩ := stage56S_ok (κ := κ) (t := t) (L := L10) (v := v) (side := side) hv hvk
-    (fun e he => ⟨hks e he, by have := hks e he; omega, by have := hks e he; omega⟩)
+    (fun e he => ⟨fun h1 => ⟨hks h1 e he, by have := hks h1 e he; omega⟩, fun h1 => hksl h1 e he⟩)
     (by rw [k10 "v" (by simp), h8v]) (by rw [k10 "v1" (by simp), h8v1]) (by rw [k10 "v2" (by simp), h8v2])
     (by rw [k10 "h" (by simp), h8h]) hvc hvs (by omega) (by omega) hvN hcC
   have k11 : ∀ r, r = "v" ∨ r = "v1" ∨ r = "v2" → L11 r = L8 r := by
@@ -1989,7 +2019,7 @@ theorem startDrainS_ok {κ : Caps} {t : Core} {L : Loc} {v B : Nat} {side : List
 theorem startDrainS_noop {κ : Caps} {t : Core} {L : Loc} {v : Nat}
     (hno : (sKids t v).length < 2 ∨ (sH t v > 1 ∧ sK t v = 0)) (hv : v < t.nodes.size)
     (hLv : L "v" = v) (hcN : t.nodes.size ≤ κ.tbl .N) (hcrc : t.nodes.size ≤ κ.lrec .children)
-    (hks : ∀ e ∈ (t.nodes.getX v).children, e < κ.tbl .N) :
+    (hks : sH t v ≠ 1 → ∀ e ∈ (t.nodes.getX v).children, e < κ.tbl .N) :
     ∃ L' c, evalF κ startDrainS t L = .ok t L' c ∧ c ≤ 230 + 300 * (t.nodes.getX v).children.length := by
   set kids := (t.nodes.getX v).children
   have hvN : v < κ.tbl .N := by omega

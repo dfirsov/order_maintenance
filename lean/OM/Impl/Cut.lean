@@ -103,11 +103,11 @@ local notation "upd" => OM.Machine.State.upd
 def wtS : Stm := .ite ("h" =ₑ 1) ("w" ::= 1) ("w" ::= .rd (.n .weight) "e")
 
 theorem wtS_ok {κ : Caps} {s : Core} {L : Loc} {h e : Nat} (hh : L "h" = h) (he : L "e" = e)
-    (heN : e < κ.tbl .N) : ∃ c, evalF κ wtS s L = .ok s (upd L "w" (drainWt s.nodes h e)) c ∧ c ≤ 10 := by
+    (heN : h ≠ 1 → e < κ.tbl .N) : ∃ c, evalF κ wtS s L = .ok s (upd L "w" (drainWt s.nodes h e)) c ∧ c ≤ 10 := by
   unfold wtS drainWt
   by_cases h1 : h = 1
   · simp [evalF, Exp.ev, hh, he, h1, Res.addCost, Exp.cost, OM.Machine.BinOp.eval]
-  · simp [evalF, Exp.ev, hh, he, h1, heN, Res.addCost, Exp.cost, OM.Machine.BinOp.eval, Fld.cap, Fld.get,
+  · simp [evalF, Exp.ev, hh, he, h1, heN h1, Res.addCost, Exp.cost, OM.Machine.BinOp.eval, Fld.cap, Fld.get,
       NF.get]
 
 /-- `t := the sum of the weights of the children of `v``. -/
@@ -116,7 +116,7 @@ def sumS : Stm := "t" ::= 0 ;; .loop "j" "n" sumBody
 
 theorem sumS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (hh : L "h" = h)
     (hn : L "n" = (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
-    (hkN : ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :
+    (hkN : h ≠ 1 → ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :
     ∃ L' c, evalF κ sumS s L = .ok s L' c ∧ c ≤ 10 + 40 * (s.nodes.getX v).children.length ∧
       L' "t" = ((s.nodes.getX v).children.map (drainWt s.nodes h)).sum ∧
       ∀ r, r ≠ "j" → r ≠ "e" → r ≠ "w" → r ≠ "t" → L' r = L r := by
@@ -131,7 +131,8 @@ theorem sumS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (h
       intro k hk L1 hF
       have hv1 : L1 "v" = v := by rw [hF "v" (by decide) (by decide) (by decide) (by decide), hv]
       have hh1 : L1 "h" = h := by rw [hF "h" (by decide) (by decide) (by decide) (by decide), hh]
-      have hkk : kids.getD k 0 < κ.tbl .N := hkN _ (by rw [List.getD_eq_getElem _ _ hk]; exact List.getElem_mem hk)
+      have hkk : h ≠ 1 → kids.getD k 0 < κ.tbl .N := fun h1 =>
+        hkN h1 _ (by rw [List.getD_eq_getElem _ _ hk]; exact List.getElem_mem hk)
       have e1 := evalF_assign_ok (κ := κ) (s := s) (L := upd L1 "j" k) (x := "e")
         (e := .lrd .children false "v" "j") (v := kids.getD k 0) (by
           simp [Exp.ev, OM.Machine.State.upd, hv1, hvr, LK.view, kids, hk])
@@ -160,7 +161,7 @@ def cutS : Stm := "b" ::= "t" / 2 ;; "c" ::= 0 ;; "d" ::= 0 ;; .loop "j" (.monus
 
 theorem cutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (hh : L "h" = h)
     (hn : L "n" = (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
-    (hkN : ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :
+    (hkN : h ≠ 1 → ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :
     ∃ L' c, evalF κ cutS s L = .ok s L' c ∧ c ≤ 40 + 60 * (s.nodes.getX v).children.length ∧
       L' "c" = cutLen (((s.nodes.getX v).children.map (drainWt s.nodes h)).take
         ((s.nodes.getX v).children.length - 1)) (L "t" / 2) ∧
@@ -183,7 +184,8 @@ theorem cutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (h
       have hk' : k < kids.length := by omega
       have hv1 : L1 "v" = v := by rw [hF "v" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hv]
       have hh1 : L1 "h" = h := by rw [hF "h" (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hh]
-      have hkk : kids.getD k 0 < κ.tbl .N := hkN _ (by rw [List.getD_eq_getElem _ _ hk']; exact List.getElem_mem hk')
+      have hkk : h ≠ 1 → kids.getD k 0 < κ.tbl .N := fun h1 =>
+        hkN h1 _ (by rw [List.getD_eq_getElem _ _ hk']; exact List.getElem_mem hk')
       have e1 := evalF_assign_ok (κ := κ) (s := s) (L := upd L1 "j" k) (x := "e")
         (e := .lrd .children false "v" "j") (v := kids.getD k 0) (by
           simp [Exp.ev, OM.Machine.State.upd, hv1, hvr, LK.view, kids, hk'])
@@ -426,7 +428,7 @@ def drainCutS : Stm :=
   .ite (1 <ₑ "h") (shRS ;; .ite ("n" ≤ₑ "k") shLS .skip) .skip
 
 theorem drainCutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (hh : L "h" = h)
-    (hvr : v < κ.lrec .children) (hkN : ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :
+    (hvr : v < κ.lrec .children) (hkN : h ≠ 1 → ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :
     ∃ L' c, evalF κ drainCutS s L = .ok s L' c ∧ c ≤ 200 + 300 * (s.nodes.getX v).children.length ∧
       L' "k" = drainCut ((s.nodes.getX v).children.map (drainWt s.nodes h))
         (drainPr s.nodes (s.nodes.getX v).children) (decide (h > 1)) ∧
@@ -476,7 +478,7 @@ theorem drainCutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = 
   rw [hdc]
   by_cases h1 : h > 1
   · obtain ⟨L5, c5, e5, hc5, hk5, hF5⟩ := shRS_ok (κ := κ) (s := s) (L := L4) (v := v)
-      (by rw [hL4 "v" (by decide), hv3]) (by rw [hL4 "n" (by decide), hn3]) hvr hkN
+      (by rw [hL4 "v" (by decide), hv3]) (by rw [hL4 "n" (by decide), hn3]) hvr (hkN (by omega))
     have hk5' : L5 "k" = shiftR pr n n k0 := by rw [hk5]; simp [L4, OM.Machine.State.upd]; rfl
     have hn5 : L5 "n" = n := by
       rw [hF5 "n" (by decide) (by decide) (by decide) (by decide) (by decide), hL4 "n" (by decide), hn3]
@@ -485,7 +487,7 @@ theorem drainCutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = 
     have hc1 : (1 <ₑ "h" : Exp).ev κ s L4 = some 1 := by
       simp [Exp.ev, OM.Machine.BinOp.eval, hL4 "h" (by decide), hh3, h1]
     by_cases h2 : shiftR pr n n k0 ≥ n
-    · obtain ⟨L6, c6, e6, hc6, hk6, hF6⟩ := shLS_ok (κ := κ) (s := s) (L := L5) (v := v) hv5 hn5 hvr hkN
+    · obtain ⟨L6, c6, e6, hc6, hk6, hF6⟩ := shLS_ok (κ := κ) (s := s) (L := L5) (v := v) hv5 hn5 hvr (hkN (by omega))
       have hc2' : ("n" ≤ₑ "k" : Exp).ev κ s L5 = some 1 := by
         simp [Exp.ev, OM.Machine.BinOp.eval, hn5, hk5', h2]
       refine ⟨L6, _, evalF_seq_ok2 a1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 (evalF_seq_ok2 a4

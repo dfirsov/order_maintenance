@@ -1181,7 +1181,7 @@ theorem startDrain_noop_run {t : Core} {v : Nat} (hno : (sKids t v).length < 2 �
 
 theorem sdAgree_noop {κ : Caps} {t : Core} {v : Nat} (hno : (sKids t v).length < 2 ∨ (sH t v > 1 ∧ sK t v = 0))
     (hv : v < t.nodes.size) (hcN : t.nodes.size ≤ κ.tbl .N) (hcrc : t.nodes.size ≤ κ.lrec .children)
-    (hks : ∀ e ∈ (t.nodes.getX v).children, e < κ.tbl .N) :
+    (hks : sH t v ≠ 1 → ∀ e ∈ (t.nodes.getX v).children, e < κ.tbl .N) :
     SDAgree κ t v (230 + 300 * (t.nodes.getX v).children.length) := by
   intro S' h
   rw [startDrain_noop_run hno] at h
@@ -1195,9 +1195,11 @@ theorem sdAgree_ok {κ : Caps} {t : Core} {v B : Nat} {side : List (Nat × Side)
     (hroom : ∀ T ∈ (t.nodes.getX v).inTables, RoomOK t v T) (hnd : (t.nodes.getX v).inTables.Nodup)
     (hall : ∀ e ∈ sKids t v, (lookup side e).isSome)
     (hpar : v ∈ (t.nodes.getX (t.nodes.getX v).livePar).children) (hv : v < t.nodes.size)
-    (hvT : v ∉ (t.nodes.getX v).inTables) (hvk : v ∉ (t.nodes.getX v).children)
-    (hK : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
-    (hks : ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size)
+    (hvT : v ∉ (t.nodes.getX v).inTables) (hvk : sH t v ≠ 1 → v ∉ (t.nodes.getX v).children)
+    (hK : sH t v - 1 ≠ 0 → ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < t.nodes.size)
+    (hKN : ∀ e ∈ (t.nodes.getX v).table.map (·.1), e < κ.tbl .N ∧ (sH t v - 1 = 0 → e < κ.lrec .cin))
+    (hks : sH t v ≠ 1 → ∀ e ∈ (t.nodes.getX v).children, e < t.nodes.size)
+    (hksl : sH t v = 1 → ∀ e ∈ (t.nodes.getX v).children, e < κ.arr .lpar)
     (hp : (t.nodes.getX v).livePar < t.nodes.size) (hpv : (t.nodes.getX v).livePar ≠ v)
     (hB : ∀ T ∈ (t.nodes.getX v).inTables, (t.nodes.getX T).table.length ≤ B ∧ (t.nodes.getX T).side.length ≤ B)
     (hcN : t.nodes.size + 2 ≤ κ.tbl .N)
@@ -1220,7 +1222,7 @@ theorem sdAgree_ok {κ : Caps} {t : Core} {v B : Nat} {side : List (Nat × Side)
   rw [startDrain_run hk2 hk0 hside hroom hnd hall hpar hv] at h
   injection h with _ hS; subst hS
   obtain ⟨L', c, e, hc⟩ := startDrainS_ok (κ := κ) (L := OM.Machine.State.setLocs (fun _ => 0) ["v"] [v]) hk2 hk0
-    hside hroom hnd hpar hv hvT hvk hK hks hp hpv hB (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hcN
+    hside hroom hnd hpar hv hvT hvk hK hKN hks hksl hp hpv hB (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) hcN
     hcrc hcrs hcrt hcri hcrcin hcl hcT hcS hcTv hcI hc4 hcC hcP
   exact ⟨L', c, e, hc, evalF_resJob sdP_noJob e⟩
 
