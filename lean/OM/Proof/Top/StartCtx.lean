@@ -34,6 +34,14 @@ theorem Timing.ew_le {s : TS} {cl : List Nat} {oj : Option Job} (Ti : Timing s c
   unfold fundOf at h3
   unfold Pid; omega
 
+theorem cutLen_ones : ∀ (m b : Nat), cutLen (List.replicate m 1) b = min m b
+  | 0, b => by simp [cutLen]
+  | m + 1, b => by
+    simp only [List.replicate_succ, cutLen]
+    by_cases hb : 1 ≤ b
+    · rw [if_pos hb, cutLen_ones m (b - 1)]; omega
+    · rw [if_neg hb]; omega
+
 section ctx
 variable {s : Core} {cl : List Nat} {ord : Nat → List Nat} {dr n0 : Nat → Nat} {j : Job} {v : Nat}
   (hpc : j.pc = .walk (some v)) (hv0 : v ≠ NIL) (hI : InvJ (ts s) cl ord dr n0 (some j))
@@ -329,6 +337,41 @@ theorem sd_cut2 (hTP : TopParams s.P) (h2 : 2 ≤ ht (ts s) v) (hof : (nd (ts s)
   by_contra hc; simp only [Bool.not_eq_false] at hc
   have : pr' (sK (wiC s v) v) = true := by simp [pr', c1, hc]; omega
   rw [c3'] at this; exact absurd this (by simp)
+
+/-- **The cut at height 1**: unit weights, the halves. -/
+theorem sd_cut1 (h1 : ht (ts s) v = 1) (hof : (nd (ts s) v).overflowOf = NIL)
+    (hW : Wd s.P (ht (ts s) v) < (nd (ts s) v).weight + 2) :
+    2 ≤ (nd (ts s) v).children.length ∧ 1 ≤ sK (wiC s v) v ∧
+      sK (wiC s v) v ≤ (nd (ts s) v).children.length - 1 ∧
+      lamd s.P 1 ≤ ((nd (ts s) v).children.take (sK (wiC s v) v)).length ∧
+      ((nd (ts s) v).children.take (sK (wiC s v) v)).length ≤ taud s.P 1 ∧
+      lamd s.P 1 ≤ ((nd (ts s) v).children.drop (sK (wiC s v) v)).length ∧
+      ((nd (ts s) v).children.drop (sK (wiC s v) v)).length ≤ taud s.P 1 := by
+  have S := hI.shape
+  have Ti := hI.time
+  obtain ⟨hvl, -⟩ := sd_live hpc hv0 hI hlp
+  set kids := (nd (ts s) v).children with hkids
+  have htv := sd_tw hpc hv0 hI hlp
+  have hwa : (nd (ts s) v).weight ≤ Wd s.P (ht (ts s) v) := Ti.wA v hvl hlp hof
+  have hn : kids.length = tw (ts s) cl v := (S.tw_one hvl h1).symm
+  rw [h1] at hW hwa
+  have e3 : Wd s.P 1 = 2 * s.P.a := by simp [Wd]
+  rw [e3] at hW hwa
+  have hK : sK (wiC s v) v = kids.length / 2 := by
+    unfold sK sWs sWt
+    rw [sd_kids_eq, sd_h_eq, h1]
+    have hm : kids.map (drainWt (wiC s v).nodes 1) = List.replicate kids.length 1 := by
+      rw [List.eq_replicate_iff]; simp [drainWt]
+    rw [hm]
+    unfold drainCut
+    simp only [List.length_replicate, List.sum_replicate, smul_eq_mul, Nat.mul_one, List.take_replicate,
+      cutLen_ones, show decide (1 > 1) = false by decide, Bool.false_and, if_false, Bool.false_eq_true]
+    omega
+  rw [hK, List.length_take, List.length_drop]
+  have e1 : lamd s.P 1 = s.P.a := rfl
+  have e2 : taud s.P 1 = s.P.a + 1 := rfl
+  rw [e1, e2]
+  omega
 
 end ctx
 
