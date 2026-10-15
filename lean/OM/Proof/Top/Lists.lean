@@ -376,6 +376,100 @@ theorem before_lift {A B : List Nat} {x y z c d : Nat} (hnd : (A ++ y :: x :: z 
     · exact hne e.symm
     · exact h.asymm hsmall e
 
+/-! ### Replacing one element -/
+
+theorem mem_replace1_of_ne {l ys : List Nat} {x y : Nat} (hx : x ∈ l) (hxy : x ≠ y) : x ∈ l.replace1 y ys := by
+  induction l with
+  | nil => simp at hx
+  | cons a t ih =>
+    simp only [List.replace1]
+    split
+    · next hay =>
+      simp only [List.mem_cons] at hx
+      rcases hx with rfl | hx
+      · exact absurd hay hxy
+      · exact List.mem_append_right _ hx
+    · simp only [List.mem_cons] at hx ⊢
+      rcases hx with rfl | hx
+      · exact Or.inl rfl
+      · exact Or.inr (ih hx)
+
+theorem mem_replace1_new {l ys : List Nat} {y z : Nat} (hy : y ∈ l) (hz : z ∈ ys) : z ∈ l.replace1 y ys := by
+  induction l with
+  | nil => simp at hy
+  | cons a t ih =>
+    simp only [List.replace1]
+    split
+    · exact List.mem_append_left _ hz
+    · next hay =>
+      simp only [List.mem_cons] at hy
+      rcases hy with rfl | hy
+      · exact absurd rfl hay
+      · exact List.mem_cons_of_mem _ (ih hy)
+
+theorem mem_replace1 {l ys : List Nat} {y z : Nat} (hz : z ∈ l.replace1 y ys) : z ∈ l ∨ z ∈ ys := by
+  induction l with
+  | nil => simp [List.replace1] at hz
+  | cons a t ih =>
+    simp only [List.replace1] at hz
+    split at hz
+    · simp only [List.mem_append] at hz
+      rcases hz with h | h
+      · exact Or.inr h
+      · exact Or.inl (List.mem_cons_of_mem _ h)
+    · simp only [List.mem_cons] at hz
+      rcases hz with rfl | h
+      · exact Or.inl (List.mem_cons_self ..)
+      · rcases ih h with h' | h'
+        · exact Or.inl (List.mem_cons_of_mem _ h')
+        · exact Or.inr h'
+
+theorem infix_replace1 {T l ys : List Nat} {y : Nat} (h : T <:+: l) (hy : y ∉ T) : T <:+: l.replace1 y ys := by
+  obtain ⟨u, w, rfl⟩ := h
+  rw [replace1_append]
+  by_cases hu : y ∈ u
+  · rw [if_pos (List.mem_append_left _ hu), replace1_append, if_pos hu]
+    exact ⟨u.replace1 y ys, w, by simp⟩
+  · rw [if_neg (fun h => by rcases List.mem_append.mp h with h | h; exact hu h; exact hy h)]
+    exact ⟨u, w.replace1 y ys, by simp⟩
+
+theorem infix_take {l : List Nat} (hl : l.Nodup) {a b k : Nat} (h : [a, b] <:+: l) (hb : b ∈ l.take k) :
+    [a, b] <:+: l.take k := by
+  obtain ⟨u, w, rfl⟩ := h
+  have hnd : (u ++ a :: b :: w).Nodup := by simpa using hl
+  have h1 := List.nodup_append.mp hnd
+  have hbu : b ∉ u := fun hh => h1.2.2 b hh b (by simp) rfl
+  have hba : b ≠ a := fun e => by subst e; simp at h1
+  have hk : u.length + 2 ≤ k := by
+    by_contra hk
+    have e : (u ++ [a, b] ++ w).take k = (u ++ [a]).take k := by
+      rw [show u ++ [a, b] ++ w = (u ++ [a]) ++ (b :: w) by simp, List.take_append_of_le_length (by simp; omega)]
+    rw [e] at hb
+    have := List.mem_of_mem_take hb
+    simp only [List.mem_append, List.mem_singleton] at this
+    rcases this with hh | hh
+    · exact hbu hh
+    · exact hba hh
+  rw [List.take_append, List.take_of_length_le (by simp; omega)]
+  exact ⟨u, _, rfl⟩
+
+theorem infix_drop {l : List Nat} (hl : l.Nodup) {a b k : Nat} (h : [a, b] <:+: l) (ha : a ∈ l.drop k) :
+    [a, b] <:+: l.drop k := by
+  obtain ⟨u, w, rfl⟩ := h
+  have hnd : (u ++ a :: b :: w).Nodup := by simpa using hl
+  have h1 := List.nodup_append.mp hnd
+  have h2 := List.nodup_cons.mp h1.2.1
+  have hk : k ≤ u.length := by
+    by_contra hk
+    have e : (u ++ [a, b] ++ w).drop k = (b :: w).drop (k - (u.length + 1)) := by
+      rw [show u ++ [a, b] ++ w = (u ++ [a]) ++ (b :: w) by simp, List.drop_append,
+        List.drop_eq_nil_of_le (by simp; omega)]
+      simp
+    rw [e] at ha
+    exact h2.1 (List.mem_of_mem_drop ha)
+  rw [show u ++ [a, b] ++ w = u ++ ([a, b] ++ w) by simp, List.drop_append_of_le_length hk]
+  exact ⟨u.drop k, w, by simp⟩
+
 /-! ### Infix triples -/
 
 theorem before_of_infix2 {l : List Nat} {a b : Nat} (h : [a, b] <:+: l) : Before l a b :=
