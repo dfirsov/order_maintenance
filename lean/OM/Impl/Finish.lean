@@ -311,4 +311,98 @@ theorem deBody_ok {κ : Caps} {S : Core} {L : Loc} {v T j B : Nat} (hv : L "v" =
   · intro r a b c d
     simp only [OM.Machine.State.setLocs, filterP, List.map]; exact hF3 r a b c d
 
+/-! ### Frames -/
+
+/-- `dropTableS` changes in-table lists only. -/
+theorem dropTableS_node (v hh : Nat) (s : Core) (e u : Nat) :
+    ∃ l, (dropTableS v hh s e).nodes.getX u = { s.nodes.getX u with inTables := l } := by
+  rw [dropTableS_getX]; split
+  · exact ⟨_, rfl⟩
+  · exact ⟨(s.nodes.getX u).inTables, rfl⟩
+
+theorem foldl_dropTableS_node (v hh u : Nat) : ∀ (l : List Nat) (s : Core),
+    ∃ m, (l.foldl (dropTableS v hh) s).nodes.getX u = { s.nodes.getX u with inTables := m }
+  | [], s => ⟨(s.nodes.getX u).inTables, rfl⟩
+  | e :: t, s => by
+    simp only [List.foldl_cons]
+    obtain ⟨m, hm⟩ := foldl_dropTableS_node v hh u t (dropTableS v hh s e)
+    obtain ⟨m', hm'⟩ := dropTableS_node v hh s e u
+    exact ⟨m, by rw [hm, hm']⟩
+
+theorem foldl_dropTableS_v {v hh : Nat} {s : Core} {l : List Nat} (hv : v ∉ l) :
+    (l.foldl (dropTableS v hh) s).nodes.getX v = s.nodes.getX v := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons e t ih =>
+    simp only [List.foldl_cons]
+    rw [ih (fun h => hv (List.mem_cons_of_mem _ h)), dropTableS_getX, if_neg]
+    intro h; exact hv (by rw [h.1]; exact List.mem_cons_self)
+
+/-- `dropEntryS` changes tables and side lists only. -/
+theorem foldl_dropEntryS_node (v u : Nat) : ∀ (l : List Nat) (s : Core),
+    ∃ t sd, (l.foldl (dropEntryS v) s).nodes.getX u = { s.nodes.getX u with table := t, side := sd }
+  | [], s => ⟨(s.nodes.getX u).table, (s.nodes.getX u).side, rfl⟩
+  | T :: r, s => by
+    simp only [List.foldl_cons]
+    obtain ⟨t, sd, h⟩ := foldl_dropEntryS_node v u r (dropEntryS v s T)
+    rw [h]; unfold dropEntryS; simp only [getX_modify']
+    split
+    · exact ⟨_, _, rfl⟩
+    · exact ⟨_, _, rfl⟩
+
+theorem foldl_dropEntryS_notin {v u : Nat} {s : Core} {l : List Nat} (hu : u ∉ l) :
+    (l.foldl (dropEntryS v) s).nodes.getX u = s.nodes.getX u := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons T t ih =>
+    simp only [List.foldl_cons]
+    rw [ih (fun h => hu (List.mem_cons_of_mem _ h)), dropEntryS_other v s T u (fun h => hu (h ▸ List.mem_cons_self))]
+
+theorem foldl_dropEntryS_size (v : Nat) : ∀ (l : List Nat) (s : Core), (l.foldl (dropEntryS v) s).nodes.size = s.nodes.size
+  | [], _ => rfl
+  | T :: r, s => by simp only [List.foldl_cons]; rw [foldl_dropEntryS_size v r]; simp [dropEntryS]
+
+/-! ### The `dropEntry` loop -/
+
+def deLoopS : Stm := "m" ::= .llen .inTab "v" ;; .loop "j" "m" deBody
+
+theorem deLoopS_ok {κ : Caps} {X : Core} {L : Loc} {v B : Nat} (hv : L "v" = v) (hvi : v < κ.lrec .inTab)
+    (hnd : (X.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (X.nodes.getX v).inTables, v ∈ (X.nodes.getX T).order)
+    (hcap : ∀ T ∈ (X.nodes.getX v).inTables, T < κ.lrec .table ∧ T < κ.lrec .side ∧
+      (X.nodes.getX T).table.length ≤ κ.lcap .table ∧ (X.nodes.getX T).side.length ≤ κ.lcap .side ∧
+      (X.nodes.getX T).table.length ≤ B ∧ (X.nodes.getX T).side.length ≤ B) :
+    ∃ L' c, evalF κ deLoopS X L = .ok ((X.nodes.getX v).inTables.foldl (dropEntryS v) X) L' c ∧
+      c ≤ 5 + (X.nodes.getX v).inTables.length * (301 + 200 * B) ∧
+      ∀ r, r ≠ "m" → r ≠ "j" → r ≠ "T" → r ≠ "r" → r ≠ "n" → L' r = L r := by
+  set tabs := (X.nodes.getX v).inTables
+  have a1 := evalF_assign_ok (κ := κ) (s := X) (L := L) (x := "m") (e := .llen .inTab "v") (v := tabs.length)
+    (by simp [Exp.ev, hv, hvi, LK.view, tabs])
+  set L1 := upd L "m" tabs.length
+  obtain ⟨S', L', c, he, hc, hS', hF⟩ := evalF_loop (κ := κ) (x := "j") (n := .var "m") (b := deBody)
+    (s := X) (L := L1) (N := tabs.length) (by simp [Exp.ev, L1, OM.Machine.State.upd])
+    (fun j S L' => S = (tabs.take j).foldl (dropEntryS v) X ∧
+      ∀ r, r ≠ "m" → r ≠ "j" → r ≠ "T" → r ≠ "r" → r ≠ "n" → L' r = L r) (300 + 200 * B)
+    ⟨by simp, fun r h1 _ _ _ _ => by simp [L1, OM.Machine.State.upd, h1]⟩
+    (by
+      intro j hj S L2 ⟨hS, hF2⟩
+      subst hS
+      set S := (tabs.take j).foldl (dropEntryS v) X
+      have hTm : tabs[j] ∈ tabs := List.getElem_mem hj
+      have hTn : tabs[j] ∉ tabs.take j := nodup_getElem_notin_take hnd hj
+      have hST : S.nodes.getX tabs[j] = X.nodes.getX tabs[j] := foldl_dropEntryS_notin hTn
+      have hSv : (S.nodes.getX v).inTables = tabs := by
+        obtain ⟨t, sd, h⟩ := foldl_dropEntryS_node v v (tabs.take j) X
+        simp only [S, h]; rfl
+      obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hcap _ hTm
+      obtain ⟨L3, c3, e3, hc3, hF3⟩ := deBody_ok (κ := κ) (S := S) (L := L2) (v := v) (T := tabs[j]) (j := j)
+        (B := B) (by rw [hF2 "v" (by decide) (by decide) (by decide) (by decide) (by decide), hv])
+        (by rw [hSv]; exact hj) (by simp only [hSv]) hvi (by rw [hST]; exact hT _ hTm) h1 h2
+        (by rw [hST]; exact h3) (by rw [hST]; exact h4) (by rw [hST]; exact h5) (by rw [hST]; exact h6)
+      refine ⟨_, L3, c3, e3, hc3, ?_, fun r a b c d e => (hF3 r b c d e).trans (hF2 r a b c d e)⟩
+      simp only [S, List.take_succ_eq_append_getElem hj, List.foldl_append, List.foldl_cons, List.foldl_nil])
+  rw [hS', List.take_length] at he
+  refine ⟨L', _, evalF_seq_ok2 a1 he, ?_, hF⟩
+  have e : tabs.length * (1 + (300 + 200 * B)) = tabs.length * (301 + 200 * B) := by ring
+  simp only [Exp.cost] at hc ⊢; omega
+
 end OM.Impl
