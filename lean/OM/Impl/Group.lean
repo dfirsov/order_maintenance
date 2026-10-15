@@ -537,4 +537,110 @@ theorem beforeS_ok {κ : Caps} {s : Core} {L : Loc} {b D : Nat} (hb : L "b" = b)
   have : ¬ b < D := by omega
   simp [beforeS, evalF, Exp.ev, OM.Machine.BinOp.eval, hb, hD, this, h1, h2, Exp.cost, Res.addCost]
 
+/-! ### `labBefore`, `labAfter` -/
+
+/-- `lab := labBefore g` (local `g`). -/
+def labBeforeS : Stm :=
+  "c" ::= .gF .chk "g" ;;
+  .ite (.cF .first "c" =ₑ "g")
+    ("b" ::= .gF .lab "g" ;; "D" ::= .prm .Dg ;; beforeS)
+    ("a" ::= .gF .lab (.gF .prev "g") ;; "b" ::= .gF .lab "g" ;; betweenS)
+
+/-- `lab := labAfter g` (local `g`). -/
+def labAfterS : Stm :=
+  "c" ::= .gF .chk "g" ;;
+  .ite (.cF .last "c" =ₑ "g")
+    ("a" ::= .gF .lab "g" ;; "D" ::= .prm .Dg ;; "B" ::= .prm .Bg ;; afterS)
+    ("a" ::= .gF .lab "g" ;; "b" ::= .gF .lab (.gF .next "g") ;; betweenS)
+
+theorem labBeforeS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g) (hgT : g < κ.tbl .G)
+    (hcT : (σ.Gs.getX g).chk < κ.tbl .C) (hpT : (σ.Gs.getX g).prev < κ.tbl .G) {v : Nat} {σ' : Core}
+    (h : (labBefore g).run σ = .ok v σ') :
+    σ' = σ ∧ ∃ L' c, evalF κ labBeforeS σ L = .ok σ L' c ∧ L' "lab" = v ∧ L' "g" = g ∧ c ≤ 50 := by
+  set G := σ.Gs.getX g
+  set C := σ.C.getX G.chk
+  unfold labBefore at h
+  simp [getP, getG, getC] at h
+  have e1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "c") (e := .gF .chk "g") (v := G.chk)
+    (by simp [Exp.gF, Exp.ev, hg, Fld.cap, Fld.get, GF.get, G, hgT])
+  set L1 := upd L "c" G.chk
+  have h1g : L1 "g" = g := by simp [L1, OM.Machine.State.upd, hg]
+  have h1c : L1 "c" = G.chk := by simp [L1, OM.Machine.State.upd]
+  by_cases hf : g = C.first
+  · rw [if_pos hf] at h
+    obtain ⟨hs, hDb, hD0, rfl⟩ := before_inv h
+    subst σ'
+    refine ⟨rfl, ?_⟩
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "b") (e := .gF .lab "g") (v := G.lab)
+      (by simp [Exp.gF, Exp.ev, h1g, Fld.cap, Fld.get, GF.get, G, hgT])
+    have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := upd L1 "b" G.lab) (x := "D") (e := .prm .Dg) (v := σ.P.D_g)
+      (by simp [Exp.ev, PF.get])
+    have b3 := beforeS_ok (κ := κ) (s := σ) (L := upd (upd L1 "b" G.lab) "D" σ.P.D_g) (b := G.lab) (D := σ.P.D_g)
+      (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd]) hDb hD0
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_ite_t (v := 1)
+      (by simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1c, h1g, hcT, Fld.cap, Fld.get, CF.get]; exact hf.symm)
+      one_ne_zero (evalF_seq_ok2 a1 (evalF_seq_ok2 a2 b3))), by simp [OM.Machine.State.upd]; rfl,
+      by simp [OM.Machine.State.upd, h1g], by simp [Exp.cost, Exp.gF, Exp.cF]⟩
+  · rw [if_neg hf] at h
+    obtain ⟨hs, hab, rfl⟩ := between_inv h
+    subst σ'
+    refine ⟨rfl, ?_⟩
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "a") (e := .gF .lab (.gF .prev "g"))
+      (v := (σ.Gs.getX G.prev).lab) (by simp [Exp.gF, Exp.ev, h1g, Fld.cap, Fld.get, GF.get, G, hgT, hpT])
+    have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := upd L1 "a" (σ.Gs.getX G.prev).lab) (x := "b")
+      (e := .gF .lab "g") (v := G.lab) (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, h1g, Fld.cap, Fld.get, GF.get, G, hgT])
+    obtain ⟨c3, b3, hc3⟩ := betweenS_ok (κ := κ) (s := σ) (L := upd (upd L1 "a" (σ.Gs.getX G.prev).lab) "b" G.lab)
+      (a := (σ.Gs.getX G.prev).lab) (b := G.lab) (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd]) hab
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_ite_f
+      (by simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1c, h1g, hcT, Fld.cap, Fld.get, CF.get]; exact Ne.symm hf)
+      (evalF_seq_ok2 a1 (evalF_seq_ok2 a2 b3))), by simp [OM.Machine.State.upd]; rfl,
+      by simp [OM.Machine.State.upd, h1g], by simp [Exp.cost, Exp.gF, Exp.cF] at hc3 ⊢; omega⟩
+
+theorem labAfterS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g) (hgT : g < κ.tbl .G)
+    (hcT : (σ.Gs.getX g).chk < κ.tbl .C) (hnT : (σ.Gs.getX g).next < κ.tbl .G) {v : Nat} {σ' : Core}
+    (h : (labAfter g).run σ = .ok v σ') :
+    σ' = σ ∧ ∃ L' c, evalF κ labAfterS σ L = .ok σ L' c ∧ L' "lab" = v ∧ L' "g" = g ∧ c ≤ 50 := by
+  set G := σ.Gs.getX g
+  set C := σ.C.getX G.chk
+  unfold labAfter at h
+  simp [getP, getG, getC] at h
+  have e1 := evalF_assign_ok (κ := κ) (s := σ) (L := L) (x := "c") (e := .gF .chk "g") (v := G.chk)
+    (by simp [Exp.gF, Exp.ev, hg, Fld.cap, Fld.get, GF.get, G, hgT])
+  set L1 := upd L "c" G.chk
+  have h1g : L1 "g" = g := by simp [L1, OM.Machine.State.upd, hg]
+  have h1c : L1 "c" = G.chk := by simp [L1, OM.Machine.State.upd]
+  by_cases hf : g = C.last
+  · rw [if_pos hf] at h
+    obtain ⟨hs, h1, h2, rfl⟩ := after_inv h
+    subst σ'
+    refine ⟨rfl, ?_⟩
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "a") (e := .gF .lab "g") (v := G.lab)
+      (by simp [Exp.gF, Exp.ev, h1g, Fld.cap, Fld.get, GF.get, G, hgT])
+    have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := upd L1 "a" G.lab) (x := "D") (e := .prm .Dg) (v := σ.P.D_g)
+      (by simp [Exp.ev, PF.get])
+    have a3 := evalF_assign_ok (κ := κ) (s := σ) (L := upd (upd L1 "a" G.lab) "D" σ.P.D_g) (x := "B") (e := .prm .Bg)
+      (v := σ.P.B_g) (by simp [Exp.ev, PF.get])
+    obtain ⟨c4, b4, hc4⟩ := afterS_ok (κ := κ) (s := σ) (L := upd (upd (upd L1 "a" G.lab) "D" σ.P.D_g) "B" σ.P.B_g)
+      (a := G.lab) (D := σ.P.D_g) (B := σ.P.B_g) (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd])
+      (by simp [OM.Machine.State.upd]) h1 h2
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_ite_t (v := 1)
+      (by simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1c, h1g, hcT, Fld.cap, Fld.get, CF.get]; exact hf.symm)
+      one_ne_zero (evalF_seq_ok2 a1 (evalF_seq_ok2 a2 (evalF_seq_ok2 a3 b4)))), by simp [OM.Machine.State.upd]; rfl,
+      by simp [OM.Machine.State.upd, h1g], by simp [Exp.cost, Exp.gF, Exp.cF] at hc4 ⊢; omega⟩
+  · rw [if_neg hf] at h
+    obtain ⟨hs, hab, rfl⟩ := between_inv h
+    subst σ'
+    refine ⟨rfl, ?_⟩
+    have a1 := evalF_assign_ok (κ := κ) (s := σ) (L := L1) (x := "a") (e := .gF .lab "g") (v := G.lab)
+      (by simp [Exp.gF, Exp.ev, h1g, Fld.cap, Fld.get, GF.get, G, hgT])
+    have a2 := evalF_assign_ok (κ := κ) (s := σ) (L := upd L1 "a" G.lab) (x := "b") (e := .gF .lab (.gF .next "g"))
+      (v := (σ.Gs.getX G.next).lab)
+      (by simp [Exp.gF, Exp.ev, OM.Machine.State.upd, h1g, Fld.cap, Fld.get, GF.get, G, hgT, hnT])
+    obtain ⟨c3, b3, hc3⟩ := betweenS_ok (κ := κ) (s := σ) (L := upd (upd L1 "a" G.lab) "b" (σ.Gs.getX G.next).lab)
+      (a := G.lab) (b := (σ.Gs.getX G.next).lab) (by simp [OM.Machine.State.upd]) (by simp [OM.Machine.State.upd]) hab
+    refine ⟨_, _, evalF_seq_ok2 e1 (evalF_ite_f
+      (by simp [Exp.cF, Exp.ev, OM.Machine.BinOp.eval, h1c, h1g, hcT, Fld.cap, Fld.get, CF.get]; exact Ne.symm hf)
+      (evalF_seq_ok2 a1 (evalF_seq_ok2 a2 b3))), by simp [OM.Machine.State.upd]; rfl,
+      by simp [OM.Machine.State.upd, h1g], by simp [Exp.cost, Exp.gF, Exp.cF] at hc3 ⊢; omega⟩
+
 end OM.Impl
