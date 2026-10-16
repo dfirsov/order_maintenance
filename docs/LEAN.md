@@ -859,3 +859,36 @@ insertions (handles are the insertion counter).
 **Not proved: Theorem W** (§2.1). Unit-cost unbounded words remain an assumption of the cost
 model.
 
+---
+
+## 16. Executable code: the machine program as Rust
+
+The machine program the theorems are about (`initWS`, `insertWS`, `deleteWS`, `orderWS`) is printed
+as Rust, statement for statement, by `lean/OM/Extract/Rust.lean` (`lake exe extract`, writing
+`rust/src/gen.rs`). Details and results: `rust/README.md`.
+
+**The printer.** A machine local becomes a Rust variable (or a field of the persistent top-level
+frame); a machine array becomes an index into the runtime's memory; a `call` becomes a call of a Rust
+function, one per distinct callee; `fail` returns `Err(Fail)` up to the nearest `catch` (a closure).
+Every statement adds the cost `exec` charges for it, and every expression node records its value in
+the peak, so the generated code counts the machine's steps exactly.
+
+**The runtime** (`rust/src/rt.rs`). Words are natural numbers of arbitrary precision (`u64`, and a
+`BigUint` above 2^64): the values need about `60·L` bits (§2.1), so fixed 64-bit words would not do.
+An access beyond an array's capacity or a subtraction below 0 panics (a machine error). An array's
+cells live in blocks allocated when first written, so memory follows the cells used (at 4 million
+elements: 57 million cells in use, against capacities totalling 33.8 billion).
+
+**What is trusted.** The printer (about 330 lines of Lean) and the runtime (about 300 lines of Rust)
+are not verified. They are checked against the machine semantics: `lake exe xrun` runs operation
+files with `OM.Machine.exec` itself, and the generated code must print the same answers, the same
+step count for every operation and the same peak bit length. It did on every file tried (4.3 million
+steps in the two longest).
+
+**Results.** The generated code agrees with the specification on 620,000 random operations, on the
+prototype's 23 stress workloads (9.2 million records) and on 1,100 fuzz traces. The most expensive
+update took 200,469 steps: the proved bound `opB 4 = 1,133,561,742` is about 10⁴ times loose on these
+workloads. Operations take 1–4 µs. The time per machine step grows from about 2 to 5 ns as the
+structure grows to 4 million elements, mostly from cache misses; the peak bit length follows the
+predicted staircase (1,119 to 1,461 bits), stepping up when a rebuild starts.
+

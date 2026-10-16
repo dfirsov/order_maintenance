@@ -41,9 +41,9 @@ cargo run --release --bin xrun -- ops.txt > rust.out && diff lean.out rust.out
 
 ## Results (2026-10-16)
 
-**Faithfulness of the printer and the runtime.** On 14 operation files (20 to 4,000 operations,
-mixed and delete-heavy, through many rebuilds; about 4.3 million machine steps), the generated code
-and Lean's `exec` printed identical lines: the same answers, the same number of steps for every
+**Faithfulness of the printer and the runtime.** On 9 operation files (20 to 4,000 operations,
+mixed and delete-heavy, through many rebuilds; 4.3 million machine steps in the two longest alone),
+the generated code and Lean's `exec` printed identical lines: the same answers, the same number of steps for every
 operation, the same peak bit length.
 
 **Correctness.** The generated code returned the specification's answers on every operation
