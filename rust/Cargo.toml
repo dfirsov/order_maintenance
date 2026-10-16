@@ -1,0 +1,14 @@
+[package]
+name = "om"
+version = "0.1.0"
+edition = "2021"
+description = "Order maintenance in O(1) worst case: Rust code generated from the verified machine program"
+license = "Apache-2.0"
+
+[dependencies]
+num-bigint = "=0.4.6"
+num-traits = "=0.2.19"
+num-integer = "=0.1.46"
+
+[profile.release]
+debug = false

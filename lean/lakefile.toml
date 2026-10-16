@@ -16,3 +16,7 @@ name = "OM"
 [[lean_exe]]
 name = "replay"
 root = "OM.Test.Replay"
+
+[[lean_exe]]
+name = "extract"
+root = "OM.Extract.Main"
