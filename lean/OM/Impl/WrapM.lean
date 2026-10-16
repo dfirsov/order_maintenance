@@ -594,4 +594,61 @@ theorem InService.insert {c : Core} {L : List Nat} (h : InService c L) {x : Nat}
   refine ⟨c', hr, he, ⟨by rw [hP']; exact hC', by rw [hcnt', h.ok.cnt, length_insertAfterL hx],
     by rw [hP']; exact h.ok.pmk⟩, hcnt', hP', hM'⟩
 
+/-! ### Insertion into `nxt` -/
+
+/-- Insert after the element in local `xn` of `nxt`, with handle `hh`; record it in the next
+handle map. -/
+def nxtInsC (p : Nat) : Stmt :=
+  .seq (.call "insertAfter" ["x", "h"] (insertAfterP.body.compile (1 - p) κ₀) ["y"] [.var "xn", .var "hh"] ["y2"])
+    (.store (wIdx (1 - p)) (.var "hh") (.var "y2"))
+
+/-- The wrapper state after an insertion into `nxt`. -/
+def nxtOM (om : OM) (n' : Core) (hh y : Nat) : OM := { om with nxt := some n', nxtIdx := om.nxtIdx.setX hh y }
+
+theorem nxtInsW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {n : Core} (hn : om.nxt = some n)
+    {B : List Nat} (hS : InService n B) {xn hh : Nat} (hxn : xn ∈ B) (hlx : m.loc "xn" = xn)
+    (hlh : m.loc "hh" = hh) (hhc : hh < m.cap (wIdx (1 - p))) :
+    ∃ n', (insertAfter xn hh).run n = .ok n.E.size n' ∧
+      CoreOK proofParams TopInv topMu topJ nfP RfP n' (OM.Spec.insertAfterL xn n.E.size B) ∧
+      n'.count = n.count + 1 ∧ n'.P = n.P ∧ Mc (capsOf n.P) n.P n' ∧
+      wp (nxtInsC p) (fun m' k => WEnc (nxtOM om n' hh n.E.size) m' p ∧
+        (∀ x, x ≠ "y2" → m'.loc x = m.loc x) ∧ k ≤ insBound n.P + 20) m := by
+  have hp := h.p2
+  obtain ⟨n', hr, ⟨L', c, he, hy, hc⟩, hok, hcnt', hP', hM'⟩ := hS.insert hxn hh
+    (OM.Machine.State.setLocs (fun _ => 0) ["x", "h"] [xn, hh]) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+  refine ⟨n', hr, hok, hcnt', hP', hM', ?_⟩
+  unfold nxtInsC
+  rw [OM.Machine.wp_seq, compile_κ₀ (1 - p) n.P]
+  refine wp_coreCall (h.nxt n hn) (by simp [OM.Machine.evalList, Expr.eval, hlx, hlh]) he (fun m2 hE hS2 hL => ?_)
+  have h2 : WEnc { om with nxt := some n' } m2 p := by
+    have hroomN := h.roomN n hn
+    have hrm := hS.room
+    refine ⟨hp, fun k hk => by rw [(hS2 _ (wa_notSlot (by omega))).2]; exact h.scap k hk, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+      h.cur.of_same fun b hb => hS2 b (fun hpb => inSlot_disj (by omega) hpb hb),
+      fun n2 hn2 => by cases hn2; rw [hP']; exact hE, fun i hi => ?_, fun _ i hi => ?_, ?_, fun n2 hn2 => ?_⟩
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.par
+    · rw [(hS2 _ (wa_notSlot (by omega))).1, h.nxtOn, hn]; rfl
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.cursor
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.cset
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.live
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.next
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.reb
+    · rw [(hS2 _ (wa_notSlot (by omega))).1]; exact h.kb
+    · rw [(hS2 _ (wIdx_notSlot (by omega))).2] at hi; rw [(hS2 _ (wIdx_notSlot (by omega))).1]; exact h.idxC i hi
+    · rw [(hS2 _ (wIdx_notSlot (by omega))).2] at hi; rw [(hS2 _ (wIdx_notSlot (by omega))).1]
+      exact h.idxN (by rw [hn]; rfl) i hi
+    · rw [(hS2 _ (wIdx_notSlot (by omega))).2]; exact h.roomC
+    · cases hn2; rw [(hS2 _ (wIdx_notSlot (by omega))).2]
+      show om.nextHandle + (om.cur.P.N - om.cur.count) + (n'.P.N - n'.count) ≤ m.cap (wIdx (1 - p))
+      rw [hP', hcnt']; omega
+  have hL2 : ∀ x, x ≠ "y2" → m2.loc x = m.loc x := fun x hx => by
+    rw [hL]; simp [OM.Machine.State.setLocs, OM.Machine.State.upd, hx]
+  have hy2 : m2.loc "y2" = n.E.size := by rw [hL]; simp [OM.Machine.State.setLocs, OM.Machine.State.upd, hy]
+  rw [OM.Machine.wp_store]
+  have hhc2 : hh < m2.cap (wIdx (1 - p)) := by rw [(hS2 _ (wIdx_notSlot (by omega))).2]; exact hhc
+  refine ⟨hh, n.E.size, by simp [Expr.eval, hL2 "hh" (by decide), hlh], by simp [Expr.eval, hy2], hhc2, ?_⟩
+  refine ⟨((h2.bump _).bump _).writeN (by simpa using hhc2), fun x hx => by simp [hL2 x hx], ?_⟩
+  simp [OM.Machine.costList, Expr.cost] at *; omega
+
 end OM.Impl
