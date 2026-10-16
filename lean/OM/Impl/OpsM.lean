@@ -541,4 +541,28 @@ theorem deleteW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEn
   simp only [Expr.cost, parE] at hk1 hk2 hk3 hk4 ⊢
   omega
 
+/-! ### Order queries -/
+
+/-- **An order query at Level M**: the specification's answer in local `r`, the state unchanged,
+at most 100 steps. -/
+theorem orderW_okM {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEnc om m p) (hI : MInv om Sp)
+    {x y : Nat} (hxv : x ∈ Sp.list) (hyv : y ∈ Sp.list) (hxl : m.loc "x" = x) (hyl : m.loc "y" = y) :
+    om.order x y = .ok (OM.Spec.precedes Sp.list x y) ∧
+      wp orderWS (fun m' k => WEnc om m' p ∧ m'.loc "r" = b2n (OM.Spec.precedes Sp.list x y) ∧ k ≤ 100) m := by
+  have hW := hI.1
+  obtain ⟨hS, hf, A, hR, hL, hIdx, hN⟩ := hW.w
+  have ho := order_ok hW.w hxv hyv
+  refine ⟨ho, ?_⟩
+  obtain ⟨hx1, -, -⟩ := hIdx x hxv
+  obtain ⟨hy1, -, -⟩ := hIdx y hyv
+  have hrun := order_correct hR.inv hx1 hy1
+  have hb : OM.Spec.precedes A.elist (om.curIdx.getX x) (om.curIdx.getX y) = OM.Spec.precedes Sp.list x y := by
+    unfold OM.order at ho; rw [runCore_ok hrun] at ho; injection ho
+  rw [hb] at hrun
+  have hS0 := hI.cur hR.inv
+  have hxc : x < om.nextHandle := by have := hS.2 x hxv; rw [hf]; exact this
+  have hyc : y < om.nextHandle := by have := hS.2 y hyv; rw [hf]; exact this
+  exact orderW_ok h hxl hyl (by have := h.roomC; omega) (by have := h.roomC; omega) hS0.ok.cost rfl hx1 hy1
+    hS0.ok.cnt hS0.mc hrun
+
 end OM.Impl
