@@ -651,4 +651,139 @@ theorem nxtInsW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {n : Core} 
   refine ⟨((h2.bump _).bump _).writeN (by simpa using hhc2), fun x hx => by simp [hL2 x hx], ?_⟩
   simp [OM.Machine.costList, Expr.cost] at *; omega
 
+/-- An assignment followed by code: the code runs from any state that differs only in the local. -/
+theorem wp_assign_seq {x : Reg} {e : Expr} {c : Stmt} {Q : State → Nat → Prop} {s : State} {v : Nat}
+    (he : e.eval s = some v)
+    (h : ∀ s', s'.loc = OM.Machine.State.upd s.loc x v → s'.mem = s.mem → s'.cap = s.cap →
+      wp c (fun s'' n => Q s'' (1 + e.cost + n)) s') : wp (.seq (.assign x e) c) Q s := by
+  rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+  exact ⟨v, he, h _ rfl rfl rfl⟩
+
+theorem WEnc.congr {om : OM} {m m' : State} {p : Nat} (h : WEnc om m p) (hm : m'.mem = m.mem) (hc : m'.cap = m.cap) :
+    WEnc om m' p :=
+  h.of_slot (h.cur.congr hm hc) fun b _ => ⟨by rw [hm], by rw [hc]⟩
+
+/-! ### Mirroring an insertion into `nxt` -/
+
+def mirrorInsC (p : Nat) : Stmt :=
+  .ite (.bin .eq (.load (wa 1) (.lit 0)) (.lit 0)) .skip
+    (.ite (.bin .eq (.load (wa 3) (.lit 0)) (.lit 0)) .skip
+      (.ite (.bin .eq (.var "hx") (.lit 0))
+        (.seq (.assign "xn" (.load (arrF (1 - p) (.s .head)) (.lit 0))) (.seq (.assign "hh" (.var "hy")) (nxtInsC p)))
+        (.seq (.assign "xn" (.load (wIdx (1 - p)) (.var "x")))
+          (.ite (.bin .eq (.var "xn") (.lit 0)) .skip (.seq (.assign "hh" (.var "hy")) (nxtInsC p))))))
+
+/-- The anchor of a mirrored insertion in `nxt`. -/
+def mirAnchor (om : OM) (n : Core) (hx : Option Nat) : Nat :=
+  match hx with
+  | none => n.head
+  | some x => om.nxtIdx.getX x
+
+theorem mirrorInsW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {hx : Option Nat} {hy : Nat}
+    (hhx : m.loc "hx" = b2n hx.isSome) (hxx : ∀ x, hx = some x → m.loc "x" = x ∧
+      (om.nxt.isSome → x < m.cap (wIdx (1 - p)))) (hhy : m.loc "hy" = hy)
+    (hhyc : om.nxt.isSome → hy < m.cap (wIdx (1 - p)))
+    (hN : ∀ n, om.nxt = some n → om.cursorSet = true → (hx = none ∨ ∃ x, hx = some x ∧ om.nxtIdx.getX x ≠ 0) →
+      ∃ B, InService n B ∧ mirAnchor om n hx ∈ B)
+    {om2 : OM} (hr : om.mirrorInsert hx hy = .ok om2) :
+    wp (mirrorInsC p) (fun m' k => WEnc om2 m' p ∧ (∀ x, x ≠ "xn" → x ≠ "hh" → x ≠ "y2" → m'.loc x = m.loc x) ∧
+      k ≤ insBound (om.nxt.map (·.P) |>.getD om.cur.P) + 100) m := by
+  have hp := h.p2
+  unfold mirrorInsC
+  rw [OM.Machine.wp_ite]
+  cases hn : om.nxt with
+  | none =>
+    have : om2 = om := by unfold OM.mirrorInsert at hr; rw [hn] at hr; cases hr; rfl
+    subst this
+    refine ⟨1, by simp [Expr.eval, h.scap 1 (by decide), h.nxtOn, hn, BinOp.eval, b2n], ?_⟩
+    simp only [ne_eq, one_ne_zero, not_false_eq_true, if_true, OM.Machine.wp_skip]
+    exact ⟨h.bump _, fun x _ _ _ => by simp, by simp [Expr.cost]⟩
+  | some n =>
+    refine ⟨0, by simp [Expr.eval, h.scap 1 (by decide), h.nxtOn, hn, BinOp.eval, b2n], ?_⟩
+    simp only [ne_eq, not_true_eq_false, if_false]
+    have hb1 := h.bump (Expr.maxv m (.bin .eq (.load (wa 1) (.lit 0)) (.lit 0)))
+    rw [OM.Machine.wp_ite]
+    by_cases hcs : om.cursorSet = false
+    · have : om2 = om := by
+        unfold OM.mirrorInsert at hr; rw [hn] at hr; simp [hcs] at hr; cases hr; rfl
+      subst this
+      refine ⟨1, by simp [Expr.eval, h.scap 3 (by decide), h.cset, hcs, BinOp.eval, b2n], ?_⟩
+      simp only [ne_eq, one_ne_zero, not_false_eq_true, if_true, OM.Machine.wp_skip]
+      exact ⟨hb1.bump _, fun x _ _ _ => by simp, by simp [Expr.cost]⟩
+    · have hcs' : om.cursorSet = true := by simpa using hcs
+      refine ⟨0, by simp [Expr.eval, h.scap 3 (by decide), h.cset, hcs', BinOp.eval, b2n], ?_⟩
+      simp only [ne_eq, not_true_eq_false, if_false]
+      set m2 := (m.bump (Expr.maxv m (.bin .eq (.load (wa 1) (.lit 0)) (.lit 0)))).bump
+        (Expr.maxv (m.bump (Expr.maxv m (.bin .eq (.load (wa 1) (.lit 0)) (.lit 0)))) (.bin .eq (.load (wa 3) (.lit 0)) (.lit 0)))
+      have h2 : WEnc om m2 p := hb1.bump _
+      have hhx2 : m2.loc "hx" = b2n hx.isSome := by simp [m2, hhx]
+      have hhy2 : m2.loc "hy" = hy := by simp [m2, hhy]
+      have hyc := hhyc (by rw [hn]; rfl)
+      rw [OM.Machine.wp_ite]
+      refine ⟨if b2n hx.isSome = 0 then 1 else 0, by simp [Expr.eval, BinOp.eval, hhx2], ?_⟩
+      have hb2 := h2.bump (Expr.maxv m2 (.bin .eq (.var "hx") (.lit 0)))
+      cases hx with
+      | none =>
+        simp only [Option.isSome_none, b2n, Bool.false_eq_true, ↓reduceIte, ne_eq, one_ne_zero, not_false_eq_true]
+        obtain ⟨B, hS, hxB⟩ := hN n hn hcs' (Or.inl rfl)
+        rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+        have hnE := h.nxt n hn
+        have hc1 := hnE.cap (.s .head)
+        have hm1 := hnE.mem (.s .head) 0 (by rw [Fld.cap]; omega)
+        refine ⟨n.head, by simp [m2, Expr.eval, hc1, Fld.cap, hm1, Fld.get, SF.get], ?_⟩
+        set m3 := ((m2.bump (Expr.maxv m2 (.bin .eq (.var "hx") (.lit 0)))).bump _).setLoc "xn" n.head
+        have h3 : WEnc om m3 p := (hb2.bump _).setLoc _ _
+        rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+        refine ⟨hy, by simp [Expr.eval, m3, hhy2], ?_⟩
+        set m4 := (m3.bump _).setLoc "hh" hy
+        have h4 : WEnc om m4 p := (h3.bump _).setLoc _ _
+        obtain ⟨n', hr', -, -, -, -, hwp⟩ := nxtInsW_ok h4 hn hS (xn := n.head) (hh := hy) hxB (by simp [m4, m3])
+          (by simp [m4]) (by simpa [m4, m3, m2] using hyc)
+        have hom2 : om2 = nxtOM om n' hy n.E.size := by
+          unfold OM.mirrorInsert at hr; rw [hn] at hr; simp [hcs', runCore, hr'] at hr
+          cases hr; simp only [nxtOM]; rw [hcs']
+        subst hom2
+        refine OM.Machine.wp_mono (fun m5 k5 ⟨h5, hl5, hk5⟩ => ⟨h5, fun x a b c => ?_, ?_⟩) hwp
+        · rw [hl5 x c]; simp [m4, m3, m2, a, b]
+        · simp only [Option.map_some, Option.getD_some, Expr.cost] at hk5 ⊢; omega
+      | some x =>
+        simp only [Option.isSome_some, b2n, ↓reduceIte, one_ne_zero, ne_eq, not_true_eq_false]
+        obtain ⟨hxl, hxc⟩ := hxx x rfl
+        have hxc' := hxc (by rw [hn]; rfl)
+        rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+        refine ⟨om.nxtIdx.getX x, by simp [Expr.eval, m2, hxl, hxc', h.idxN (by rw [hn]; rfl) x hxc'], ?_⟩
+        set m3 := ((m2.bump (Expr.maxv m2 (.bin .eq (.var "hx") (.lit 0)))).bump _).setLoc "xn" (om.nxtIdx.getX x)
+        have h3 : WEnc om m3 p := (hb2.bump _).setLoc _ _
+        have hl3 : ∀ z, z ≠ "xn" → m3.loc z = m.loc z := fun z hz => by simp [m3, m2, hz]
+        have hxn3 : m3.loc "xn" = om.nxtIdx.getX x := by simp [m3]
+        rw [OM.Machine.wp_ite]
+        by_cases h0 : om.nxtIdx.getX x = 0
+        · have : om2 = om := by
+            unfold OM.mirrorInsert at hr; rw [hn] at hr; simp [hcs', h0] at hr; cases hr; rfl
+          subst this
+          refine ⟨1, by simp only [Expr.eval, hxn3, h0, Option.bind_some, BinOp.eval]; rfl, ?_⟩
+          simp only [ne_eq, one_ne_zero, not_false_eq_true, if_true, OM.Machine.wp_skip]
+          refine ⟨h3.bump _, fun y a b c => ?_, by simp [Expr.cost]⟩
+          show m3.loc y = m.loc y
+          exact hl3 y a
+        · refine ⟨0, by simp only [Expr.eval, hxn3, h0, Option.bind_some, BinOp.eval]; rfl, ?_⟩
+          simp only [ne_eq, not_true_eq_false, if_false]
+          obtain ⟨B, hS, hxB⟩ := hN n hn hcs' (Or.inr ⟨x, rfl, h0⟩)
+          have h3' : WEnc om (m3.bump (Expr.maxv m3 (.bin .eq (.var "xn") (.lit 0)))) p := h3.bump _
+          refine wp_assign_seq (v := hy) (by simp only [Expr.eval]; rw [show (m3.bump _).loc "hy" = m3.loc "hy" from rfl,
+            hl3 "hy" (by decide), hhy]) (fun m4 hl4 hm4 hc4 => ?_)
+          have h4 : WEnc om m4 p := h3'.congr hm4 hc4
+          have hl4' : ∀ z, z ≠ "hh" → m4.loc z = m3.loc z := fun z hz => by
+            rw [hl4]; simp only [OM.Machine.State.upd, if_neg hz]; rfl
+          obtain ⟨n', hr', -, -, -, -, hwp⟩ := nxtInsW_ok h4 hn hS (xn := om.nxtIdx.getX x) (hh := hy) hxB
+            (by rw [hl4' "xn" (by decide), hxn3]) (by rw [hl4]; simp [OM.Machine.State.upd])
+            (by rw [hc4]; show hy < m.cap (wIdx (1 - p)); exact hyc)
+          have hom2 : om2 = nxtOM om n' hy n.E.size := by
+            unfold OM.mirrorInsert at hr; rw [hn] at hr; simp [hcs', h0, runCore, hr'] at hr
+            cases hr; simp only [nxtOM]; rw [hcs']
+          subst hom2
+          refine OM.Machine.wp_mono (fun m5 k5 ⟨h5, hl5, hk5⟩ => ⟨h5, fun y a b c => ?_, ?_⟩) hwp
+          · rw [hl5 y c, hl4' y b, hl3 y a]
+          · simp only [Option.map_some, Option.getD_some, Expr.cost] at hk5 ⊢; omega
+
 end OM.Impl
