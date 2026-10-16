@@ -247,7 +247,7 @@ OM/
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
 | M4 ✅ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13), against the top structure's contracts | invariant reasoning | medium |
 | M5 ✅ | Top-structure lemmas T0–T5, (Q); the contracts; the parameter rule (§14) | the largest proof | **high** |
-| M6 | Level M programs and simulation; assembly; **Theorems B and W** | mechanical, but long | medium |
+| M6 | Level M programs and simulation; assembly; **Theorems A and B at Level M** ✅ (§15), **Theorem W** (open) | mechanical, but long | medium |
 
 The order is chosen so that the riskiest mathematics (M5) is attacked on a validated
 model, and the mechanical machine layer (M6) comes last, when Level F is stable.
@@ -762,3 +762,53 @@ These are collected in `Mc κ P` (with the queue's `PQCaps`, no preparation in p
 functions of `P` (`nbMax P`, `cb P`, `N`, and constants). Then `insertAgreeM`: under `CostInv`,
 `count = |L|`, `count + 1 ≤ N`, `Mc κ P s` and `CapsOK κ P`, an insertion agrees at cost at most
 `insBound P`, and the result satisfies `CostInv`, `Mc κ P` and the new count.
+
+**The wrapper, step 5 (`WrapM.lean`, `RebuildM.lean`, `OpsM.lean`, `InitM.lean`).** The machine
+state holds the wrapper state as follows (`WEnc om m p`): `cur` in slot `p`, `nxt` in slot `1 − p`,
+eight scalar cells from array 2000 (parity, whether `nxt` exists, cursor, cursorSet, live,
+nextHandle, rebuilds, `K_B`), and the handle maps in arrays `2010 + q`. The capacity of the map of
+`cur` is at least `nextHandle + (N − count)`, and that of `nxt` at least `nextHandle + (N − count) +
+(N' − count')`. So every handle the wrapper will hand out before the next swap fits. The code tests
+the parity once (`byPar`) and runs the code specialized to it. A swap flips the parity cell.
+* The core calls (`wp_coreCall`) run the compiled core procedures in their slot; a slot's code
+  leaves the other slot and the wrapper's arrays alone (`Enc.of_other`).
+* Each piece of the wrapper is proved at the machine level against Level F's function: the order
+  query, deletion and insertion in `cur`, their mirroring in `nxt` (`mirrorDelW_ok`,
+  `mirrorInsW_ok`), the swap, a preparation step and a copy step, one iteration of the rebuild loop
+  (`iterW_ok`), the loop (`loopW_ok`: `K_B + 1` iterations of a `for` loop; a local `bud` holds the
+  budget, and the swap sets it to 0), the start of a rebuild (`startW_ok`: the trigger, the next
+  capacity, a new core built lazily in slot `1 − p`, a zero handle map), and the whole rebuild step
+  (`rebuildW_ok`).
+* Each core call needs the core's cost invariant and facts about its arguments, at intermediate
+  states of an operation that Level F's cost proof does not expose. `WrapSafe.lean` replays
+  `rebuildLoop_cost` and records them along the run (`RLSafeF`, `rebuildLoop_safe`). It also adapts
+  `rebuildStep_cost`, `insert_cost` and `delete_cost` into `rebuildStep_safe`, `insert_safe` and
+  `delete_safe`, whose proofs are copies of the cost proofs with the rebuild step's call replaced.
+* The Level M side conditions of the cores are carried alongside Level F's invariant:
+  `MX om` = `Mc` for `cur`, and for `nxt` `PrepM` during its preparation or `Mc` once it is in
+  service. The Level M invariant is `MInv om Sp = WC … om Sp ∧ MX om` (`OpsM.lean`). Every step keeps
+  `MX`: an insertion or a deletion keeps `Mc` (`insertAgreeM`, `markDeadAgreeM`), a preparation step
+  keeps `PrepM` or ends with `Mc` (`prepAgreeM`), a new core satisfies `PrepM` (`prepM_start`), and
+  the eagerly built first core satisfies `Mc` (`eager_M`).
+* `insertW_ok`, `deleteW_ok`, `orderW_okM` and `initW_ok`: each operation returns Level F's answer,
+  keeps `MInv` (and `K_B`), and its machine code runs in at most `insW K_B`, `delW K_B`, 100 and
+  `initB` steps. These bounds do not depend on `N`: the insertion bound `insBound P` depends only on
+  the `K` parameters, which are constants of the proof parameters (`insB = 94462311`).
+
+**Theorems A and B at Level M (`TheoremsM.lean`).** The machine program is `initWS` (with `K_B` in
+local `kb`), then `opS op` for each operation (its arguments as literals; an order query leaves
+its answer in local `r`). A reachable machine state holds a wrapper state with `MInv` (`Reach`).
+* `init_reach`, `step_reach`: initialization reaches such a state; from one, each valid operation
+  returns the specification's answer, reaches such a state again, and takes at most `opB K_B` steps.
+* `theoremAB_M`: for `K_B ≥ 4` and every valid operation sequence, the machine returns exactly
+  `Spec.run`'s answers, initialization takes at most `initB = 6648` steps, and every operation takes
+  at most `opB K_B` steps, with `opB 4 = 1133561742` (`opB_four`). The axioms are `propext`,
+  `Classical.choice` and `Quot.sound`.
+
+The constant is large because the loops of the top structure run over tables, side lists and child
+lists of up to 160 entries, and a drain start nests several of them (`sdBound`). It is a numeral
+fixed by the proof parameters, the same for every `N` and every history.
+
+**Open.** Theorem W (the word size: every value the program computes is below `2^(c_w · L)`) and
+the memory bound (`nbMax P`, `cb P` are `O(N)`) are not proved yet.
+
