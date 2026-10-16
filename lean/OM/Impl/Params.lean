@@ -45,8 +45,8 @@ def eHC : Expr := .bin .mul (.lit 2) (.bin .add ecsB ersB)
 def ePC : Expr := .bin .add (.bin .add (.bin .mul (.lit 3) eMu) ersB) ecsB
 def eth : Expr := .bin .mul (.bin .mul (.lit 2) eL) eL
 def eH : Expr := .bin .add (.bin .div eL (.lit 3)) (.lit 1)
-def eBe : Expr := .bin .add (.bin .add eUG (.bin .add eG ekg)) (.lit 2)
-def eBg : Expr := .bin .add (.bin .add eHC ePC) (.lit 2)
+def eBe : Expr := .bin .add eUG (.bin .add (.un .msb (.bin .add eG ekg)) (.lit 2))
+def eBg : Expr := .bin .add eHC (.bin .add (.un .msb ePC) (.lit 2))
 def ecm : Expr := .bin .div (.bin .add (.bin .add (.bin .add eT ekc) (.bin .add eG ekg)) (.lit 1)) (.lit 2)
 def ecb : Expr := .bin .add (.lit 2) (.bin .mul (.lit 2) (.bin .div eN (.bin .sub (.bin .add eth (.lit 1)) ecm)))
 def enb : Expr := .bin .add (.bin .add eH (.lit 2))
@@ -72,8 +72,8 @@ def vHC : Nat := 2 * (vcsB L + vrsB L)
 def vPC : Nat := 3 * vMu L + vrsB L + vcsB L
 def vth : Nat := 2 * L * L
 def vH : Nat := L / 3 + 1
-def vBe : Nat := vUG L + (vG L + vkg L) + 2
-def vBg : Nat := vHC L + vPC L + 2
+def vBe : Nat := vUG L + (Nat.log2 (vG L + vkg L) + 2)
+def vBg : Nat := vHC L + (Nat.log2 (vPC L) + 2)
 def vcm : Nat := (vT L + vkc L + (vG L + vkg L) + 1) / 2
 def vcb : Nat := 2 + 2 * (N / (vth L + 1 - vcm L))
 def vnb : Nat := (vH L + 2) + ((vH L + 1) + (vH L * 12 + 1)) * vcb N L
@@ -111,9 +111,9 @@ theorem ePC_ev (h8 : 8 ≤ L) : ePC.eval s = some (vPC L) := by
 theorem eth_ev : eth.eval s = some (vth L) := by simp [eth, eL, Expr.eval, BinOp.eval, hL, vth]
 theorem eH_ev : eH.eval s = some (vH L) := by simp [eH, eL, Expr.eval, BinOp.eval, hL, vH]
 theorem eBe_ev (h8 : 8 ≤ L) : eBe.eval s = some (vBe L) := by
-  simp [eBe, Expr.eval, BinOp.eval, eUG_ev hL h8, eG_ev hL, ekg_ev hL, vBe]
+  simp [eBe, Expr.eval, BinOp.eval, UnOp.eval, eUG_ev hL h8, eG_ev hL, ekg_ev hL, vBe]
 theorem eBg_ev (h8 : 8 ≤ L) : eBg.eval s = some (vBg L) := by
-  simp [eBg, Expr.eval, BinOp.eval, eHC_ev hL h8, ePC_ev hL h8, vBg]
+  simp [eBg, Expr.eval, BinOp.eval, UnOp.eval, eHC_ev hL h8, ePC_ev hL h8, vBg]
 theorem ecm_ev (h8 : 8 ≤ L) : ecm.eval s = some (vcm L) := by
   simp [ecm, Expr.eval, BinOp.eval, eT_ev hL, ekc_ev hL h8, eG_ev hL, ekg_ev hL, vcm]
 include hN in
@@ -261,7 +261,7 @@ theorem partC_frame {s : State} {N L : Nat} (hL : s.loc "L" = L) (hN : s.loc "nN
   simp (config := { maxSteps := 4000000 }) [partC, seqAll, exec, Out.bind, State.setLoc, State.upd, Expr.eval,
     BinOp.eval, eH_ev, ecb_ev, enb_ev, hNe, hL, hN, h8, hc, h1, h2, h3, h4, h5, h6, h7, h8', h9, h10, h11]
 
-theorem partB_cost (q : Nat) : (partB q).slCost = some 467 := by
+theorem partB_cost (q : Nat) : (partB q).slCost = some 469 := by
   simp [partB, OM.Machine.storeAll, pList, OM.Machine.Stmt.slCost, Expr.cost, eN, eL, eG, eT, eth, eBe, eBg, eUG,
     eHC, eH, ekg, egm, tsubE, ecsB, ersB, eIC, ekc, euT, eMu, ePC]
 

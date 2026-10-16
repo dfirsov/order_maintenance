@@ -61,11 +61,14 @@ determines are compared (handles and order answers), not the prototype's interna
 `harmonic_half`), against the proved bound `opB 4 = 1,133,561,742`: the bound is about 10⁴ times
 loose on these workloads. An order query always took 65 steps.
 
-**Word size.** The largest value computed grows with the capacity, as expected: 552 bits for a few
-live elements, 1,233 at 160,000, 1,461 at 4 million (`L = 24`). The steps of the staircase come
-when a rebuild starts (`results/growth.png`, bottom).
+**Word size.** The largest value computed grows with the capacity, as expected: 301 bits for a few
+live elements (workload `flicker`), 660 at 160,000 (`random`), 780 at 4 million (`L = 24`). These are the
+group labels. (Before the label widths of the proof parameters were narrowed, `docs/LEAN.md` §15: 552,
+1,233 and 1,461 bits.) The steps of the staircase come when a rebuild starts (`results/growth.png`,
+bottom).
 
-**Time.** 1–4 µs per operation (3.8 µs on average while growing to 4 million elements). The time
+**Time.** 1–4 µs per operation (3.9 µs on average while growing to 4 million elements; the narrower
+labels did not change it, since time is dominated by memory traffic). The time
 per machine step grows from about 2 to 5 ns over that range, mostly from cache misses as the
 structure grows; it drops after each swap.
 

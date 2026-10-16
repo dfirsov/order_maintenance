@@ -859,6 +859,15 @@ at most `40000·N` cells, and during a rebuild `nxt`'s slot at most `40000·N'` 
 handle maps are allocated with `nextHandle + (N − count) + N'` cells, which grows with the number of
 insertions (handles are the insertion counter).
 
+**Label widths (2026-10-16).** The label widths of the proof parameters were `B_e = UG + (G + kG) + 2`
+and `B_g = HC + PC + 2`. The lemmas only need `(G + kG)·2^UG < 2^(B_e−1)` and `PC·2^HC < 2^(B_g−1)`
+(`GParams.push`, `LParams.push`), so the linear terms are now logarithms: `B_e = UG + log₂(G + kG) + 2`
+and `B_g = HC + log₂ PC + 2`, as §14 planned (`B_g ≈ 30L`). Only the parameter conditions
+(`gparams_proof`, `lparams_proof`, `core_proof`) and the machine code computing the parameters (an
+`msb` each) changed. Group labels, the widest values, went from 551 to 300 bits at `L = 8` and from
+2,429 to 1,290 at `L = 41`; the measured peak at 4 million elements from 1,461 to 780 bits. The step
+bound does not depend on the label widths.
+
 **Not proved: Theorem W** (§2.1). Unit-cost unbounded words remain an assumption of the cost
 model.
 
@@ -877,7 +886,8 @@ Every statement adds the cost `exec` charges for it, and every expression node r
 the peak, so the generated code counts the machine's steps exactly.
 
 **The runtime** (`rust/src/rt.rs`). Words are natural numbers of arbitrary precision (`u64`, and a
-`BigUint` above 2^64): the values need about `60·L` bits (§2.1), so fixed 64-bit words would not do.
+`BigUint` above 2^64): the values need about `32·L` bits (the group labels, §15), so fixed 64-bit words
+would not do.
 An access beyond an array's capacity or a subtraction below 0 panics (a machine error). An array's
 cells live in blocks allocated when first written, so memory follows the cells used (at 4 million
 elements: 57 million cells in use, against capacities totalling 33.8 billion).
@@ -893,5 +903,6 @@ prototype's 23 stress workloads (9.2 million records) and on 1,100 fuzz traces. 
 update took 200,469 steps: the proved bound `opB 4 = 1,133,561,742` is about 10⁴ times loose on these
 workloads. Operations take 1–4 µs. The time per machine step grows from about 2 to 5 ns as the
 structure grows to 4 million elements, mostly from cache misses; the peak bit length follows the
-predicted staircase (1,119 to 1,461 bits), stepping up when a rebuild starts.
+predicted staircase (600 to 780 bits on the way to 4 million elements), stepping up when a rebuild
+starts.
 

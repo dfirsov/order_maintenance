@@ -179,6 +179,8 @@ theorem core_proof (N : Nat) : CoreP (proofParams N) := by
         _ ≤ 3 * L * L / ((2 * L - 2) / 2) := Nat.div_le_div_left (by omega) (by omega)
     generalize 3 * L * L / ((2 * L - 2) / 2) = q at h1 ⊢
     generalize 3 * L * L / 2 / max 1 (2 * L / 2) = r at h1 ⊢
+    generalize Nat.log2 _ = lg
+    generalize (3 * L * L + 2 * ((q + 1) / 3 + 1)) / ((2 * L - 2) / 2) = cs
     exact lt_of_le_of_lt (by omega) Nat.lt_two_pow_self
   · simp only [proofParams]; exact Nat.one_le_two_pow
   · unfold fbGS
@@ -186,13 +188,14 @@ theorem core_proof (N : Nat) : CoreP (proofParams N) := by
     generalize pL N = L at hL
     rw [show max 1 (2 * L / 2) = L by omega]
     generalize hU : 2 * L + (2 * L / 3 + 1) + (2 * L / 3 + 1 - (2 * L - 2) / 2) = U
+    generalize hX : 2 * L + (2 * L / 3 + 1) = X
     apply (Nat.lt_div_iff_mul_lt (by omega)).mpr
-    rw [show U + (2 * L + (2 * L / 3 + 1)) + 2 = U + (2 * L + (2 * L / 3 + 1) + 2) by omega, pow_add]
-    have hB : 2 * (L + 1) ≤ 2 ^ (2 * L + (2 * L / 3 + 1) + 2) :=
-      le_trans (by omega) (Nat.lt_two_pow_self (n := 2 * L + (2 * L / 3 + 1) + 2)).le
+    rw [pow_add]
+    have hB : 2 * (L + 1) ≤ 2 ^ (Nat.log2 X + 2) := by
+      have := Nat.lt_log2_self (n := X); rw [pow_succ]; omega
     have hA : 1 ≤ 2 ^ U := Nat.one_le_two_pow
     generalize 2 ^ U = A at hA ⊢
-    generalize 2 ^ (2 * L + (2 * L / 3 + 1) + 2) = B at hB ⊢
+    generalize 2 ^ (Nat.log2 X + 2) = B at hB ⊢
     have h1 : 2 * (A * (L + 1)) ≤ A * B := by nlinarith
     have h2 : L + 1 ≤ A * (L + 1) := by nlinarith
     omega

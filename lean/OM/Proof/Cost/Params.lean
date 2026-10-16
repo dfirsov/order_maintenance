@@ -17,7 +17,8 @@ open OM.Model
 /-- `L` for capacity `N`. -/
 def pL (N : Nat) : Nat := max 8 (Nat.size N)
 
-/-- The parameters of a core of capacity `N`. -/
+/-- The parameters of a core of capacity `N`. The label widths are the smallest the conditions
+allow: `B_e − 1 > UG + log₂(G + kG)` and `B_g − 1 > HC + log₂ PC` (`GParams.push`, `LParams.push`). -/
 def proofParams (N : Nat) : Params :=
   let L := pL N
   let G := 2 * L
@@ -33,8 +34,8 @@ def proofParams (N : Nat) : Params :=
   let rsB := 3 * Mu + 1
   let HC := 2 * (csB + rsB)
   let PC := 3 * Mu + rsB + csB
-  { N := N, L := L, G := G, T := T, theta := 2 * L * L, B_e := UG + (G + kG) + 2,
-    B_g := HC + PC + 2, D_e := 2 ^ UG, D_g := 2 ^ HC, K_G := 4, K_C := 4, K_R := 8, a := 8,
+  { N := N, L := L, G := G, T := T, theta := 2 * L * L, B_e := UG + (Nat.log2 (G + kG) + 2),
+    B_g := HC + (Nat.log2 PC + 2), D_e := 2 ^ UG, D_g := 2 ^ HC, K_G := 4, K_C := 4, K_R := 8, a := 8,
     s := 11, beta := 64, H := L / 3 + 1 }
 
 theorem pL_ge (N : Nat) : 8 ≤ pL N := le_max_left _ _
@@ -58,11 +59,10 @@ theorem gparams_proof (N : Nat) : GParams (proofParams N) := by
   · rw [cE_eq _ (by simp only [proofParams]; omega)]
     simp only [proofParams, kG]
     generalize hU : 2 * pL N + (2 * pL N / 3 + 1) + ((2 * pL N / 3 + 1) - (2 * pL N - 2) / 2) = U
-    have h1 : 2 * pL N + (2 * pL N / (4 - 1) + 1) < 2 ^ (2 * pL N + (2 * pL N / 3 + 1) + 1) :=
-      lt_of_lt_of_le (Nat.lt_two_pow_self) (Nat.pow_le_pow_right (by norm_num) (by omega))
+    generalize hX : 2 * pL N + (2 * pL N / (4 - 1) + 1) = X
+    have h1 : X < 2 ^ (Nat.log2 X + 1) := Nat.lt_log2_self
     have := pow_lt_two_pow _ _ h1 U
-    rw [show U + (2 * pL N + (2 * pL N / 3 + 1)) + 2 - 1 = U + (2 * pL N + (2 * pL N / 3 + 1) + 1)
-      by omega]
+    rw [show U + (Nat.log2 X + 2) - 1 = U + (Nat.log2 X + 1) by omega]
     simpa [Nat.mul_comm] using this
   · simp only [proofParams, UG, kG, gmin]; exact le_rfl
 
@@ -95,13 +95,12 @@ theorem lparams_proof (N : Nat) : LParams (proofParams N) := by
   · simp only [proofParams]; exact Nat.one_le_two_pow
   · simp only [proofParams]; omega
   · have hD : (proofParams N).D_g = 2 ^ HC (proofParams N) := rfl
-    have hB : (proofParams N).B_g = HC (proofParams N) + PC (proofParams N) + 2 := rfl
+    have hB : (proofParams N).B_g = HC (proofParams N) + (Nat.log2 (PC (proofParams N)) + 2) := rfl
     rw [cG_eq, hB, hD]
-    have h1 : PC (proofParams N) < 2 ^ (PC (proofParams N) + 1) :=
-      lt_of_lt_of_le Nat.lt_two_pow_self (Nat.pow_le_pow_right (by norm_num) (by omega))
+    have h1 : PC (proofParams N) < 2 ^ (Nat.log2 (PC (proofParams N)) + 1) := Nat.lt_log2_self
     have := pow_lt_two_pow _ _ h1 (HC (proofParams N))
-    rw [show HC (proofParams N) + PC (proofParams N) + 2 - 1 =
-      HC (proofParams N) + (PC (proofParams N) + 1) by omega]
+    rw [show HC (proofParams N) + (Nat.log2 (PC (proofParams N)) + 2) - 1 =
+      HC (proofParams N) + (Nat.log2 (PC (proofParams N)) + 1) by omega]
     exact this
   · simp only [proofParams, HC, csB, rsB, Mu, IC, kC, unitsOf, gmin]; exact le_rfl
 

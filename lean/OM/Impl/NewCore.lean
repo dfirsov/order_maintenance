@@ -25,7 +25,7 @@ def newCoreS (q : Nat) : Stmt :=
     (.call "initCore" ["lz"] (initCoreS.compile q κ₀) [] [.lit 1] []))
 
 theorem proofParams_B (N : Nat) : 1 ≤ (proofParams N).B_e ∧ 1 ≤ (proofParams N).B_g := by
-  simp [proofParams]
+  simp only [proofParams]; omega
 
 /-- The locals the parameter computation sets. -/
 def pLocs : List Reg := ["L", "kE", "kG", "kC", "kN", "kB", "kCc", "kL", "kR", "kRc", "kf", "kW"]
