@@ -577,4 +577,209 @@ theorem split_pz {t t2 : Core} {x : Nat} (h : (splitChunkStart x).run t = .ok ()
     · rw [hj] at h; simp at h
   · simp [OM.Model.guard] at h
 
+/-! ### A queue pop changes only the queue -/
+
+instance : IsPre PQOnly := ⟨PQOnly.refl, fun _ _ _ => PQOnly.trans⟩
+
+theorem pqo_pqDel (c : Nat) : Pres PQOnly (pqDel c) := by
+  unfold pqDel
+  pres <;> (intro s; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+
+theorem pqo_pqPopMax : Pres PQOnly pqPopMax := by
+  unfold pqPopMax; pres [pqo_pqDel _]
+
+/-- A split start keeps the queue. -/
+theorem split_pq {t t2 : Core} {x : Nat} (h : (splitChunkStart x).run t = .ok () t2) : PQSame t t2 := by
+  unfold splitChunkStart at h
+  simp only [run_get_bind, run_require_bind] at h
+  split at h
+  · simp only [run_newChunk_bind, run_modify_bind, Array.size_push] at h
+    have hps : ({ ({ t with C := t.C.push {} } : Core) with C := (t.C.push {}).push {} } : Core) =
+        push2 t := rfl
+    rw [hps, run_bind] at h
+    rcases hj : (insertAround x t.C.size (t.C.size + 1)).run
+        (linkChunkPair (push2 t) x t.C.size (t.C.size + 1)) with ⟨job, s2⟩ | ⟨e, s2⟩
+    · rw [hj] at h
+      have hR := (top_insertAround _ _ _).ok hj
+      simp only [markSplit_run] at h
+      obtain ⟨-, e⟩ := EStateM.Result.ok.inj h; subst e
+      obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := hR.pq
+      have hP : (markState s2 x t.C.size (t.C.size + 1) job).P.theta = t.P.theta := by
+        show s2.P.theta = _; rw [hR.rest.1]; rfl
+      exact ⟨q4, q2, q3, q1, q5, q6, q8, q7, hP⟩
+    · rw [hj] at h; simp at h
+  · simp [OM.Model.guard] at h
+
 end OM.Proof
+
+namespace OM.Impl
+
+open OM.Model OM.Proof OM.Proof.Top
+
+set_option linter.deprecated false
+
+/-! ### The capacity conditions -/
+
+/-- The chunk bound of a core of capacity `P.N` (`CountInv.chunks`). -/
+def cb (P : Params) : Nat := 2 + 2 * (P.N / (P.theta + 1 - cmax P))
+/-- The nodes of a fresh core. -/
+def nb0 (P : Params) : Nat := P.H + 2
+/-- The node bound. -/
+def nbMax (P : Params) : Nat := nb0 P + topJ P * cb P
+
+/-- **The node budget**: each chunk pays for the nodes of one job. -/
+def NodeB (s : Core) : Prop := s.nodes.size + topMu s ≤ nb0 s.P + topJ s.P * s.C.size
+
+/-- **The capacities as functions of the parameters.** -/
+structure CapsOK (κ : Caps) (P : Params) : Prop where
+  N : nbMax P + 2 ≤ κ.tbl .N
+  NC : cb P ≤ κ.tbl .N
+  C : cb P + 2 ≤ κ.tbl .C
+  rc : nbMax P + 2 ≤ κ.lrec .children
+  rs : nbMax P + 2 ≤ κ.lrec .side
+  rt : nbMax P + 2 ≤ κ.lrec .table
+  ri : nbMax P + 2 ≤ κ.lrec .inTab
+  rcin : nbMax P + cb P + 2 ≤ κ.lrec .cin
+  alp : nbMax P + cb P + 2 ≤ κ.arr .lpar
+  lt : 162 ≤ κ.lcap .table
+  ls : 322 ≤ κ.lcap .side
+  li : 322 ≤ κ.lcap .inTab
+  lcin : 322 ≤ κ.lcap .cin
+  lc : 162 ≤ κ.lcap .children
+  pw : κ.pw = P.H + 1
+
+theorem NodeB.le {s : Core} (h : NodeB s) (hC : s.C.size ≤ cb s.P) : s.nodes.size ≤ nbMax s.P := by
+  unfold NodeB at h; unfold nbMax; have := Nat.mul_le_mul_left (topJ s.P) hC; omega
+
+theorem topCaps_of {κ : Caps} {s : Core} (K : CapsOK κ s.P) (hN : NodeB s) (hC : s.C.size ≤ cb s.P) :
+    TopCaps κ s := by
+  have h := hN.le hC
+  have := K.N; have := K.NC; have := K.C; have := K.rc; have := K.rs; have := K.rt; have := K.ri
+  have := K.rcin; have := K.alp
+  exact ⟨by omega, by omega, by omega, by omega, by omega, by omega, by omega, by omega, by omega,
+    K.lt, K.ls, K.li, K.lcin, K.lc, K.pw⟩
+
+/-- **The capacity predicate of the reservation rounds.** -/
+def Mc (κ : Caps) (P : Params) (t : Core) : Prop :=
+  t.P = P ∧ NodeB t ∧ t.C.size ≤ cb P ∧ PQCaps κ t ∧ t.prep = none ∧ PZ t ∧ t.count ≤ P.N
+
+theorem Mc.caps {κ : Caps} {P : Params} (K : CapsOK κ P) {t : Core} (h : Mc κ P t) :
+    TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧ ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0 := by
+  obtain ⟨hP, hN, hC, hq, hpr, hz, -⟩ := h
+  subst hP
+  exact ⟨topCaps_of K hN hC, hq, hpr, hz⟩
+
+theorem ts_eq_of {s s' : Core} (hP : s'.P = s.P) (hN : s'.nodes = s.nodes) (hp : s'.path = s.path)
+    (hc : s'.cin = s.cin) (hl : s'.lpar = s.lpar) (hC : s'.C = s.C) : ts s' = ts s := by
+  unfold ts; rw [hP, hN, hp, hc, hl, hC]
+
+theorem mc_pop {κ : Caps} {P : Params} {t t1 : Core} {c : Nat} (h : Mc κ P t) (hp : pqPopMax.run t = .ok c t1) :
+    Mc κ P t1 := by
+  obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt⟩ := h
+  have F := pqo_pqPopMax.ok hp
+  obtain ⟨-, -, eC, eP, r⟩ := F
+  obtain ⟨-, ecnt, -, -, -, -, -, epr, ejob, -, -, eN, epa, ecin, elp⟩ := r
+  have hts : ts t1 = ts t := ts_eq_of eP eN epa ecin elp eC
+  have hmu : topMu t1 = topMu t := by unfold topMu; rw [ejob, hts]
+  refine ⟨eP.trans hP, ?_, by rw [eC]; exact hC, (pqPopMax_agree κ t (fun _ => 0) hq hp).2, by rw [epr]; exact hpr,
+    fun d hd j => by rw [epa]; rw [eC] at hd; exact hz d hd j, by rw [ecnt]; exact hcnt⟩
+  unfold NodeB at hN ⊢; rw [eN, hmu, eC, eP]; exact hN
+
+theorem mc_job {κ : Caps} {P : Params} {t : Core} {job : Job} (hT : TopInv t) (h : Mc κ P t)
+    (hres : t.resJob = some job) {r : Option Job} {t1 : Core} (hr : (jobStep job).run t = .ok r t1) :
+    Mc κ P { t1 with resJob := r } := by
+  obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt⟩ := h
+  have hR := (top_jobStep job).ok hr
+  have hn := node_step hT hres hr
+  obtain ⟨hCs, hzz⟩ := path_step hT hres hr
+  have hpp := (tp_jobStep job).ok hr
+  obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := hR.pq
+  refine ⟨hR.rest.1.trans hP, ?_, by show t1.C.size ≤ _; rw [hCs]; exact hC,
+    hq.of_same ⟨q4, q2, q3, q1, q5, q6, q8, q7, by show t1.P.theta = _; rw [hR.rest.1]⟩,
+    by show t1.prep = _; rw [hpp]; exact hpr, hzz hz, by show t1.count ≤ _; rw [hR.rest.2.1]; exact hcnt⟩
+  unfold NodeB at hN ⊢
+  have e1 : ({ t1 with resJob := r } : Core).P = t.P := hR.rest.1
+  have e2 : ({ t1 with resJob := r } : Core).C.size = t.C.size := hCs
+  have eR : nb0 ({ t1 with resJob := r } : Core).P + topJ ({ t1 with resJob := r } : Core).P *
+      ({ t1 with resJob := r } : Core).C.size = nb0 t.P + topJ t.P * t.C.size := by rw [e1, e2]
+  rw [eR]; exact le_trans hn hN
+
+theorem mc_split {κ : Caps} {P : Params} {t t1 t2 : Core} {c : Nat} (h : Mc κ P t) (hnone : t.resJob = none)
+    (hp : pqPopMax.run t = .ok c t1) (hs : (splitChunkStart c).run t1 = .ok () t2) (hP2 : t2.P = P)
+    (hmu : topMu t2 ≤ topJ P) (hC2 : t2.C.size ≤ cb P) (hc2 : t2.count ≤ P.N) : Mc κ P t2 := by
+  have h1 := mc_pop h hp
+  obtain ⟨hP, hN, -, -, -, -, -⟩ := h
+  obtain ⟨hP1, hN1, hC1, hq1, hpr1, hz1, -⟩ := h1
+  obtain ⟨en, ec, epr⟩ := split_frame hs
+  refine ⟨hP2, ?_, hC2, hq1.of_same (split_pq hs), by rw [epr]; exact hpr1, split_pz hs hz1, hc2⟩
+  have hmu0 : topMu t = 0 := by unfold topMu; rw [hnone]
+  have F := pqo_pqPopMax.ok hp
+  have eN : t1.nodes = t.nodes := F.rest.2.2.2.2.2.2.2.2.2.2.2.1
+  have eC : t1.C = t.C := F.C
+  unfold NodeB at hN ⊢
+  rw [hmu0] at hN
+  rw [hP2, en, ec, eN, eC, ← hP]
+  rw [← hP] at hmu
+  have := Nat.mul_add (topJ t.P) t.C.size 2
+  omega
+
+/-- The chunk bound at a state of the low invariant whose count is at most `N`. -/
+theorem cb_of {t : Core} {L : List Nat} (hL : LowInv t L) (hc : t.count ≤ t.P.N) : t.C.size ≤ cb t.P := by
+  obtain ⟨e, pops, hN⟩ := hL.cnt
+  have h1 := hN.chunks (by have := hL.cp.I4; omega)
+  have h2 : t.count / (t.P.theta + 1 - cmax t.P) ≤ t.P.N / (t.P.theta + 1 - cmax t.P) :=
+    Nat.div_le_div_right hc
+  unfold cb; omega
+
+/-- The cost bound of an insertion at Level M, at parameters `P`. -/
+abbrev insBoundM (P : Params) : Nat := insBound P
+
+/-- **An insertion agrees** at Level M under the cost invariant, the capacity conditions, the node
+budget, the zero path rows, and no preparation in progress. -/
+theorem insertAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat}
+    (hC : CostInv (TIat TopInv P) topMu (topJ P) n R L s) (hsP : s.P = P)
+    (hx : x ∈ L) (hk : 1 ≤ s.P.K_R) (hR : topJ P / s.P.K_R + 1 ≤ R) (hn : 1 ≤ n)
+    (hsize : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
+    (hcap : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ capT s.P)
+    (hI5 : (s.P.theta : ℝ) + R * (OM.Zeroing.Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat)
+    {κ : Caps} (Lx : Loc) (hLx : Lx "x" = x) (hLh : Lx "h" = hh) (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
+    (K : CapsOK κ P) (KI : InsCaps κ s) (hcnt : s.count + 1 ≤ P.N)
+    (hNB : NodeB s) (hPZ : PZ s) (hpr : s.prep = none) :
+    ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧
+      (∃ L' m, evalF κ insertAfterP.body s Lx = .ok s' L' m ∧ L' "y" = s.E.size ∧ m ≤ insBound s.P) ∧
+      CostInv (TIat TopInv P) topMu (topJ P) n R (OM.Spec.insertAfterL x s.E.size L) s' ∧
+      s'.count = s.count + 1 ∧ s'.P = s.P := by
+  have hTC : TopContract (TIat TopInv P) topMu (topJ P) capT := topContract'.at P
+  refine insertAgree hTC (fun t h => h.1) hC hx hk hR hn hsize hcap hI5 hh Lx hLx hLh hpow KI (Mc κ P)
+    (fun t hts hjob hprt hCs hct hq => ?_) (fun t h => h.caps K) (fun t c t1 h hp => mc_pop h hp)
+    (fun L' s' j t job r t1 hI hM hjob hr _ => mc_job hI.2.1.1 hM hjob hr)
+    (fun L' s' j t c t1 t2 hI hM hnone hp hs hI' => ?_)
+  · -- the start of the reservation
+    have hPt : t.P = P := by
+      have : (OM.Proof.Top.ts t).P = (OM.Proof.Top.ts s).P := by rw [hts]
+      exact this.trans hsP
+    have hNt : t.nodes = s.nodes := by
+      have : (OM.Proof.Top.ts t).nodes = (OM.Proof.Top.ts s).nodes := by rw [hts]
+      exact this
+    have hmu : topMu t = topMu s := by unfold topMu; rw [hjob, hts]
+    have hcbs : s.C.size ≤ cb s.P := cb_of hC.low (by rw [hsP]; omega)
+    refine ⟨hPt, ?_, by rw [hCs, ← hsP]; exact hcbs, hq, by rw [hprt]; exact hpr, ?_, by rw [hct]; omega⟩
+    · unfold NodeB at hNB ⊢; rw [hNt, hmu, hCs, hPt, ← hsP]; exact hNB
+    · intro c hc j
+      have : (OM.Proof.Top.ts t).path = (OM.Proof.Top.ts s).path := by rw [hts]
+      have hpa : t.path = s.path := this
+      rw [hpa]; exact hPZ c (by rw [← hCs]; exact hc) j
+  · -- a split start
+    obtain ⟨hL', hT', hc', hP', y', i', a', ip', js', hG', hR'⟩ := hI'
+    obtain ⟨-, -, hc0, hP0, -⟩ := hI
+    have hPt : t.P = P := hM.1
+    have hP2 : t2.P = P := by rw [hP', ← hP0, hPt]
+    have hc2 : t2.count ≤ P.N := by rw [hc', ← hc0]; exact hM.2.2.2.2.2.2
+    refine mc_split hM hnone hp hs hP2 ?_ (by have := cb_of hL' (by rw [hP2]; exact hc2); rwa [hP2] at this) hc2
+    rcases hj : t2.resJob with _ | j'
+    · have : topMu t2 = 0 := by unfold topMu; rw [hj]
+      omega
+    · unfold RoundAt at hR'; rw [hj] at hR'
+      have := hR'.2.1; omega
+
+end OM.Impl

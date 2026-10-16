@@ -835,11 +835,12 @@ theorem reservationAgree_top {TI : Core → Prop} {μ : Core → Nat} {J n R : N
     (Mc : Core → Prop) (hM0 : Mc s)
     (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
       ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
-    (hMpop : ∀ t c, Mc t → Mc (delSt t c))
+    (hMpop : ∀ t c t1, Mc t → pqPopMax.run t = .ok c t1 → Mc t1)
     (hMjob : ∀ j t job r t1, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = some job →
-      (jobStep job).run t = .ok r t1 → Mc { t1 with resJob := r })
-    (hMsplit : ∀ j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → pqPopMax.run t = .ok c t1 →
-      (splitChunkStart c).run t1 = .ok () t2 → Mc t2) :
+      (jobStep job).run t = .ok r t1 → ResInv TI s.P.K_R J n R μ L s (j + 1) { t1 with resJob := r } →
+      Mc { t1 with resJob := r })
+    (hMsplit : ∀ j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = none → pqPopMax.run t = .ok c t1 →
+      (splitChunkStart c).run t1 = .ok () t2 → ResInv TI s.P.K_R J n R μ L s (j + 1) t2 → Mc t2) :
     ∃ t' L' m, (reservation s.P.K_R).run s = .ok () t' ∧ evalF κ reservationS s Lc = .ok t' L' m ∧
       m ≤ resBound s.P.K_R := by
   have hstep := resInv_step (k := s.P.K_R) (L := L) hTC hn hsize hcap hI5
@@ -851,9 +852,9 @@ theorem reservationAgree_top {TI : Core → Prop} {μ : Core → Nat} {J n R : N
       refine ⟨fun hnone => ?_, fun job hjob => ?_⟩
       · rcases hn' hnone with ⟨h0, -⟩ | ⟨h0, c, t1, t2, hp, hsc, hI'⟩
         · exact Or.inl ⟨h0, trivial⟩
-        · exact Or.inr ⟨h0, c, t1, t2, hp, hsc, hI', hMsplit j t c t1 t2 hI hM hp hsc⟩
+        · exact Or.inr ⟨h0, c, t1, t2, hp, hsc, hI', hMsplit j t c t1 t2 hI hM hnone hp hsc hI'⟩
       · obtain ⟨r, t1, hr, hI'⟩ := hs' job hjob
-        exact ⟨r, t1, hr, hI', hMjob j t job r t1 hI hM hjob hr⟩)
+        exact ⟨r, t1, hr, hI', hMjob j t job r t1 hI hM hjob hr hI'⟩)
     (fun j t job ⟨hI, hM⟩ _ hjob => by
       obtain ⟨hT, -, hpr, -⟩ := hMc t hM
       obtain ⟨-, hTt, -, hPt, -⟩ := hI
@@ -864,6 +865,7 @@ theorem reservationAgree_top {TI : Core → Prop} {μ : Core → Nat} {J n R : N
       refine ⟨hPQ, ?_⟩
       obtain ⟨bl, nb, hQ⟩ := hL.pq
       obtain ⟨c', hpop, hcin, -⟩ := pqPopMax_ok hQ hq0
+      have hM1 := hMpop t c t1 hM hp
       rw [hpop] at hp; injection hp with e1 e2; subst e1; subst e2
       have hcq := hcin
       unfold inQC at hcq; simp only [decide_eq_true_eq] at hcq
@@ -873,7 +875,7 @@ theorem reservationAgree_top {TI : Core → Prop} {μ : Core → Nat} {J n R : N
       have hI1 : INV (delSt t c') A := hIA.of_sameLinks hD.sameLinks (fun d => by simp only [cT, hD.C])
       have hT1 : TI (delSt t c') := hTC.frame _ _ hD.topSame hTt
       have hcL1 : LiveC (delSt t c') c' := by simp only [LiveC, hD.C]; exact hcL
-      obtain ⟨hTC1, -, hpr1, hrow1⟩ := hMc _ (hMpop t c' hM)
+      obtain ⟨hTC1, -, hpr1, hrow1⟩ := hMc _ hM1
       obtain ⟨D, hD', hA⟩ := splitAgree_top hI1 (hTI _ hT1) (by rw [hD.rest.2.2.2.2.2.2.2.2.1]; exact hnone) hcL1
         hpr1 hrow1 hTC1
       exact fun t2 h => by
@@ -907,11 +909,12 @@ theorem bgAgree {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : 
     (Mc : Core → Prop) (hM4 : ∀ t, DFrame s2 t → PQCaps κ t → Mc t)
     (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
       ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
-    (hMpop : ∀ t c, Mc t → Mc (delSt t c))
+    (hMpop : ∀ t c t1, Mc t → pqPopMax.run t = .ok c t1 → Mc t1)
     (hMjob : ∀ s j t job r t1, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = some job →
-      (jobStep job).run t = .ok r t1 → Mc { t1 with resJob := r })
-    (hMsplit : ∀ s j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → pqPopMax.run t = .ok c t1 →
-      (splitChunkStart c).run t1 = .ok () t2 → Mc t2) :
+      (jobStep job).run t = .ok r t1 → ResInv TI s.P.K_R J n R μ L s (j + 1) { t1 with resJob := r } →
+      Mc { t1 with resJob := r })
+    (hMsplit : ∀ s j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = none → pqPopMax.run t = .ok c t1 →
+      (splitChunkStart c).run t1 = .ok () t2 → ResInv TI s.P.K_R J n R μ L s (j + 1) t2 → Mc t2) :
     ∃ s', (background y).run s1 = .ok () s' ∧
       ∃ L' m, evalF κ backgroundS s1 Ly = .ok s' L' m ∧ m ≤ bgBound s0.P := by
   obtain ⟨A, hI, hel⟩ := hPost.inv
@@ -1077,14 +1080,16 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
     (hI5 : (s.P.theta : ℝ) + R * (OM.Zeroing.Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat)
     {κ : Caps} (Lx : Loc) (hLx : Lx "x" = x) (hLh : Lx "h" = hh) (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
     (K : InsCaps κ s) (Mc : Core → Prop)
-    (hM4 : ∀ t, t.nodes = s.nodes → t.path = s.path → t.prep = s.prep → t.C.size = s.C.size → PQCaps κ t → Mc t)
+    (hM4 : ∀ t, OM.Proof.Top.ts t = OM.Proof.Top.ts s → t.resJob = s.resJob → t.prep = s.prep →
+      t.C.size = s.C.size → t.count = s.count + 1 → PQCaps κ t → Mc t)
     (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
       ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
-    (hMpop : ∀ t c, Mc t → Mc (delSt t c))
+    (hMpop : ∀ t c t1, Mc t → pqPopMax.run t = .ok c t1 → Mc t1)
     (hMjob : ∀ L s j t job r t1, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = some job →
-      (jobStep job).run t = .ok r t1 → Mc { t1 with resJob := r })
-    (hMsplit : ∀ L s j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → pqPopMax.run t = .ok c t1 →
-      (splitChunkStart c).run t1 = .ok () t2 → Mc t2) :
+      (jobStep job).run t = .ok r t1 → ResInv TI s.P.K_R J n R μ L s (j + 1) { t1 with resJob := r } →
+      Mc { t1 with resJob := r })
+    (hMsplit : ∀ L s j t c t1 t2, ResInv TI s.P.K_R J n R μ L s j t → Mc t → t.resJob = none → pqPopMax.run t = .ok c t1 →
+      (splitChunkStart c).run t1 = .ok () t2 → ResInv TI s.P.K_R J n R μ L s (j + 1) t2 → Mc t2) :
     ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧
       (∃ L' m, evalF κ insertAfterP.body s Lx = .ok s' L' m ∧ L' "y" = s.E.size ∧ m ≤ insBound s.P) ∧
       CostInv TI μ J n R (OM.Spec.insertAfterL x s.E.size L) s' ∧ s'.count = s.count + 1 ∧
@@ -1114,7 +1119,7 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
   obtain ⟨s2', hrun2', hPQ2, -⟩ := chunkSize_ok (lab := lab) (hh := hh) hC.low.pq hcL
   rw [hrun2] at hrun2'; injection hrun2' with _ e2; subst e2
   obtain ⟨-, -, hC2, -, r2⟩ := hPQ2
-  obtain ⟨-, -, -, -, -, -, -, hpr2, -, -, -, hN2, hPa2, -, -⟩ := r2
+  obtain ⟨-, -, -, -, -, -, -, hpr2, hjb2, -, -, hN2, hPa2, hci2, hlp2⟩ := r2
   have hsC : (sizeState s1 (gC s (eG s x))).C.size = s1.C.size := by simp [sizeState]
   have hsN : (sizeState s1 (gC s (eG s x))).nodes = s1.nodes := rfl
   have hsPa : (sizeState s1 (gC s (eG s x))).path = s1.path := rfl
@@ -1127,8 +1132,21 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
     ⟨by rw [fG]; have := K.G; omega, by rw [fE]; have := K.E; omega, by rw [fC]; exact K.C, K.fl, K.f0⟩
     (by rw [fG]; exact K.G) K.f0 (by rw [fF]; have := hI.freeG_len; have := K.G; have := K.fl; omega)
     (by have := K.E; omega) Mc
-    (fun t hD hq => hM4 t (by rw [hD.top.1, hN2, hsN, fN]) (by rw [hD.top.2.1, hPa2, hsPa, fPa])
-      (by rw [hD.top.2.2.2.2.2.1, hpr2, hsPr, fPr]) (by rw [hD.Csize, hC2, hsC, fC]) hq)
+    (fun t hD hq => hM4 t (by
+        have hPt : t.P = s.P := by rw [hD.P, hPost.P]
+        have hNt : t.nodes = s.nodes := by rw [hD.top.1, hN2, hsN, fN]
+        have hPat : t.path = s.path := by rw [hD.top.2.1, hPa2, hsPa, fPa]
+        have hct : t.cin = s.cin := by rw [hD.top.2.2.1, hci2]; rfl
+        have hlt : t.lpar = s.lpar := by rw [hD.top.2.2.2.1, hlp2]; rfl
+        have htag : ∀ c, (t.C.getX c).tag = (s.C.getX c).tag := fun c => by
+          have := (hD.links c).2.2
+          show cT t c = cT s c
+          rw [this]; show (s2.C.getX c).tag = _
+          rw [hC2]; simp only [sizeState, Array.getX_modify]; rw [fC]; split <;> rfl
+        unfold OM.Proof.Top.ts; rw [hPt, hNt, hPat, hct, hlt]; simp only [htag])
+      (by rw [hD.top.2.2.2.2.1, hjb2]; rfl)
+      (by rw [hD.top.2.2.2.2.2.1, hpr2, hsPr, fPr]) (by rw [hD.Csize, hC2, hsC, fC])
+      (by rw [hD.count, hPost.count]) hq)
     hMc hMpop (hMjob _) (hMsplit _)
   have hxs := hI.size_pos hx
   obtain ⟨hrunI, Li, mi, ei, hyi, hmi⟩ := insertAfterP_agree (κ := κ) (L := Lx) hLx hLh hxs.2 hgL.2.1
