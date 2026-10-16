@@ -25,3 +25,13 @@ The Lean port has started (`docs/LEAN.md` §7):
 * **M0:** machine model, cost semantics, program logic and list specification.
 * **M1:** the executable functional model replays 2,292 prototype traces (31 million records)
   exactly (`docs/TESTING.md` §10).
+* **M2–M5:** Theorem A and the cost lemmas at Level F (the executable model).
+* **M6:** the machine program. **Theorems A and B are proved for it** (`lean/OM/Impl/TheoremsM.lean`):
+  it returns the specification's answers, and every operation takes at most a fixed number of machine
+  steps (`opB 4 = 1,133,561,742`, the same for every `N` and history). A core of capacity `N` uses at
+  most `40000·N` memory cells.
+
+**Assumptions** (`docs/LEAN.md` §2.1): one step per instruction on words of unbounded size, and
+constant-time array allocation. The word-size theorem (values stay below `2^(c·log N)`, or the number
+of operations for handles) is **not proved**, so the unit-cost model is not yet justified formally.
+
