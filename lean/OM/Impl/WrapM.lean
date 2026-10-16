@@ -213,4 +213,125 @@ theorem curDelW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {x : Nat}
   refine ⟨(h2.bump _ |>.bump _).writeC (by simpa using hxc2), by simp [hL, OM.Machine.State.setLocs, m1], ?_⟩
   simp [OM.Machine.costList, Expr.cost] at *; omega
 
+/-! ### The next core -/
+
+/-- The next core changes (in its slot), with the same parameters and count. -/
+theorem WEnc.of_nxt {om : OM} {m m' : State} {p : Nat} (h : WEnc om m p) {n n' : Core} (hn : om.nxt = some n)
+    (hE : Enc (1 - p) (capsOf n'.P) n' m') (hS : ∀ b, ¬ InSlot (1 - p) b → Same b m m')
+    (hcnt : n'.count = n.count) (hP : n'.P = n.P) : WEnc { om with nxt := some n' } m' p := by
+  have hp := h.p2
+  have hp' : 1 - p < 2 := by omega
+  have hw : ∀ k, Same (wa k) m m' := fun k => hS _ (wa_notSlot hp')
+  have hi : ∀ q, Same (wIdx q) m m' := fun q => hS _ (wIdx_notSlot hp')
+  refine ⟨hp, fun k hk => by rw [(hw k).2]; exact h.scap k hk, by rw [(hw 0).1]; exact h.par,
+    by rw [(hw 1).1, h.nxtOn, hn]; rfl, by rw [(hw 2).1]; exact h.cursor, by rw [(hw 3).1]; exact h.cset,
+    by rw [(hw 4).1]; exact h.live, by rw [(hw 5).1]; exact h.next, by rw [(hw 6).1]; exact h.reb,
+    by rw [(hw 7).1]; exact h.kb, h.cur.of_same fun b hb => hS b (fun hpb => inSlot_disj (by omega) hpb hb),
+    fun n2 hn2 => ?_, fun x hx => ?_, fun _ x hx => ?_, ?_, fun n2 hn2 => ?_⟩
+  · cases hn2; exact hE
+  · rw [(hi p).2] at hx; rw [(hi p).1]; exact h.idxC x hx
+  · rw [(hi (1 - p)).2] at hx; rw [(hi (1 - p)).1]; exact h.idxN (by rw [hn]; rfl) x hx
+  · rw [(hi p).2]; exact h.roomC
+  · cases hn2; rw [(hi (1 - p)).2]; show _ + (n'.P.N - n'.count) ≤ _; rw [hcnt, hP]; exact h.roomN n hn
+
+/-- Writing `v` at handle `x` of the next handle map. -/
+theorem WEnc.writeN {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {x v : Nat}
+    (hx : x < m.cap (wIdx (1 - p))) :
+    WEnc { om with nxtIdx := om.nxtIdx.setX x v } (m.write (wIdx (1 - p)) x v) p := by
+  have hp := h.p2
+  have hne : ∀ k < 8, wa k ≠ wIdx (1 - p) := fun k hk e => by
+    have : (2000 + k : Nat) = 2010 + (1 - p) := e
+    omega
+  have hq : wIdx p ≠ wIdx (1 - p) := fun e => by
+    have : (2010 + p : Nat) = 2010 + (1 - p) := e
+    omega
+  refine ⟨hp, fun k hk => h.scap k hk, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    h.cur.of_same fun b hb => ⟨?_, rfl⟩, fun n hn => (h.nxt n hn).of_same fun b hb => ⟨?_, rfl⟩,
+    fun i hi => ?_, fun hn i hi => ?_, h.roomC, h.roomN⟩
+  all_goals simp only [State.write, OM.Machine.State.upd]
+  · rw [if_neg (hne 0 (by decide))]; exact h.par
+  · rw [if_neg (hne 1 (by decide))]; exact h.nxtOn
+  · rw [if_neg (hne 2 (by decide))]; exact h.cursor
+  · rw [if_neg (hne 3 (by decide))]; exact h.cset
+  · rw [if_neg (hne 4 (by decide))]; exact h.live
+  · rw [if_neg (hne 5 (by decide))]; exact h.next
+  · rw [if_neg (hne 6 (by decide))]; exact h.reb
+  · rw [if_neg (hne 7 (by decide))]; exact h.kb
+  · funext i; rw [if_neg (fun e => wIdx_notSlot hp (e ▸ hb))]
+  · funext i; rw [if_neg (fun e => wIdx_notSlot (p := 1 - p) (by omega) (e ▸ hb))]
+  · rw [if_neg hq]; exact h.idxC i hi
+  · simp only [if_true, OM.Proof.Top.getX_setX']
+    by_cases e : i = x
+    · simp [e]
+    · simp [e, h.idxN hn i hi]
+
+/-! ### Mirroring a deletion into `nxt` -/
+
+def mirrorDelC (p : Nat) : Stmt :=
+  .ite (.bin .eq (.load (wa 1) (.lit 0)) (.lit 0)) .skip
+    (.seq (.assign "xn" (.load (wIdx (1 - p)) (.var "x")))
+      (.ite (.bin .eq (.var "xn") (.lit 0)) .skip
+        (.seq (.call "markDead" ["x"] (markDeadP.body.compile (1 - p) κ₀) [] [.var "xn"] [])
+          (.store (wIdx (1 - p)) (.var "x") (.lit 0)))))
+
+/-- The core facts a deletion from `nxt` needs. -/
+def DelOK (n : Core) (xn : Nat) : Prop :=
+  ∃ (P : Params) (nn R : Nat) (L : List Nat), CostInv (TIat TopInv P) topMu (topJ P) nn R L n ∧ n.P = P ∧
+    xn ∈ L ∧ n.count = L.length ∧ Mc (capsOf P) P n
+
+theorem mirrorDelW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {x : Nat}
+    (hx : m.loc "x" = x) (hxc : om.nxt.isSome → x < m.cap (wIdx (1 - p)))
+    (hN : ∀ n, om.nxt = some n → om.nxtIdx.getX x ≠ 0 → DelOK n (om.nxtIdx.getX x))
+    {om2 : OM} (hr : om.mirrorDelete x = .ok om2) :
+    wp (mirrorDelC p) (fun m' k => WEnc om2 m' p ∧ m'.loc "x" = x ∧ k ≤ 50) m := by
+  have hp := h.p2
+  unfold mirrorDelC
+  rw [OM.Machine.wp_ite]
+  cases hn : om.nxt with
+  | none =>
+    have : om2 = om := by unfold OM.mirrorDelete at hr; rw [hn] at hr; cases hr; rfl
+    subst this
+    refine ⟨1, by simp [Expr.eval, h.scap 1 (by decide), h.nxtOn, hn, BinOp.eval, b2n], ?_⟩
+    simp only [ne_eq, one_ne_zero, not_false_eq_true, if_true, OM.Machine.wp_skip]
+    exact ⟨h.bump _, by simp [hx], by simp [Expr.cost]⟩
+  | some n =>
+    refine ⟨0, by simp [Expr.eval, h.scap 1 (by decide), h.nxtOn, hn, BinOp.eval, b2n], ?_⟩
+    simp only [ne_eq, not_true_eq_false, if_false]
+    have hxc' := hxc (by rw [hn]; rfl)
+    rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+    refine ⟨om.nxtIdx.getX x, by simp [Expr.eval, hx, hxc', h.idxN (by rw [hn]; rfl) x hxc'], ?_⟩
+    set m1 := ((m.bump _).bump _).setLoc "xn" (om.nxtIdx.getX x)
+    have h1 : WEnc om m1 p := ((h.bump _).bump _).setLoc _ _
+    rw [OM.Machine.wp_ite]
+    by_cases h0 : om.nxtIdx.getX x = 0
+    · have : om2 = om := by
+        unfold OM.mirrorDelete at hr; rw [hn] at hr; simp [h0] at hr
+        cases hr; rfl
+      subst this
+      refine ⟨1, by simp [Expr.eval, m1, h0, BinOp.eval], ?_⟩
+      simp only [ne_eq, one_ne_zero, not_false_eq_true, if_true, OM.Machine.wp_skip]
+      exact ⟨h1.bump _, by simp [m1, hx], by simp [Expr.cost]⟩
+    · refine ⟨0, by simp [Expr.eval, m1, h0, BinOp.eval], ?_⟩
+      simp only [ne_eq, not_true_eq_false, if_false]
+      obtain ⟨P, nn, R, L, hC, hP, hxL, hcntL, hM⟩ := hN n hn h0
+      obtain ⟨n', hr', ⟨L', c, he, hc⟩, -, hcnt', hP', -⟩ := markDeadAgreeM hC hP hxL
+        (OM.Machine.State.setLocs (fun _ => 0) ["x"] [om.nxtIdx.getX x])
+        (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) (capsOf_ok P) hcntL hM
+      have hom2 : om2 = { om with nxt := some n', nxtIdx := om.nxtIdx.setX x 0 } := by
+        unfold OM.mirrorDelete at hr; rw [hn] at hr; simp [h0, runCore, hr'] at hr; exact hr.symm
+      subst hom2
+      rw [OM.Machine.wp_seq, compile_κ₀ (1 - p) P]
+      have hb1 := h1.bump (Expr.maxv m1 (.bin .eq (.var "xn") (.lit 0)))
+      have hnE : Enc (1 - p) (capsOf P) n (m1.bump (Expr.maxv m1 (.bin .eq (.var "xn") (.lit 0)))) := by
+        rw [← hP]; exact hb1.nxt n hn
+      refine wp_coreCall hnE (by simp [OM.Machine.evalList, Expr.eval, m1]) he (fun m2 hE hS hL => ?_)
+      have h2 : WEnc { om with nxt := some n' } m2 p :=
+        hb1.of_nxt hn (by rw [hP', hP]; exact hE) hS hcnt' hP'
+      rw [OM.Machine.wp_store]
+      have hxc2 : x < m2.cap (wIdx (1 - p)) := by
+        rw [(hS _ (wIdx_notSlot (by omega))).2]; exact hxc'
+      refine ⟨x, 0, by simp [Expr.eval, hL, OM.Machine.State.setLocs, m1, hx], rfl, hxc2, ?_⟩
+      refine ⟨(h2.bump _ |>.bump _).writeN (by simpa using hxc2), by simp [hL, OM.Machine.State.setLocs, m1, hx], ?_⟩
+      simp [OM.Machine.costList, Expr.cost] at *; omega
+
 end OM.Impl
