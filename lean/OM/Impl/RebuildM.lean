@@ -142,6 +142,10 @@ theorem InService.insB {c : Core} {L : List Nat} (h : InService c L) : insBound 
 
 attribute [irreducible] insB
 
+theorem eval_bin {s : State} {op : BinOp} {a b : Expr} {x y : Nat} (ha : a.eval s = some x)
+    (hb : b.eval s = some y) : (Expr.bin op a b).eval s = op.eval x y := by
+  simp [Expr.eval, ha, hb]
+
 theorem eval_load {s : State} {a : Arr} {i : Expr} {j v : Nat} (hi : i.eval s = some j) (hj : j < s.cap a)
     (hv : s.mem a j = v) : (Expr.load a i).eval s = some v := by
   simp [Expr.eval, hi, hj, hv]
@@ -374,5 +378,253 @@ theorem iterW_ok {R : OM} {p f : Nat} {s : State} (hp : p < 2) (hI : LoopI R p (
             fun x hx => ?_, ?_⟩
           · rw [hl6 x hx.1, hl5, hl4 x hx.2.2.1 hx.2.2.2.1 hx.2.2.2.2.1 hx.2.2.2.2.2, hl3, hl2, hl1]
           · unfold iterB; simp only [Expr.cost] at hk4 hk6 ⊢; omega
+
+/-! ### The loop -/
+
+theorem LoopI.congr {R : OM} {p f : Nat} {s s' : State} (h : LoopI R p f s) (hl : s'.loc "bud" = s.loc "bud")
+    (hm : s'.mem = s.mem) (hc : s'.cap = s.cap) : LoopI R p f s' := by
+  rcases h with ⟨om, n, b, h, hb, hr, hS⟩ | ⟨hb, hW⟩
+  · exact Or.inl ⟨om, n, b, h.congr hm hc, by rw [hl, hb], hr, hS⟩
+  · exact Or.inr ⟨by rw [hl, hb], hW.congr hm hc⟩
+
+/-- **The rebuild loop**: the machine ends holding Level F's result, in one slot or the other. -/
+theorem loopW_ok {om : OM} {n : Core} {m : State} {p : Nat} (h : WEnc { om with nxt := some n } m p) {R : OM}
+    (hr : rebuildLoop om n (om.KB + 1) om.KB = .ok R) (hS : RLSafe om n (om.KB + 1) om.KB) :
+    wp (loopC p) (fun m' k => (WEnc R m' p ∨ WEnc R m' (1 - p)) ∧
+      (∀ x, ItLoc x → x ≠ "it" → m'.loc x = m.loc x) ∧ k ≤ 20 + (om.KB + 1) * (1 + iterB)) m := by
+  have hp := h.p2
+  unfold loopC
+  rw [OM.Machine.wp_seq]
+  refine wp_assign_g om.KB (eval_load_lit (by rw [h.scap 7 (by decide)]; decide) h.kb) (fun s1 hl1 hm1 hc1 => ?_)
+  have h1 := h.congr hm1 hc1
+  refine OM.Machine.wp_loop (om.KB + 1)
+    (fun k s => LoopI R p (om.KB + 1 - k) s ∧ ∀ x, ItLoc x → x ≠ "it" → s.loc x = m.loc x) iterB
+    (by simp [Expr.eval, BinOp.eval, h1.scap 7 (by decide), h1.kb]) ⟨?_, fun x hx _ => ?_⟩ ?_ ?_
+  · refine Or.inl ⟨om, n, om.KB, h1.bump _, ?_, by simpa using hr, by simpa using hS⟩
+    simp [hl1, OM.Machine.State.upd]
+  · simp [hl1, OM.Machine.State.upd, hx.1]
+  · intro k hk s ⟨hI, hfr⟩
+    have hI' : LoopI R p (om.KB - k + 1) (s.setLoc "it" k) := by
+      have e : om.KB + 1 - k = om.KB - k + 1 := by omega
+      rw [e] at hI
+      exact hI.congr (by simp [OM.Machine.State.upd]) rfl rfl
+    refine OM.Machine.wp_mono (fun s' k' ⟨hI2, hl2, hk2⟩ => ⟨⟨?_, fun x hx hit => ?_⟩, hk2⟩) (iterW_ok hp hI')
+    · have e : om.KB + 1 - (k + 1) = om.KB - k := by omega
+      rw [e]; exact hI2
+    · rw [hl2 x hx]; simp [OM.Machine.State.upd, hit, hfr x hx hit]
+  · intro s' c ⟨hI, hfr⟩ hc
+    refine ⟨?_, hfr, ?_⟩
+    · simp only [Nat.sub_self] at hI
+      rcases hI with ⟨om', n', b, h', -, hr', -⟩ | ⟨-, hW⟩
+      · left; cases hr'; exact h'
+      · right; exact hW
+    · simp only [Expr.cost] at hc ⊢; omega
+
+/-! ### Starting a rebuild -/
+
+/-- **A new `nxt`** in slot `1 - p`, with a zero handle map of room enough. -/
+theorem WEnc.start {om : OM} {m m' : State} {p : Nat} (h : WEnc om m p) (hn : om.nxt = none) {n : Core}
+    (hE : Enc (1 - p) (capsOf n.P) n m') (hS : ∀ b, ¬ InSlot (1 - p) b → b ≠ wIdx (1 - p) → Same b m m')
+    (hcap : om.nextHandle + (om.cur.P.N - om.cur.count) + n.P.N ≤ m'.cap (wIdx (1 - p)))
+    (hz : ∀ i, m'.mem (wIdx (1 - p)) i = 0) :
+    WEnc { om with nxt := some n, nxtIdx := #[] } (m'.write (wa 1) 0 1) p := by
+  have hp := h.p2
+  have hp' : 1 - p < 2 := by omega
+  have hw : ∀ k, k < 8 → Same (wa k) m m' := fun k hk => hS _ (wa_notSlot hp') (wa_ne_idx hk)
+  have hip : Same (wIdx p) m m' := hS _ (wIdx_notSlot hp') (fun e => by
+    have : (2010 + p : Nat) = 2010 + (1 - p) := e
+    omega)
+  have hW : ∀ b, b ≠ wa 1 → Same b m' (m'.write (wa 1) 0 1) := fun b hb =>
+    ⟨by simp [State.write, hb], rfl⟩
+  have hk : ∀ k, k < 8 → k ≠ 1 → (m'.write (wa 1) 0 1).mem (wa k) 0 = m.mem (wa k) 0 := fun k hk h1 => by
+    rw [(hW _ (wa_ne h1)).1, (hw k hk).1]
+  refine ⟨hp, fun k hk' => ?_, by rw [hk 0 (by decide) (by decide)]; exact h.par, ?_,
+    by rw [hk 2 (by decide) (by decide)]; exact h.cursor, by rw [hk 3 (by decide) (by decide)]; exact h.cset,
+    by rw [hk 4 (by decide) (by decide)]; exact h.live, by rw [hk 5 (by decide) (by decide)]; exact h.next,
+    by rw [hk 6 (by decide) (by decide)]; exact h.reb, by rw [hk 7 (by decide) (by decide)]; exact h.kb,
+    h.cur.of_same fun b hb => ?_, fun n2 hn2 => ?_, fun i hi => ?_, fun _ i hi => ?_, ?_, fun n2 hn2 => ?_⟩
+  · show m'.cap (wa k) = 1
+    rw [(hw k hk').2]; exact h.scap k hk'
+  · simp [State.write, OM.Machine.State.upd, b2n]
+  · have hb1 : b ≠ wa 1 := fun e => wa_notSlot hp (e ▸ hb)
+    have hb2 : ¬ InSlot (1 - p) b := fun hb' => inSlot_disj (by omega) hb hb'
+    have hb3 : b ≠ wIdx (1 - p) := fun e => wIdx_notSlot hp (e ▸ hb)
+    exact (hS b hb2 hb3).trans (hW b hb1)
+  · cases hn2
+    exact hE.of_same fun b hb => hW b (fun e => wa_notSlot hp' (e ▸ hb))
+  · have hi' : i < m.cap (wIdx p) := by rw [← hip.2]; exact hi
+    rw [(hW _ (Ne.symm (wa_ne_idx (by decide)))).1, hip.1]; exact h.idxC i hi'
+  · rw [(hW _ (Ne.symm (wa_ne_idx (by decide)))).1, hz]; simp [Array.getX]
+  · show om.nextHandle + (om.cur.P.N - om.cur.count) ≤ m'.cap (wIdx p)
+    rw [hip.2]; exact h.roomC
+  · cases hn2
+    show om.nextHandle + (om.cur.P.N - om.cur.count) + (n.P.N - n.count) ≤ m'.cap (wIdx (1 - p))
+    omega
+
+/-- The trigger: `count ≥ N/2`, or `N > N_MIN` and `live < N/8` (locals `cnt`, `nC`, `lv`). -/
+def condE : Expr :=
+  .bin .or (.bin .le (.bin .div (.var "nC") (.lit 2)) (.var "cnt"))
+    (.bin .and (.bin .lt (.lit 64) (.var "nC")) (.bin .lt (.var "lv") (.bin .div (.var "nC") (.lit 8))))
+
+/-- `live + mirrored` of the next capacity. -/
+def naE (p : Nat) : Expr :=
+  .bin .add (.var "lv") (.bin .add (.bin .div (.bin .add (.var "cnt") (.bin .add (.load (arrP p) (.lit 1)) (.lit 2)))
+    (.bin .sub (.load (wa 7) (.lit 0)) (.lit 1))) (.lit 1))
+
+/-- The next capacity, `4 · max na 16`. -/
+def nNE : Expr := .bin .mul (.lit 4) (.bin .add (.var "na") (tsubE (.lit 16) (.var "na")))
+
+/-- The capacity of the new handle map: `nextHandle + (N − count) + N'`. -/
+def idxCapE (p : Nat) : Expr :=
+  .bin .add (.bin .add (.load (wa 5) (.lit 0)) (tsubE (.load (arrP p) (.lit 0)) (.load (arrF p (.s .count)) (.lit 0))))
+    (.var "nN")
+
+/-- Start a rebuild if `cur` is half full or too few of its elements are live. -/
+def startC (p : Nat) : Stmt :=
+  .seq (.assign "cnt" (.load (arrF p (.s .count)) (.lit 0)))
+  (.seq (.assign "nC" (.load (arrP p) (.lit 0)))
+  (.seq (.assign "lv" (.load (wa 4) (.lit 0)))
+  (.ite condE
+    (.seq (.store (wa 3) (.lit 0) (.lit 0))
+    (.seq (.store (wa 6) (.lit 0) (.bin .add (.load (wa 6) (.lit 0)) (.lit 1)))
+    (.seq (.assign "na" (naE p))
+    (.seq (.assign "nN" nNE)
+    (.seq (newCoreS (1 - p))
+    (.seq (.alloc (wIdx (1 - p)) (idxCapE p))
+      (.store (wa 1) (.lit 0) (.lit 1))))))))
+    .skip)))
+
+/-- The locals a rebuild start may change. -/
+def StLoc (x : Reg) : Prop := x ∉ pLocs ∧ x ≠ "cnt" ∧ x ≠ "nC" ∧ x ≠ "lv" ∧ x ≠ "na" ∧ x ≠ "nN"
+
+/-- The state after a rebuild start. -/
+def startOM (om : OM) (n : Core) : OM := { om with nxt := some n, nxtIdx := #[], cursorSet := false, rebuilds := om.rebuilds + 1 }
+
+theorem newCore_true (P : Params) : newCore P true = .ok (prepStart P false) := by
+  unfold newCore runCore; rw [initCore_lazy_eq]; rfl
+
+theorem startW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) (hn : om.nxt = none) (hkb : 1 ≤ om.KB)
+    {R : OM} (hr : om.rebuildStep proofParams = .ok R) :
+    wp (startC p) (fun m' k => WEnc R m' p ∧ (∀ x, StLoc x → m'.loc x = m.loc x) ∧ k ≤ 3500) m := by
+  have hp := h.p2
+  have hp' : 1 - p < 2 := by omega
+  unfold startC
+  -- the three reads
+  rw [OM.Machine.wp_seq]
+  refine wp_assign_g om.cur.count (eval_load_lit (by rw [h.cur.cap]; simp [Fld.cap])
+    (by rw [h.cur.mem _ _ (by simp [Fld.cap])]; rfl)) (fun s1 hl1 hm1 hc1 => ?_)
+  have h1 := h.congr hm1 hc1
+  rw [OM.Machine.wp_seq]
+  refine wp_assign_g om.cur.P.N (eval_load_lit (by rw [h1.cur.pcap]; decide) (h1.cur.pmem .N))
+    (fun s2 hl2 hm2 hc2 => ?_)
+  have h2 := h1.congr hm2 hc2
+  rw [OM.Machine.wp_seq]
+  refine wp_assign_g om.live (eval_load_lit (by rw [h2.scap 4 (by decide)]; decide) h2.live)
+    (fun s3 hl3 hm3 hc3 => ?_)
+  have h3 := h2.congr hm3 hc3
+  have hcnt3 : s3.loc "cnt" = om.cur.count := by rw [hl3, hl2, hl1]; simp [OM.Machine.State.upd]
+  have hnC3 : s3.loc "nC" = om.cur.P.N := by rw [hl3, hl2]; simp [OM.Machine.State.upd]
+  have hlv3 : s3.loc "lv" = om.live := by rw [hl3]; simp [OM.Machine.State.upd]
+  have hl3' : ∀ x, x ≠ "cnt" → x ≠ "nC" → x ≠ "lv" → s3.loc x = m.loc x := fun x a b c => by
+    rw [hl3, hl2, hl1]; simp [OM.Machine.State.upd, a, b, c]
+  -- the trigger
+  by_cases hc : (decide (om.cur.count ≥ om.cur.P.N / 2) || (decide (om.cur.P.N > N_MIN) && decide (om.live < om.cur.P.N / 8))) = true
+  · have hR : R = startOM om (prepStart (proofParams om.nextCapacity) false) := by
+      have e : om.rebuildStep proofParams = .ok (startOM om (prepStart (proofParams om.nextCapacity) false)) := by
+        unfold OM.rebuildStep; rw [hn]
+        simp only [hc, if_true, newCore_true, bind, Except.bind, pure, Except.pure]; rfl
+      rw [e] at hr; injection hr with hr; exact hr.symm
+    subst hR
+    have hc' : om.cur.P.N / 2 ≤ om.cur.count ∨ (64 < om.cur.P.N ∧ om.live < om.cur.P.N / 8) := by
+      simpa [N_MIN] using hc
+    refine wp_ite_g 1 (by
+      simp only [condE, Expr.eval, hcnt3, hnC3, hlv3, Option.bind_some, BinOp.eval]
+      rcases hc' with h' | ⟨h1', h2'⟩
+      · simp [h']
+      · simp [h1', h2']) (fun s4 hl4 hm4 hc4 => ?_)
+    simp only [ne_eq, one_ne_zero, not_false_eq_true, if_true]
+    have h4 := h3.congr hm4 hc4
+    -- the scalar writes
+    rw [OM.Machine.wp_seq]
+    refine wp_store_g 0 0 rfl rfl (by rw [h4.scap 3 (by decide)]; decide) (fun s5 hl5 hm5 hc5 => ?_)
+    have h5 := (h4.writeCset false).congr hm5 hc5
+    rw [OM.Machine.wp_seq]
+    refine wp_store_g 0 (om.rebuilds + 1) rfl
+      (by simp [Expr.eval, BinOp.eval, h5.scap 6 (by decide), h5.reb]) (by rw [h5.scap 6 (by decide)]; decide)
+      (fun s6 hl6 hm6 hc6 => ?_)
+    have h6 := (h5.writeReb (om.rebuilds + 1)).congr hm6 hc6
+    have hl6' : s6.loc = s3.loc := by rw [hl6, hl5, hl4]
+    -- the next capacity
+    rw [OM.Machine.wp_seq]
+    set na := om.live + ((om.cur.count + (om.cur.P.L + 2)) / (om.KB - 1) + 1)
+    refine wp_assign_g na (by
+      have hL : s6.mem (arrP p) 1 = om.cur.P.L := h6.cur.pmem .L
+      have hK : s6.mem (wa 7) 0 = om.KB := h6.kb
+      simp [naE, Expr.eval, hL, hK, BinOp.eval, hl6', hcnt3, hlv3, h6.cur.pcap, h6.scap 7 (by decide : 7 < 8), hkb]
+      omega) (fun s7 hl7 hm7 hc7 => ?_)
+    rw [OM.Machine.wp_seq]
+    have hcapv : 4 * (na + (16 - na)) = om.nextCapacity := by
+      show 4 * (na + (16 - na)) = 4 * max na 16
+      rw [Nat.max_def]; split <;> omega
+    refine wp_assign_g om.nextCapacity (by
+      have : (tsubE (.lit 16) (.var "na")).eval s7 = some (16 - na) :=
+        tsubE_eval rfl (by simp [Expr.eval, hl7, OM.Machine.State.upd])
+      simp only [nNE, Expr.eval, this, Option.bind_some, BinOp.eval, hl7, OM.Machine.State.upd, if_true]
+      rw [hcapv]) (fun s8 hl8 hm8 hc8 => ?_)
+    have h8 := (h6.congr hm7 hc7).congr hm8 hc8
+    have hN8 : s8.loc "nN" = om.nextCapacity := by rw [hl8]; simp [OM.Machine.State.upd]
+    have hpos : 0 < om.nextCapacity := by rw [← hcapv]; omega
+    -- the new core
+    rw [OM.Machine.wp_seq]
+    refine OM.Machine.wp_mono (fun s9 k9 ⟨hE9, hS9, hN9, hl9, hk9⟩ => ?_) (OM.Impl.newCore_ok (1 - p) hN8 hpos)
+    set P' := proofParams om.nextCapacity
+    have hw9 : ∀ k, Same (wa k) s8 s9 := fun k => hS9 _ (wa_notSlot hp')
+    have hsl9 : ∀ b, InSlot p b → Same b s8 s9 := fun b hb => hS9 b (fun hb' => inSlot_disj (by omega) hb hb')
+    have hcur9 : Enc p (capsOf om.cur.P) om.cur s9 := h8.cur.of_same hsl9
+    -- the handle map
+    rw [OM.Machine.wp_seq, OM.Machine.wp_alloc]
+    have hcntv : (Expr.load (arrF p (.s .count)) (.lit 0)).eval s9 = some om.cur.count :=
+      eval_load_lit (by rw [hcur9.cap]; simp [Fld.cap]) (by rw [hcur9.mem _ _ (by simp [Fld.cap])]; rfl)
+    have hNv : (Expr.load (arrP p) (.lit 0)).eval s9 = some om.cur.P.N :=
+      eval_load_lit (by rw [hcur9.pcap]; decide) (hcur9.pmem .N)
+    have hhv : (Expr.load (wa 5) (.lit 0)).eval s9 = some om.nextHandle :=
+      eval_load_lit (by rw [(hw9 5).2, h8.scap 5 (by decide)]; decide) (by rw [(hw9 5).1]; exact h8.next)
+    refine ⟨om.nextHandle + (om.cur.P.N - om.cur.count) + om.nextCapacity, by
+      have ht := tsubE_eval hNv hcntv
+      unfold idxCapE
+      rw [eval_bin (eval_bin hhv ht) (show (Expr.var "nN").eval s9 = some om.nextCapacity by simp [Expr.eval, hN9])]
+      rfl, ?_⟩
+    set s10 := (s9.bump ((idxCapE p).maxv s9)).alloc (wIdx (1 - p)) (om.nextHandle + (om.cur.P.N - om.cur.count) + om.nextCapacity)
+    have hne : ∀ b, b ≠ wIdx (1 - p) → Same b s9 s10 := fun b hb => ⟨by simp [s10, State.alloc, hb],
+      by simp [s10, State.alloc, OM.Machine.State.upd, hb]⟩
+    refine wp_store_g 0 1 rfl rfl (by
+      rw [(hne _ (wa_ne_idx (by decide))).2, (hw9 1).2, h8.scap 1 (by decide)]; decide) (fun s11 hl11 hm11 hc11 => ?_)
+    have hW := WEnc.start (n := prepStart P' false) h8 (by simpa using hn)
+      (m' := s10) (hE9.of_same fun b hb => hne b (fun e => wIdx_notSlot hp' (e ▸ hb)))
+      (fun b hb1 hb2 => (hS9 b hb1).trans (hne b hb2))
+      (by simp [s10, State.alloc, OM.Machine.State.upd]; rfl) (fun i => by simp [s10, State.alloc])
+    refine ⟨hW.congr hm11 (by rw [hc11]; rfl), fun x hx => ?_, ?_⟩
+    · obtain ⟨x0, x1, x2, x3, x4, x5⟩ := hx
+      rw [hl11]; show s9.loc x = m.loc x
+      rw [hl9 x x0, hl8, hl7]; simp only [OM.Machine.State.upd, if_neg x5, if_neg x4]
+      rw [hl6', hl3' x x1 x2 x3]
+    · simp only [Expr.cost, idxCapE, naE, nNE, condE, tsubE] at hk9 ⊢; omega
+  · have hR : R = om := by
+      have e : om.rebuildStep proofParams = .ok om := by
+        unfold OM.rebuildStep; rw [hn]
+        simp only [hc, Bool.false_eq_true, if_false, pure, Except.pure]
+      rw [e] at hr; injection hr with hr; exact hr.symm
+    subst R
+    have hc' : ¬ (om.cur.P.N / 2 ≤ om.cur.count ∨ (64 < om.cur.P.N ∧ om.live < om.cur.P.N / 8)) := by
+      simpa [N_MIN] using hc
+    push_neg at hc'
+    refine wp_ite_g 0 (by
+      simp only [condE, Expr.eval, hcnt3, hnC3, hlv3, Option.bind_some, BinOp.eval]
+      by_cases h64 : 64 < om.cur.P.N
+      · simp [hc'.1, Nat.not_lt.mpr (hc'.2 h64)]
+      · simp [hc'.1, h64]) (fun s4 hl4 hm4 hc4 => ?_)
+    simp only [ne_eq, not_true_eq_false, if_false]
+    refine wp_skip_g ⟨h3.congr hm4 hc4, fun x hx => by rw [hl4, hl3' x hx.2.1 hx.2.2.1 hx.2.2.2.1], ?_⟩
+    simp only [Expr.cost, condE]; omega
 
 end OM.Impl

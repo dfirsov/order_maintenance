@@ -27,10 +27,14 @@ def newCoreS (q : Nat) : Stmt :=
 theorem proofParams_B (N : Nat) : 1 ≤ (proofParams N).B_e ∧ 1 ≤ (proofParams N).B_g := by
   simp [proofParams]
 
+/-- The locals the parameter computation sets. -/
+def pLocs : List Reg := ["L", "kE", "kG", "kC", "kN", "kB", "kCc", "kL", "kR", "kRc", "kf", "kW"]
+
 /-- **A new core**: slot `q` holds `prepStart (proofParams N) false`. -/
 theorem newCore_ok (q : Nat) {m : State} {N : Nat} (hN : m.loc "nN" = N) (hpos : 0 < N) :
     wp (newCoreS q) (fun m' n => Enc q (capsOf (proofParams N)) (prepStart (proofParams N) false) m' ∧
-      (∀ b, ¬ InSlot q b → Same b m m') ∧ m'.loc "nN" = N ∧ n ≤ 3000) m := by
+      (∀ b, ¬ InSlot q b → Same b m m') ∧ m'.loc "nN" = N ∧ (∀ x, x ∉ pLocs → m'.loc x = m.loc x) ∧
+      n ≤ 3000) m := by
   obtain ⟨a1, a2, a3, a4, a5, a6, a7⟩ := paramsS_ok q hN hpos
   set P := proofParams N
   set m1 := (exec (paramsS q) m).st
@@ -48,7 +52,7 @@ theorem newCore_ok (q : Nat) {m : State} {N : Nat} (hN : m.loc "nN" = N) (hpos :
   show wp _ _ m2
   rw [compile_κ₀ q P]
   refine wp_coreCall b4 (by rfl) he (fun m3 hE hS hL => ?_)
-  refine ⟨hE, fun b hb => ?_, ?_, ?_⟩
+  refine ⟨hE, fun b hb => ?_, ?_, fun x hx => ?_, ?_⟩
   · have h1 : Same b m m1 := by
       by_cases e : b = arr q .prm
       · exact absurd (e ▸ arr_inSlot q .prm) hb
@@ -56,6 +60,10 @@ theorem newCore_ok (q : Nat) {m : State} {N : Nat} (hN : m.loc "nN" = N) (hpos :
     exact h1.trans ((b5 b hb).trans (hS b hb))
   · rw [hL]; simp [OM.Machine.State.setLocs, b3, a7 "nN" (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), hN]
+  · simp only [pLocs, List.mem_cons, List.not_mem_nil, or_false, not_or] at hx
+    obtain ⟨x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12⟩ := hx
+    rw [hL]; simp only [OM.Machine.State.setLocs, List.map]; rw [b3]
+    exact a7 x x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12
   · rw [b2]
     have := a2
     have hb : OM.Machine.allocCost (Slot.allNP.map fun sl => (arr q sl, capE sl)) ≤ 1000 := by
