@@ -297,4 +297,121 @@ theorem insert_eq {mk : Nat → Params} {om : OM} {hx : Option Nat} {c' : Core} 
   | error e => simp [Except.bind]
   | ok a => simp [Except.bind]
 
+/-! ### Insertion -/
+
+def liveIncC : Stmt := .store (wa 4) (.lit 0) (.bin .add (.load (wa 4) (.lit 0)) (.lit 1))
+
+theorem liveIncW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) :
+    wp liveIncC (fun m' k => WEnc { om with live := om.live + 1 } m' p ∧ m'.loc = m.loc ∧ k ≤ 10) m :=
+  wp_store_g 0 (om.live + 1) rfl (by simp [Expr.eval, BinOp.eval, h.scap 4 (by decide), h.live])
+    (by rw [h.scap 4 (by decide)]; decide)
+    (fun s' hl hm hc => ⟨(h.writeLive _).congr hm hc, hl, by simp [Expr.cost]⟩)
+
+/-- The insertion code of parity `p`. -/
+def insC (p : Nat) : Stmt := .seq (curInsC p) (.seq (mirrorInsC p) (.seq liveIncC (rebuildC p)))
+
+/-- **The wrapper's insertion**: the handle of the anchor in local `x` (if `hx` = 1). -/
+def insertWS : Stmt := byPar insC
+
+/-- The cost bound of an insertion. -/
+def insW (KB : Nat) : Nat := 2 * insB + 400 + rebB KB
+
+theorem insBound_of {P : Params} (h : P = proofParams P.N) : insBound P = insB := by
+  rw [h]; exact insBound_proof _
+
+theorem wp_par_or {om : OM} {m : State} {p : Nat} (hp : p < 2) (h : WEnc om m p ∨ WEnc om m (1 - p)) :
+    WEnc om m 0 ∨ WEnc om m 1 := by
+  have : p = 0 ∨ p = 1 := by omega
+  rcases h with h | h
+  · rcases this with rfl | rfl
+    · exact Or.inl h
+    · exact Or.inr h
+  · rcases this with rfl | rfl
+    · exact Or.inr h
+    · exact Or.inl h
+
+/-- **An insertion at Level M**: it answers Level F's handle, keeps the invariant, and the machine
+code runs in at most `insW K_B` steps. -/
+theorem insertW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEnc om m p) (hI : MInv om Sp)
+    {hx : Option Nat} (hv : (insOp hx).Valid Sp) (hhx : m.loc "hx" = b2n hx.isSome)
+    (hxl : ∀ x, hx = some x → m.loc "x" = x) :
+    ∃ om', om.insert proofParams hx = .ok (Sp.fresh, om') ∧ MInv om' (OM.Spec.step Sp (insOp hx)).1 ∧
+      wp insertWS (fun m' k => (WEnc om' m' 0 ∨ WEnc om' m' 1) ∧ m'.loc "hy" = Sp.fresh ∧
+        k ≤ insW om.KB) m := by
+  have hp := h.p2
+  have hW := hI.1
+  obtain ⟨hS, hf, A, hR, hL, hIdx, hN⟩ := hW.w
+  obtain ⟨om', hins, hW'⟩ := insert_cost costSetup hW hx hv
+  obtain ⟨c', om2, hr1, hm2, hsafe⟩ := insert_safe costSetup hW hx hv
+  have hR' : ({ om2 with live := om2.live + 1 } : OM).rebuildStep proofParams = .ok om' := by
+    rw [← insert_eq hr1 hm2, hf]; exact hins
+  -- the anchor, and `cur` in service
+  have hxS : ∀ x, hx = some x → x ∈ Sp.list := fun x e => by subst e; exact hv
+  have hxL : insAnchor om hx ∈ A.elist := by
+    cases hx with
+    | none => exact hR.head
+    | some x => exact (hIdx x (hxS x rfl)).1
+  have hS0 := hI.cur hR.inv
+  obtain ⟨hk, hRf, hn1, hsize, hcap, hI5, hpow⟩ := hS0.params
+  -- the side conditions after the mirroring and the rebuild step
+  obtain ⟨c'', hr'', -, -, -, hP'', hM''⟩ := hS0.insert hxL om.nextHandle
+    (fun r => if r = "x" then insAnchor om hx else om.nextHandle) (by simp) (by simp)
+  have hr1' : (insertAfter (insAnchor om hx) om.nextHandle).run om.cur = .ok om.cur.E.size c' := hr1
+  rw [hr1'] at hr''
+  injection hr'' with _ hcc; subst hcc
+  obtain ⟨e1, e2, hX2⟩ := mirrorInsert_M (om := insOM om c' om.cur.E.size) (hx := hx) (hy := om.nextHandle)
+    (fun n hn => hI.2.2 n hn) (fun n hn hs hc => hI.mirror hx n hn hs hc) hm2
+  have hX3 : MX ({ om2 with live := om2.live + 1 } : OM) :=
+    ⟨by show Mc (capsOf om2.cur.P) om2.cur.P om2.cur; rw [e1]; show Mc (capsOf c'.P) c'.P c'; rw [hP'']; exact hM'',
+      fun n hn => hX2 n hn⟩
+  refine ⟨om', hins, ⟨hW', rebuild_MX hX3 hsafe hR'⟩, ?_⟩
+  -- the machine
+  refine wp_byPar h ?_
+  have h0 := h.bump (parE.maxv m)
+  unfold insC
+  rw [OM.Machine.wp_seq]
+  have hxc : ∀ x, hx = some x → x < om.nextHandle := fun x e => by
+    have := hS.2 x (hxS x e); rw [hf]; exact this
+  obtain ⟨c3, y, hr3, -, -, -, -, hy, hwp1⟩ := curInsW_ok h0 (by simpa using hhx)
+    (fun x e => ⟨by simpa using hxl x e, by have := h0.roomC; have := hxc x e; omega⟩)
+    hS0.ok.cost rfl hxL hS0.ok.cnt hS0.room hS0.mc hk hRf hn1 hsize hcap hI5 hpow
+  rw [hr1'] at hr3
+  injection hr3 with hyy hcc; subst hcc; subst hyy
+  refine OM.Machine.wp_mono (fun m1 k1 ⟨h1, hy1, hyy1, hhx1, hx1, hk1⟩ => ?_) hwp1
+  rw [OM.Machine.wp_seq]
+  have hib : insBound ((insOM om c' om.cur.E.size).nxt.map (·.P) |>.getD (insOM om c' om.cur.E.size).cur.P) = insB := by
+    cases hn : om.nxt with
+    | none => simp only [insOM, hn, Option.map_none, Option.getD_none]; rw [hP'']; exact hS0.insB
+    | some n =>
+      simp only [insOM, hn, Option.map_some, Option.getD_some]
+      obtain ⟨c₀, live₀, I, D, hRW⟩ := hW.busy n hn
+      rw [hRW.nP]; exact insBound_proof _
+  have hmir := mirrorInsW_ok (om := insOM om c' om.cur.E.size) h1 (hx := hx) (hy := om.nextHandle)
+    (by rw [hhx1]; simpa using hhx)
+    (fun x e => ⟨by rw [hx1]; simpa using hxl x e, fun hs => by
+      obtain ⟨n, hn⟩ := Option.isSome_iff_exists.mp hs
+      have h5 := h1.roomN n hn; have h6 := hxc x e
+      simp only [insOM] at h5; omega⟩)
+    hy1
+    (fun hs => by
+      obtain ⟨n, hn⟩ := Option.isSome_iff_exists.mp hs
+      have h5 := h1.roomN n hn
+      simp only [insOM] at h5; omega)
+    (fun n hn hs hc => hI.mirror hx n hn hs hc) hm2
+  refine OM.Machine.wp_mono (fun m2 k2 ⟨h2, hl2, hk2⟩ => ?_) hmir
+  rw [OM.Machine.wp_seq]
+  refine OM.Machine.wp_mono (fun m3 k3 ⟨h3, hl3, hk3⟩ => ?_) (liveIncW_ok h2)
+  have hkb : 1 ≤ ({ om2 with live := om2.live + 1 } : OM).KB := by
+    show 1 ≤ om2.KB; rw [e2]; have := hW.kb; show 1 ≤ om.KB; omega
+  obtain ⟨-, hwp4⟩ := rebuildW_ok h3 hX3 hkb hsafe hR'
+  refine OM.Machine.wp_mono (fun m4 k4 ⟨h4, hl4, hk4⟩ => ⟨wp_par_or hp h4, ?_, ?_⟩) hwp4
+  · rw [hl4 "hy" (by simp [RbLoc, StLoc, ItLoc, pLocs]), hl3, hl2 "hy" (by decide) (by decide) (by decide), hy1, hf]
+  · have hKB : ({ om2 with live := om2.live + 1 } : OM).KB = om.KB := e2
+    rw [hKB] at hk4
+    rw [hib] at hk2
+    have := hS0.insB
+    unfold insW
+    simp only [Expr.cost, parE] at hk1 hk2 hk3 hk4 ⊢
+    omega
+
 end OM.Impl
