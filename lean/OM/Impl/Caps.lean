@@ -930,4 +930,107 @@ theorem mc_final {κ : Caps} {P : Params} (K : CapsOK κ P) (hN : 1 ≤ P.N) {s 
   · rw [q7]; show 0 < _; omega
   · rw [hC] at hc; rw [hz c hc]; rfl
 
+/-! ### The capacities of a core -/
+
+/-- **The capacities of a core with parameters `P`**: every bound above, exactly. The list
+capacities are constants (they fix the strides of the compiled code), except the free-group
+stack's, which has stride 0. -/
+def capsOf (P : Params) : Caps where
+  tbl
+    | .E => P.N + 2
+    | .G => 2 * P.N + 4
+    | .C => cb P + 2
+    | .N => nbMax P + cb P + 2
+  arr
+    | .pqHead => P.N + 3
+    | .pqNext => cb P + 2
+    | .pqPrev => cb P + 2
+    | .pqWhere => cb P + 2
+    | .nbNext => P.N + 3
+    | .nbPrev => P.N + 3
+    | .lpar => nbMax P + cb P + 2
+  lrec
+    | .children => nbMax P + 2
+    | .table => nbMax P + 2
+    | .inTab => nbMax P + 2
+    | .side => nbMax P + 2
+    | .cin => nbMax P + cb P + 2
+    | .freeG => 1
+  lcap
+    | .children => 162
+    | .table => 162
+    | .inTab => 322
+    | .side => 322
+    | .cin => 322
+    | .freeG => 2 * P.N + 4
+  pw := P.H + 1
+
+theorem capsOf_ok (P : Params) : CapsOK (capsOf P) P where
+  N := by simp [capsOf]
+  NC := by simp [capsOf]; omega
+  C := le_rfl
+  rc := le_rfl
+  rs := le_rfl
+  rt := le_rfl
+  ri := le_rfl
+  rcin := le_rfl
+  alp := le_rfl
+  lt := le_rfl
+  ls := le_rfl
+  li := le_rfl
+  lcin := le_rfl
+  lc := le_rfl
+  pw := rfl
+  E := le_rfl
+  G := le_rfl
+  fl := le_rfl
+  f0 := by simp [capsOf]
+  cC := by simp [capsOf, Ccap]
+  cB := by simp [capsOf, Bcap]
+  pqC := ⟨rfl, rfl⟩
+  pqB := ⟨rfl, rfl⟩
+
+theorem capsOf_init (P : Params) : InitCaps (capsOf P) P where
+  pw := rfl
+  N := by simp [capsOf, nbMax, nb0]; omega
+  C := by simp [capsOf]
+  rc := by simp [capsOf, nbMax, nb0]; omega
+  rt := by simp [capsOf, nbMax, nb0]; omega
+  ri := by simp [capsOf, nbMax, nb0]; omega
+  rcin := by simp [capsOf]
+  alp := by simp [capsOf]
+  cc := by simp [capsOf]
+  ct := by simp [capsOf]
+  ci := by simp [capsOf]
+  ccin := by simp [capsOf]
+
+/-- The list capacities do not depend on the parameters, so neither does the compiled code. -/
+theorem capsOf_lcap (P P' : Params) (k : LK) : LK.stride (capsOf P).lcap k = LK.stride (capsOf P').lcap k := by
+  cases k <;> rfl
+
+theorem Exp.compile_congr {p : Nat} {κ κ' : Caps} (h : ∀ k : LK, k.stride κ.lcap = k.stride κ'.lcap) :
+    ∀ e : Exp, e.compile p κ = e.compile p κ' := by
+  intro e
+  induction e with
+  | bin op a b iha ihb => simp [Exp.compile, iha, ihb]
+  | un op a ih => simp [Exp.compile, ih]
+  | rd f i ih => simp [Exp.compile, ih]
+  | lrd k b i j ihi ihj => simp [Exp.compile, ihi, ihj, h k]
+  | llen k i ih => simp [Exp.compile, ih]
+  | prd c j ihc ihj => simp [Exp.compile, ihc, ihj]
+  | _ => rfl
+
+/-- **The compiled code does not depend on the capacities**, beyond the list strides. -/
+theorem Stm.compile_congr {p : Nat} {κ κ' : Caps} (h : ∀ k : LK, k.stride κ.lcap = k.stride κ'.lcap) :
+    ∀ c : Stm, c.compile p κ = c.compile p κ' := by
+  have he := Exp.compile_congr (p := p) h
+  intro c
+  induction c with
+  | seq c d ihc ihd => simp [Stm.compile, ihc, ihd]
+  | ite e t f iht ihf => simp [Stm.compile, he, iht, ihf]
+  | loop x n b ih => simp [Stm.compile, he, ih]
+  | call nm ps b rs args ds ih => simp [Stm.compile, ih, he]
+  | «catch» c d ihc ihd => simp [Stm.compile, ihc, ihd]
+  | _ => simp [Stm.compile, he, h]
+
 end OM.Impl
