@@ -11,7 +11,7 @@ order query on a list) and prove it correct in Lean 4.
 | `docs/LEAN.md` | design of the Lean formalization: deep-embedded word RAM with counted steps, two-level proof, milestones |
 | `lean/` | Lean 4 development (`lake build` in `lean/`): list specification, machine model with cost semantics, program logic, executable functional model (`OM/Model`), trace replay (`lake exe replay`) |
 | `prototype/` | executable Python prototype with differential tests and adversarial stress (see its README) |
-| `papers/` | source papers: Dietz–Sleator 1987, Bender et al. 2002, Kopelowitz 2012, Brodal's slides |
+| `papers/` | citations of the source papers: Dietz–Sleator 1987, Bender et al. 2002, Kopelowitz 2012, Brodal's slides |
 
 Status: the Python prototype implements the full algorithm. An extensive testing campaign
 (`docs/TESTING.md`) found no correctness failures and a bounded cost per operation up to
@@ -34,4 +34,8 @@ The Lean port (`docs/LEAN.md` §7):
 **Assumptions** (`docs/LEAN.md` §2.1): one step per instruction on words of unbounded size, and
 constant-time array allocation. The word-size theorem (values stay below `2^(c·log N)`, or the number
 of operations for handles) is **not proved**, so the unit-cost model is not yet justified formally.
+
+## License
+
+Copyright 2026 Denis Firsov. Licensed under the Apache License, Version 2.0 (`LICENSE`).
 

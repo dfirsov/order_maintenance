@@ -28,10 +28,10 @@ guard check on every write turns each of those arguments into a *cost* fact inst
 
 ## 1. Literature and why we don't follow any single paper
 
-Local copies are in `papers/`.
+Full citations are in `papers/README.md`.
 
 * **Dietz & Sleator 1987/88**, *Two algorithms for maintaining order in a list*
-  (CMU-CS-88-113; `papers/dietz-sleator-1987.pdf`).
+  (CMU-CS-88-113).
   * §2: a simple list-labeling algorithm with labels in `[0, M)`, `M > n²`, and
     O(log n) amortized relabels; it reaches O(1) amortized with sublists of size log n.
   * §3 + appendix: the **O(1) worst-case algorithm**. It uses a tree of height 4 in which
@@ -44,12 +44,12 @@ Local copies are in `papers/`.
   * The appendix pseudocode has bugs. For example, `IncrementalSplit` updates only
     `nleaves` of `pred(x)`, not of its ancestors.
 * **Bender, Cole, Demaine, Farach-Colton, Zito 2002**, *Two simplified algorithms…*
-  (ESA; `papers/bender-et-al-2002.pdf`). It gives a simple amortized "tag-range
+  (ESA). It gives a simple amortized "tag-range
   relabeling" algorithm with an easy proof. Its worst-case O(1) algorithm is deferred to a
   "full paper" that **was never published** (confirmed by Kopelowitz 2012). Its §5
   (O(log² n) worst-case file maintenance) has proofs left "to the full version".
 * **Kopelowitz 2012**, *On-line indexing for general alphabets via predecessor queries on
-  subsets of an ordered list* (FOCS; arXiv:1208.3798; `papers/kopelowitz-2012.pdf`).
+  subsets of an ordered list* (FOCS; arXiv:1208.3798).
   * §3: list labeling with **O(log n) worst-case** cost and polynomial label space, built
     on a weight-balanced B-tree (Arge–Vitter). Each tree level owns a bit-field of the
     tag. After a node split, a background "tag-process" rewrites that field in the
