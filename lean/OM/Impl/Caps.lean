@@ -1033,4 +1033,61 @@ theorem Stm.compile_congr {p : Nat} {κ κ' : Caps} (h : ∀ k : LK, k.stride κ
   | «catch» c d ihc ihd => simp [Stm.compile, ihc, ihd]
   | _ => simp [Stm.compile, he, h]
 
+/-! ### A preparation step -/
+
+/-- **A core under construction**, as Level M needs it: Level F's stage invariant, empty path
+rows from 2 on, and empty top arrays at the first stage. -/
+def PrepM (s : Core) : Prop :=
+  topPI s ∧ PZ1 s ∧ (∀ h, Stage s.P h s → h = 1 → s.nodes = #[default] ∧ s.path = #[] ∧ s.cin = #[] ∧ s.lpar = #[])
+
+theorem prepM_start (P : Params) (hPP : topPP P) : PrepM (prepStart P false) := by
+  refine ⟨⟨hPP, rfl, 1, le_rfl, by omega, stage_one (initState P) false⟩, pz1_initState P false, fun h _ _ => ?_⟩
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+/-- **A preparation step agrees**, and keeps the construction's invariant or makes the core
+ready with the capacity predicate. -/
+theorem prepAgreeM {s : Core} (hM : PrepM s) (hN : 1 ≤ s.P.N) {b : Bool} {s' : Core}
+    (hr : prepareStep.run s = .ok b s') (L : Loc) :
+    (∃ L' c, evalF (capsOf s.P) prepP.body s L = .ok s' L' c ∧ L' "r" = b2n b ∧ c ≤ 440) ∧
+      s'.P = s.P ∧ (b = false → PrepM s') ∧ (b = true → Mc (capsOf s.P) s.P s' ∧ TopInv s' ∧ s'.resJob = none) := by
+  obtain ⟨⟨hPP, hrd, h, h1, hH, S⟩, hz, hfirst⟩ := hM
+  have hb := hPP.beta
+  have hH1 : 1 ≤ s.P.H := by have := hPP.2; omega
+  have hA : ISAgree (capsOf s.P) s 400 :=
+    isAgree_stage S h1 hH hb hH1 (capsOf_init s.P) (fun e => hfirst h S e)
+  by_cases hh : h ≤ s.P.H
+  · obtain ⟨s1, hr1, S', hrd'⟩ := stage_next S h1 hh hb
+    have hrun : prepareStep.run s = .ok false s1 := by
+      unfold prepareStep; simp [hrd]; rw [hr1]; simp [hrd', hrd]
+    have hrdA : ∀ b' s2, initStep.run s = .ok b' s2 → s2.ready = s.ready := fun b' s2 h2 => by
+      rw [hr1] at h2; obtain ⟨-, rfl⟩ := EStateM.Result.ok.inj h2; exact hrd'
+    have hag := prepP_agree (L := L) (fun _ => hA) hrdA hrun
+    rw [hrun] at hr; obtain ⟨rfl, rfl⟩ := EStateM.Result.ok.inj hr
+    have hP' : s1.P = s.P := S'.P.trans S.P.symm
+    refine ⟨hag, hP', fun _ => ?_, fun e => absurd e (by simp)⟩
+    refine ⟨⟨by rw [hP']; exact hPP, by rw [hrd', hrd], h + 1, by omega, by rw [hP']; omega, by rw [hP']; exact S'⟩,
+      prep_pz1 S hH1 hz hr1, fun h' S2 e => ?_⟩
+    obtain ⟨pa, hp, -, -⟩ := S'.pr
+    obtain ⟨pa', hp', -, -⟩ := S2.pr
+    rw [hp] at hp'
+    have := congrArg (fun o => (o.map (·.h)).getD 0) hp'
+    simp at this; omega
+  · have e : h = s.P.H + 1 := by omega
+    subst e
+    obtain ⟨s1, hr1, F, hrd'⟩ := stage_last S hH1
+    have hrun : prepareStep.run s = .ok true { s1 with ready := true } := by
+      unfold prepareStep; simp [hrd]; rw [hr1]; simp
+    have hrdA : ∀ b' s2, initStep.run s = .ok b' s2 → s2.ready = s.ready := fun b' s2 h2 => by
+      rw [hr1] at h2; obtain ⟨-, rfl⟩ := EStateM.Result.ok.inj h2; exact hrd'
+    have hag := prepP_agree (L := L) (fun _ => hA) hrdA hrun
+    rw [hrun] at hr; obtain ⟨rfl, rfl⟩ := EStateM.Result.ok.inj hr
+    have hP1 : s1.P = s.P := F.low.rest.1
+    refine ⟨hag, hP1, fun e => absurd e (by simp), fun _ => ?_⟩
+    have hz1 := prep_pz1 S hH1 hz hr1
+    have hM := mc_final (capsOf_ok s.P) hN F hz1
+    have F' := F.ready true
+    refine ⟨?_, F'.topInv hPP.1 hPP.2, F'.res⟩
+    obtain ⟨a, b, c, d, e, f, g, i⟩ := hM
+    exact ⟨a, b, c, d.of_same ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, e, f, g, i⟩
+
 end OM.Impl
