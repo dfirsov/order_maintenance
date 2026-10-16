@@ -742,3 +742,23 @@ The capacities are hypotheses so far: `GCaps` for the group and chunk programs, 
 start of an insertion, and, for the reservation, a predicate `Mc` that gives `TopCaps`, `PQCaps`,
 no preparation in progress, and zero path rows beyond the chunks, and that each round keeps.
 Step 4 provides them.
+
+**Capacities, step 4 (`Caps.lean`).** Level F bounds the element and chunk counts already:
+`E.size = count + 1`, and `C.size ≤ cb P = 2 + 2·⌊N / (θ + 1 − c_max)⌋` (`CountInv.chunks`). The
+other bounds are new:
+* nodes, by a potential, `NodeB`: `nodes.size + topMu ≤ nb0 + topJ · C.size`. A drain start adds 2
+  nodes and lowers the job measure `jobLeft` by `s ≥ 3` (`walk_nodes`). No other step adds nodes:
+  the frame chains `NS` (node count) and `TP` (preparation state) are generated from `TopFrame`'s
+  chain. A split start adds 2 chunks and a job of measure at most `topJ`. So `nodes = O(topJ ·
+  N / L²) = O(N / L)`.
+* groups: `Gs.size ≤ 2 + 2·count`. Only a group split start allocates groups (at most 2), and an
+  insertion runs at most one. Free groups are reused, which only helps.
+* zero path rows beyond the chunks, `PZ`: every path write is at a chunk of the list (the copy
+  step, the sweep step's chunk) or at a new chunk (`insertAround`).
+* chunk sizes: a live chunk's size is its element count (`CInv.csz`), at most `count`.
+
+These are collected in `Mc κ P` (with the queue's `PQCaps`, no preparation in progress, and
+`count ≤ N`). The capacity conditions `CapsOK κ P` are inequalities between the capacities and
+functions of `P` (`nbMax P`, `cb P`, `N`, and constants). Then `insertAgreeM`: under `CostInv`,
+`count = |L|`, `count + 1 ≤ N`, `Mc κ P s` and `CapsOK κ P`, an insertion agrees at cost at most
+`insBound P`, and the result satisfies `CostInv`, `Mc κ P` and the new count.
