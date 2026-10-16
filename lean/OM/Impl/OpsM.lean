@@ -414,4 +414,131 @@ theorem insertW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEn
     simp only [Expr.cost, parE] at hk1 hk2 hk3 hk4 ⊢
     omega
 
+/-! ### Deletion -/
+
+/-- What mirroring a deletion needs: an element copied into `nxt` is in service there. -/
+theorem MInv.mirrorDel {om : OM} {Sp : OM.Spec.State} (hI : MInv om Sp) (x : Nat) :
+    ∀ n, om.nxt = some n → om.nxtIdx.getX x ≠ 0 → om.cursorSet = true ∧ DelOK n (om.nxtIdx.getX x) := by
+  intro n hn hx0
+  obtain ⟨-, -, A, -, -, -, hN⟩ := hI.1.w
+  unfold NxtR at hN; rw [hn] at hN
+  obtain ⟨B, hRB, hIB, hzB, hcs⟩ := hN
+  have hxB := hzB x hx0
+  cases hs : om.cursorSet with
+  | false =>
+    rw [hs] at hcs; simp only [Bool.false_eq_true, if_false] at hcs; subst hcs
+    rw [liveH_initAbs hRB] at hxB; cases hxB
+  | true =>
+    obtain ⟨c₀, live₀, I, D, hRW⟩ := hI.1.busy n hn
+    have hok := ((hRW.serve hs).1 B hRB.inv).1
+    exact ⟨rfl, n.P, _, _, B.elist, hok.cost, rfl, (hIB x hxB).1, hok.cnt, (hI.2.2 n hn).2 hs⟩
+
+/-- Mirroring a deletion keeps the side conditions of `nxt`. -/
+theorem mirrorDelete_M {om : OM} {x : Nat} (hX : ∀ n, om.nxt = some n → NxtM om n)
+    (hN : ∀ n, om.nxt = some n → om.nxtIdx.getX x ≠ 0 → om.cursorSet = true ∧ DelOK n (om.nxtIdx.getX x))
+    {om2 : OM} (hm : om.mirrorDelete x = .ok om2) :
+    om2.cur = om.cur ∧ om2.KB = om.KB ∧ om2.live = om.live ∧ ∀ n, om2.nxt = some n → NxtM om2 n := by
+  unfold OM.mirrorDelete at hm
+  cases hn : om.nxt with
+  | none =>
+    rw [hn] at hm; injection hm with hm; subst hm
+    exact ⟨rfl, rfl, rfl, fun n h => by rw [hn] at h; cases h⟩
+  | some n =>
+    rw [hn] at hm
+    simp only at hm
+    by_cases hx0 : om.nxtIdx.getX x = 0
+    · simp only [hx0, bne_self_eq_false, Bool.false_eq_true, if_false, pure, Except.pure] at hm
+      injection hm with hm; subst hm
+      exact ⟨rfl, rfl, rfl, fun n2 h2 => by rw [hn] at h2; cases h2; exact hX n hn⟩
+    · have : (om.nxtIdx.getX x != 0) = true := by simp [hx0]
+      simp only [this, if_true] at hm
+      obtain ⟨hs, P, nn, R, L, hC, hP, hxL, hcnt, hM⟩ := hN n hn hx0
+      obtain ⟨n', hr, -, -, -, hP', hM'⟩ := markDeadAgreeM hC hP hxL (κ := capsOf P)
+        (fun _ => om.nxtIdx.getX x) rfl (capsOf_ok P) hcnt hM
+      simp only [bind, Except.bind, runCore, hr, pure, Except.pure] at hm
+      injection hm with hm; subst hm
+      refine ⟨rfl, rfl, rfl, fun n2 h2 => ?_⟩
+      cases h2
+      exact ⟨fun h => by simp [hs] at h, fun _ => by rw [hP', hP]; exact hM'⟩
+
+/-- **Level F's deletion, step by step.** -/
+theorem delete_eq {mk : Nat → Params} {om : OM} {x : Nat} {c' : Core} {om2 : OM}
+    (hr : (markDead (om.curIdx.getX x)).run om.cur = .ok () c')
+    (hm : ({ om with cur := c', curIdx := om.curIdx.setX x 0 } : OM).mirrorDelete x = .ok om2)
+    (R : OM) : om.delete mk x = .ok R ↔ ({ om2 with live := om2.live - 1 } : OM).rebuildStep mk = .ok R := by
+  have e : om.delete mk x = ({ om2 with live := om2.live - 1 } : OM).rebuildStep mk := by
+    unfold OM.delete
+    rw [onCur_ok hr]
+    simp only [bind, Except.bind]
+    rw [hm]
+  rw [e]
+
+def liveDecC : Stmt := .store (wa 4) (.lit 0) (tsubE (.load (wa 4) (.lit 0)) (.lit 1))
+
+theorem liveDecW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) :
+    wp liveDecC (fun m' k => WEnc { om with live := om.live - 1 } m' p ∧ m'.loc = m.loc ∧ k ≤ 20) m :=
+  wp_store_g 0 (om.live - 1) rfl
+    (tsubE_eval (eval_load_lit (by rw [h.scap 4 (by decide)]; decide) h.live) rfl)
+    (by rw [h.scap 4 (by decide)]; decide)
+    (fun s' hl hm hc => ⟨(h.writeLive _).congr hm hc, hl, by simp [Expr.cost, tsubE]⟩)
+
+/-- The deletion code of parity `p`. -/
+def delC (p : Nat) : Stmt := .seq (curDelC p) (.seq (mirrorDelC p) (.seq liveDecC (rebuildC p)))
+
+/-- **The wrapper's deletion** of the handle in local `x`. -/
+def deleteWS : Stmt := byPar delC
+
+/-- The cost bound of a deletion. -/
+def delW (KB : Nat) : Nat := 200 + rebB KB
+
+/-- **A deletion at Level M**: it keeps the invariant, and the machine code runs in at most
+`delW K_B` steps. -/
+theorem deleteW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEnc om m p) (hI : MInv om Sp)
+    {x : Nat} (hv : x ∈ Sp.list) (hxl : m.loc "x" = x) :
+    ∃ om', om.delete proofParams x = .ok om' ∧ MInv om' (OM.Spec.step Sp (.delete x)).1 ∧
+      wp deleteWS (fun m' k => (WEnc om' m' 0 ∨ WEnc om' m' 1) ∧ k ≤ delW om.KB) m := by
+  have hp := h.p2
+  have hW := hI.1
+  obtain ⟨hS, hf, A, hR, hL, hIdx, hN⟩ := hW.w
+  obtain ⟨om', hdel, hW'⟩ := delete_cost costSetup hW hv
+  obtain ⟨c', om2, hr1, hm2, hsafe⟩ := delete_safe costSetup hW hv
+  have hR' : ({ om2 with live := om2.live - 1 } : OM).rebuildStep proofParams = .ok om' := by
+    rw [← delete_eq hr1 hm2]; exact hdel
+  have hxL : om.curIdx.getX x ∈ A.elist := (hIdx x hv).1
+  have hS0 := hI.cur hR.inv
+  obtain ⟨c'', hr'', -, -, -, hP'', hM''⟩ := markDeadAgreeM hS0.ok.cost rfl hxL (κ := capsOf om.cur.P)
+    (fun _ => om.curIdx.getX x) rfl (capsOf_ok _) hS0.ok.cnt hS0.mc
+  rw [hr1] at hr''
+  injection hr'' with _ hcc; subst hcc
+  obtain ⟨e1, e2, -, hX2⟩ := mirrorDelete_M (om := { om with cur := c', curIdx := om.curIdx.setX x 0 }) (x := x)
+    (fun n hn => hI.2.2 n hn) (fun n hn hx0 => hI.mirrorDel x n hn hx0) hm2
+  have hX3 : MX ({ om2 with live := om2.live - 1 } : OM) :=
+    ⟨by show Mc (capsOf om2.cur.P) om2.cur.P om2.cur; rw [e1]; show Mc (capsOf c'.P) c'.P c'; rw [hP'']; exact hM'',
+      fun n hn => hX2 n hn⟩
+  refine ⟨om', hdel, ⟨hW', rebuild_MX hX3 hsafe hR'⟩, ?_⟩
+  refine wp_byPar h ?_
+  have h0 := h.bump (parE.maxv m)
+  have hxc : x < om.nextHandle := by have := hS.2 x hv; rw [hf]; exact this
+  unfold delC
+  rw [OM.Machine.wp_seq]
+  refine OM.Machine.wp_mono (fun m1 k1 ⟨h1, hl1, hk1⟩ => ?_)
+    (curDelW_ok h0 (by simpa using hxl) (by have := h0.roomC; omega) hS0.ok.cost rfl hxL hS0.ok.cnt hS0.mc hr1)
+  rw [OM.Machine.wp_seq]
+  have hx1 : m1.loc "x" = x := by rw [hl1]; simp [OM.Machine.State.upd, hxl]
+  refine OM.Machine.wp_mono (fun m2 k2 ⟨h2, hl2, hk2⟩ => ?_)
+    (mirrorDelW_ok h1 hx1 (fun hs => by
+      obtain ⟨n, hn⟩ := Option.isSome_iff_exists.mp hs
+      have h5 := h1.roomN n hn; simp only at h5; omega) (fun n hn hx0 => (hI.mirrorDel x n hn hx0).2) hm2)
+  rw [OM.Machine.wp_seq]
+  refine OM.Machine.wp_mono (fun m3 k3 ⟨h3, hl3, hk3⟩ => ?_) (liveDecW_ok h2)
+  have hkb : 1 ≤ ({ om2 with live := om2.live - 1 } : OM).KB := by
+    show 1 ≤ om2.KB; rw [e2]; have := hW.kb; show 1 ≤ om.KB; omega
+  obtain ⟨-, hwp4⟩ := rebuildW_ok h3 hX3 hkb hsafe hR'
+  refine OM.Machine.wp_mono (fun m4 k4 ⟨h4, hl4, hk4⟩ => ⟨wp_par_or hp h4, ?_⟩) hwp4
+  have hKB : ({ om2 with live := om2.live - 1 } : OM).KB = om.KB := e2
+  rw [hKB] at hk4
+  unfold delW
+  simp only [Expr.cost, parE] at hk1 hk2 hk3 hk4 ⊢
+  omega
+
 end OM.Impl
