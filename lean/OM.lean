@@ -27,3 +27,7 @@ import OM.Impl.Fresh
 import OM.Impl.Params
 import OM.Impl.NewCore
 import OM.Impl.WrapM
+import OM.Impl.RebuildM
+import OM.Proof.Cost.WrapSafe
+import OM.Impl.OpsM
+import OM.Impl.InitM
