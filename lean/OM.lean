@@ -20,3 +20,4 @@ import OM.Impl.Background
 import OM.Impl.Init
 import OM.Impl.GlueTop
 import OM.Impl.GlueCore
+import OM.Impl.Caps
