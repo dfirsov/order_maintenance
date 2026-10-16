@@ -819,4 +819,52 @@ theorem insertAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat
     · unfold RoundAt at hR'; rw [hj] at hR'
       have := hR'.2.1; omega
 
+/-! ### Deletion and order -/
+
+/-- **A deletion agrees** and keeps the capacity predicate. -/
+theorem markDeadAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat}
+    (hC : CostInv (TIat TopInv P) topMu (topJ P) n R L s) (hsP : s.P = P) (hx : x ∈ L)
+    {κ : Caps} (Lx : Loc) (hLx : Lx "x" = x) (K : CapsOK κ P) (hcntL : s.count = L.length) (hM : Mc κ P s) :
+    ∃ s', (markDead x).run s = .ok () s' ∧
+      (∃ L' m, evalF κ markDeadP.body s Lx = .ok s' L' m ∧ m ≤ 5) ∧
+      CostInv (TIat TopInv P) topMu (topJ P) n R L s' ∧ s'.count = s.count ∧ s'.P = s.P ∧ Mc κ P s' := by
+  have hTC : TopContract (TIat TopInv P) topMu (topJ P) capT := topContract'.at P
+  obtain ⟨s', hr, hC'⟩ := markDead_cost hTC hC x
+  have he : s' = { s with E := s.E.modify x fun e => { e with live := false } } := by
+    rw [markDead_run] at hr; cases hr; rfl
+  subst he
+  obtain ⟨A, hI, hel⟩ := hC.low.inv
+  have hxs := hI.size_pos (hel ▸ hx)
+  have hE := E_size_le hI
+  rw [hel, ← hcntL] at hE
+  have := hM.2.2.2.2.2.2.1; have := K.E
+  refine ⟨_, hr, markDead_agree κ s Lx hLx hxs.2 (by rw [← hsP] at *; omega) hr, hC', rfl, rfl, ?_⟩
+  obtain ⟨a, b, c, d, e, f, g, h⟩ := hM
+  exact ⟨a, b, c, d.of_same ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, e, f, g, h⟩
+
+/-- **An order query agrees**; it changes nothing. -/
+theorem orderAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x y : Nat}
+    (hC : CostInv (TIat TopInv P) topMu (topJ P) n R L s) (hsP : s.P = P) (hx : x ∈ L) (hy : y ∈ L)
+    {κ : Caps} (Lxy : Loc) (hLx : Lxy "x" = x) (hLy : Lxy "y" = y) (K : CapsOK κ P) (hcntL : s.count = L.length)
+    (hM : Mc κ P s) {b : Bool} {s' : Core} (h : (OM.Model.order x y).run s = .ok b s') :
+    ∃ L' m, evalF κ orderP.body s Lxy = .ok s' L' m ∧ L' "r" = b2n b ∧ m ≤ 80 := by
+  obtain ⟨A, hI, hel⟩ := hC.low.inv
+  obtain ⟨s₀, hCI, -⟩ := hC.low.cinv
+  subst hel
+  have hE := E_size_le hI
+  rw [← hcntL] at hE
+  obtain ⟨hP, -, hcb, -, -, -, hcnt, hgs⟩ := hM
+  have := K.E; have := K.G; have := K.C
+  have hxs := (hI.size_pos hx).2
+  have hys := (hI.size_pos hy).2
+  have hgx := hI.mem_glist_iff.mp (hI.eG_mem hx)
+  have hgy := hI.mem_glist_iff.mp (hI.eG_mem hy)
+  have hcx := (hCI.gchk _ hgx).1.2
+  have hcy := (hCI.gchk _ hgy).1.2
+  have hgx' : (s.E.getX x).grp < s.Gs.size := hgx.2.1
+  have hgy' : (s.E.getX y).grp < s.Gs.size := hgy.2.1
+  have hcx' : (s.Gs.getX (s.E.getX x).grp).chk < s.C.size := hcx
+  have hcy' : (s.Gs.getX (s.E.getX y).grp).chk < s.C.size := hcy
+  exact order_agree κ s Lxy hLx hLy (by omega) (by omega) (by omega) (by omega) (by omega) (by omega) h
+
 end OM.Impl
