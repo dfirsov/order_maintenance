@@ -25,3 +25,4 @@ import OM.Impl.SlotFrame
 import OM.Impl.WCall
 import OM.Impl.Fresh
 import OM.Impl.Params
+import OM.Impl.NewCore
