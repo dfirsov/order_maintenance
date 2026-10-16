@@ -263,7 +263,7 @@ theorem node_step {s : Core} {job : Job} (hT : TopInv s) (hres : s.resJob = some
 
 /-- **A split start** keeps the node count and the preparation state, and adds two chunks. -/
 theorem split_frame {t t2 : Core} {x : Nat} (h : (splitChunkStart x).run t = .ok () t2) :
-    t2.nodes.size = t.nodes.size ∧ t2.C.size = t.C.size + 2 ∧ t2.prep = t.prep := by
+    t2.nodes.size = t.nodes.size ∧ t2.C.size = t.C.size + 2 ∧ t2.prep = t.prep ∧ t2.Gs = t.Gs := by
   unfold splitChunkStart at h
   simp only [run_get_bind, run_require_bind] at h
   split at h
@@ -280,7 +280,7 @@ theorem split_frame {t t2 : Core} {x : Nat} (h : (splitChunkStart x).run t = .ok
       simp only [markSplit_run] at h
       obtain ⟨-, e⟩ := EStateM.Result.ok.inj h; subst e
       have hl := (linkChunkPair_rest (s := push2 t) (x := x) (y := t.C.size) (z := t.C.size + 1)).2.2.2.2.2.2.1
-      refine ⟨hN, ?_, hP⟩
+      refine ⟨hN, ?_, hP, by rw [show (markState s2 x t.C.size (t.C.size + 1) job).Gs = s2.Gs from rfl, hR.Gs]; rfl⟩
       simp only [markState, Array.size_modify]
       rw [hR.Csize, hl]; simp [push2]
     · rw [hj] at h; simp at h
@@ -647,6 +647,12 @@ structure CapsOK (κ : Caps) (P : Params) : Prop where
   lcin : 322 ≤ κ.lcap .cin
   lc : 162 ≤ κ.lcap .children
   pw : κ.pw = P.H + 1
+  E : P.N + 2 ≤ κ.tbl .E
+  G : 2 * P.N + 4 ≤ κ.tbl .G
+  fl : κ.tbl .G ≤ κ.lcap .freeG
+  f0 : 0 < κ.lrec .freeG
+  cC : cb P ≤ Ccap κ
+  cB : P.N + 2 < Bcap κ
 
 theorem NodeB.le {s : Core} (h : NodeB s) (hC : s.C.size ≤ cb s.P) : s.nodes.size ≤ nbMax s.P := by
   unfold NodeB at h; unfold nbMax; have := Nat.mul_le_mul_left (topJ s.P) hC; omega
@@ -661,7 +667,8 @@ theorem topCaps_of {κ : Caps} {s : Core} (K : CapsOK κ s.P) (hN : NodeB s) (hC
 
 /-- **The capacity predicate of the reservation rounds.** -/
 def Mc (κ : Caps) (P : Params) (t : Core) : Prop :=
-  t.P = P ∧ NodeB t ∧ t.C.size ≤ cb P ∧ PQCaps κ t ∧ t.prep = none ∧ PZ t ∧ t.count ≤ P.N
+  t.P = P ∧ NodeB t ∧ t.C.size ≤ cb P ∧ PQCaps κ t ∧ t.prep = none ∧ PZ t ∧ t.count ≤ P.N ∧
+    t.Gs.size ≤ 2 + 2 * t.count
 
 theorem Mc.caps {κ : Caps} {P : Params} (K : CapsOK κ P) {t : Core} (h : Mc κ P t) :
     TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧ ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0 := by
@@ -675,20 +682,21 @@ theorem ts_eq_of {s s' : Core} (hP : s'.P = s.P) (hN : s'.nodes = s.nodes) (hp :
 
 theorem mc_pop {κ : Caps} {P : Params} {t t1 : Core} {c : Nat} (h : Mc κ P t) (hp : pqPopMax.run t = .ok c t1) :
     Mc κ P t1 := by
-  obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt⟩ := h
+  obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt, hgs⟩ := h
   have F := pqo_pqPopMax.ok hp
-  obtain ⟨-, -, eC, eP, r⟩ := F
+  obtain ⟨-, eG, eC, eP, r⟩ := F
   obtain ⟨-, ecnt, -, -, -, -, -, epr, ejob, -, -, eN, epa, ecin, elp⟩ := r
   have hts : ts t1 = ts t := ts_eq_of eP eN epa ecin elp eC
   have hmu : topMu t1 = topMu t := by unfold topMu; rw [ejob, hts]
   refine ⟨eP.trans hP, ?_, by rw [eC]; exact hC, (pqPopMax_agree κ t (fun _ => 0) hq hp).2, by rw [epr]; exact hpr,
-    fun d hd j => by rw [epa]; rw [eC] at hd; exact hz d hd j, by rw [ecnt]; exact hcnt⟩
+    fun d hd j => by rw [epa]; rw [eC] at hd; exact hz d hd j, by rw [ecnt]; exact hcnt,
+    by rw [eG, ecnt]; exact hgs⟩
   unfold NodeB at hN ⊢; rw [eN, hmu, eC, eP]; exact hN
 
 theorem mc_job {κ : Caps} {P : Params} {t : Core} {job : Job} (hT : TopInv t) (h : Mc κ P t)
     (hres : t.resJob = some job) {r : Option Job} {t1 : Core} (hr : (jobStep job).run t = .ok r t1) :
     Mc κ P { t1 with resJob := r } := by
-  obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt⟩ := h
+  obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt, hgs⟩ := h
   have hR := (top_jobStep job).ok hr
   have hn := node_step hT hres hr
   obtain ⟨hCs, hzz⟩ := path_step hT hres hr
@@ -696,7 +704,8 @@ theorem mc_job {κ : Caps} {P : Params} {t : Core} {job : Job} (hT : TopInv t) (
   obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := hR.pq
   refine ⟨hR.rest.1.trans hP, ?_, by show t1.C.size ≤ _; rw [hCs]; exact hC,
     hq.of_same ⟨q4, q2, q3, q1, q5, q6, q8, q7, by show t1.P.theta = _; rw [hR.rest.1]⟩,
-    by show t1.prep = _; rw [hpp]; exact hpr, hzz hz, by show t1.count ≤ _; rw [hR.rest.2.1]; exact hcnt⟩
+    by show t1.prep = _; rw [hpp]; exact hpr, hzz hz, by show t1.count ≤ _; rw [hR.rest.2.1]; exact hcnt,
+    by show t1.Gs.size ≤ 2 + 2 * t1.count; rw [hR.Gs, hR.rest.2.1]; exact hgs⟩
   unfold NodeB at hN ⊢
   have e1 : ({ t1 with resJob := r } : Core).P = t.P := hR.rest.1
   have e2 : ({ t1 with resJob := r } : Core).C.size = t.C.size := hCs
@@ -706,12 +715,15 @@ theorem mc_job {κ : Caps} {P : Params} {t : Core} {job : Job} (hT : TopInv t) (
 
 theorem mc_split {κ : Caps} {P : Params} {t t1 t2 : Core} {c : Nat} (h : Mc κ P t) (hnone : t.resJob = none)
     (hp : pqPopMax.run t = .ok c t1) (hs : (splitChunkStart c).run t1 = .ok () t2) (hP2 : t2.P = P)
-    (hmu : topMu t2 ≤ topJ P) (hC2 : t2.C.size ≤ cb P) (hc2 : t2.count ≤ P.N) : Mc κ P t2 := by
+    (hmu : topMu t2 ≤ topJ P) (hC2 : t2.C.size ≤ cb P) (hc2 : t2.count ≤ P.N) (hce : t2.count = t.count) :
+    Mc κ P t2 := by
   have h1 := mc_pop h hp
-  obtain ⟨hP, hN, -, -, -, -, -⟩ := h
-  obtain ⟨hP1, hN1, hC1, hq1, hpr1, hz1, -⟩ := h1
-  obtain ⟨en, ec, epr⟩ := split_frame hs
-  refine ⟨hP2, ?_, hC2, hq1.of_same (split_pq hs), by rw [epr]; exact hpr1, split_pz hs hz1, hc2⟩
+  obtain ⟨hP, hN, -, -, -, -, -, -⟩ := h
+  obtain ⟨hP1, hN1, hC1, hq1, hpr1, hz1, -, hgs1⟩ := h1
+  obtain ⟨en, ec, epr, eg⟩ := split_frame hs
+  have hc1 : t1.count = t.count := (pqo_pqPopMax.ok hp).rest.2.1
+  refine ⟨hP2, ?_, hC2, hq1.of_same (split_pq hs), by rw [epr]; exact hpr1, split_pz hs hz1, hc2,
+    by rw [eg, hce, ← hc1]; exact hgs1⟩
   have hmu0 : topMu t = 0 := by unfold topMu; rw [hnone]
   have F := pqo_pqPopMax.ok hp
   have eN : t1.nodes = t.nodes := F.rest.2.2.2.2.2.2.2.2.2.2.2.1
@@ -731,6 +743,27 @@ theorem cb_of {t : Core} {L : List Nat} (hL : LowInv t L) (hc : t.count ≤ t.P.
     Nat.div_le_div_right hc
   unfold cb; omega
 
+/-- The element count of a core is its number of element records. -/
+theorem E_size_le {s : Core} {A : Abs} (hI : INV s A) : s.E.size ≤ A.elist.length + 1 := by
+  have := length_eq_of_mem_iff hI.eList.nodup List.nodup_range' (l' := List.range' 1 (s.E.size - 1))
+    (fun c => by rw [hI.eAlloc c, List.mem_range'_1]; omega)
+  simp at this; omega
+
+/-- **The capacities at the start of an insertion**, from the capacity conditions and the
+invariants. -/
+theorem insCaps_of {κ : Caps} {s : Core} {L : List Nat} (K : CapsOK κ s.P) (hM : Mc κ s.P s)
+    (hL : LowInv s L) (hcntL : s.count = L.length) (hcnt : s.count + 1 ≤ s.P.N) : InsCaps κ s := by
+  obtain ⟨-, -, hC, hq, -, -, -, hgs⟩ := hM
+  obtain ⟨A, hI, hel⟩ := hL.inv
+  obtain ⟨s₀, hCI, -⟩ := hL.cinv
+  have hE := E_size_le hI
+  rw [hel, ← hcntL] at hE
+  have := K.E; have := K.G; have := K.C; have := K.cC; have := K.cB
+  refine ⟨by omega, by omega, by omega, K.fl, K.f0, hq, by omega, fun c hc => ?_⟩
+  have h1 : (s.C.getX c).size = (celts s L c).length := hCI.csz c hc
+  have h2 : (celts s L c).length ≤ L.length := List.length_filter_le _ _
+  omega
+
 /-- The cost bound of an insertion at Level M, at parameters `P`. -/
 abbrev insBoundM (P : Params) : Nat := insBound P
 
@@ -743,18 +776,20 @@ theorem insertAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat
     (hcap : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ capT s.P)
     (hI5 : (s.P.theta : ℝ) + R * (OM.Zeroing.Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat)
     {κ : Caps} (Lx : Loc) (hLx : Lx "x" = x) (hLh : Lx "h" = hh) (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
-    (K : CapsOK κ P) (KI : InsCaps κ s) (hcnt : s.count + 1 ≤ P.N)
-    (hNB : NodeB s) (hPZ : PZ s) (hpr : s.prep = none) :
+    (K : CapsOK κ P) (hcntL : s.count = L.length) (hcnt : s.count + 1 ≤ P.N) (hM0 : Mc κ P s) :
     ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧
       (∃ L' m, evalF κ insertAfterP.body s Lx = .ok s' L' m ∧ L' "y" = s.E.size ∧ m ≤ insBound s.P) ∧
       CostInv (TIat TopInv P) topMu (topJ P) n R (OM.Spec.insertAfterL x s.E.size L) s' ∧
       s'.count = s.count + 1 ∧ s'.P = s.P ∧ Mc κ P s' := by
   have hTC : TopContract (TIat TopInv P) topMu (topJ P) capT := topContract'.at P
+  have KI : InsCaps κ s := by
+    subst hsP; exact insCaps_of K hM0 hC.low hcntL hcnt
   refine insertAgree hTC (fun t h => h.1) hC hx hk hR hn hsize hcap hI5 hh Lx hLx hLh hpow KI (Mc κ P)
-    (fun t hts hjob hprt hCs hct hq => ?_) (fun t h => h.caps K) (fun t c t1 h hp => mc_pop h hp)
+    (fun t hts hjob hprt hCs hct hGt hq => ?_) (fun t h => h.caps K) (fun t c t1 h hp => mc_pop h hp)
     (fun L' s' j t job r t1 hI hM hjob hr _ => mc_job hI.2.1.1 hM hjob hr)
     (fun L' s' j t c t1 t2 hI hM hnone hp hs hI' => ?_)
   · -- the start of the reservation
+    obtain ⟨-, hNB, -, -, hpr, hPZ, -, hgs⟩ := hM0
     have hPt : t.P = P := by
       have : (OM.Proof.Top.ts t).P = (OM.Proof.Top.ts s).P := by rw [hts]
       exact this.trans hsP
@@ -763,7 +798,8 @@ theorem insertAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat
       exact this
     have hmu : topMu t = topMu s := by unfold topMu; rw [hjob, hts]
     have hcbs : s.C.size ≤ cb s.P := cb_of hC.low (by rw [hsP]; omega)
-    refine ⟨hPt, ?_, by rw [hCs, ← hsP]; exact hcbs, hq, by rw [hprt]; exact hpr, ?_, by rw [hct]; omega⟩
+    refine ⟨hPt, ?_, by rw [hCs, ← hsP]; exact hcbs, hq, by rw [hprt]; exact hpr, ?_, by rw [hct]; omega,
+      by rw [hct]; omega⟩
     · unfold NodeB at hNB ⊢; rw [hNt, hmu, hCs, hPt, ← hsP]; exact hNB
     · intro c hc j
       have : (OM.Proof.Top.ts t).path = (OM.Proof.Top.ts s).path := by rw [hts]
@@ -774,8 +810,9 @@ theorem insertAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat
     obtain ⟨-, -, hc0, hP0, -⟩ := hI
     have hPt : t.P = P := hM.1
     have hP2 : t2.P = P := by rw [hP', ← hP0, hPt]
-    have hc2 : t2.count ≤ P.N := by rw [hc', ← hc0]; exact hM.2.2.2.2.2.2
+    have hc2 : t2.count ≤ P.N := by rw [hc', ← hc0]; exact hM.2.2.2.2.2.2.1
     refine mc_split hM hnone hp hs hP2 ?_ (by have := cb_of hL' (by rw [hP2]; exact hc2); rwa [hP2] at this) hc2
+      (by rw [hc', hc0])
     rcases hj : t2.resJob with _ | j'
     · have : topMu t2 = 0 := by unfold topMu; rw [hj]
       omega

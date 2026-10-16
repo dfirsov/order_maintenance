@@ -920,7 +920,7 @@ theorem bgAgree {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : 
     (hq1 : PQCaps κ s1) (hcC : c < Ccap κ) (hcB : (s1.C.getX c).size + 1 < Bcap κ)
     (K1 : GCaps κ s1) (hG2 : s1.Gs.size + 2 ≤ κ.tbl .G) (hF0 : 0 < κ.lrec .freeG)
     (hF : s1.freeG.length ≤ κ.lcap .freeG) (hyE : y < κ.tbl .E)
-    (Mc : Core → Prop) (hM4 : ∀ t, DFrame s2 t → PQCaps κ t → Mc t)
+    (Mc : Core → Prop) (hM4 : ∀ t, DFrame s2 t → PQCaps κ t → t.Gs.size ≤ s1.Gs.size + 2 → Mc t)
     (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
       ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
     (hMpop : ∀ t c t1, Mc t → pqPopMax.run t = .ok c t1 → Mc t1)
@@ -1003,7 +1003,7 @@ theorem bgAgree {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : 
     hcsz3
   have K3 : GCaps κ s3 := ⟨by have := hS12.1.Gsize; have := K1.G; omega, by rw [hEs3, hS12.1.Esize]; exact K1.E,
     by rw [hCs3, hS12.1.Csize]; exact K1.C, K1.fl, K1.f0⟩
-  obtain ⟨⟨L4, n4, e4, hn4⟩, -⟩ := driveChunkAgree hI3 hel3 hG3 (hel3 ▸ hC3) hLX3
+  obtain ⟨⟨L4, n4, e4, hn4⟩, hGs4, -⟩ := driveChunkAgree hI3 hel3 hG3 (hel3 ▸ hC3) hLX3
     (hN.frame hQS hCF.count) (by rw [hP3]; exact hGP) (by rw [hP3]; exact hPost.cp) hcL3 hcnd3
     hcsz3 K3 hdc
   have hD : DFrame s2 t4 := hCF.dframe.trans hCP4.fr
@@ -1024,7 +1024,7 @@ theorem bgAgree {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : 
   have hkt : t4.P.K_R = k := by rw [hP4]; exact hkP
   obtain ⟨s', L5, n5, hres, e5, hn5, hMs⟩ := reservationAgree_top (κ := κ) (OM.Machine.State.setLocs (fun _ => 0) [] [])
     hTC hTI (by rw [hkt]; exact h0) hn (by rw [hD.count, hP4]; exact hsize) (by rw [hD.count, hP4]; exact hcap)
-    (by rw [hP4]; exact hI5) (by rw [hP4]; exact hpow) Mc (hM4 t4 hD hq4) hMc hMpop
+    (by rw [hP4]; exact hI5) (by rw [hP4]; exact hpow) Mc (hM4 t4 hD hq4 (by rw [hGs4]; have := hS12.1.Gsize; omega)) hMc hMpop
     (fun j t job r t1 => hMjob t4 j t job r t1) (fun j t c t1 t2 => hMsplit t4 j t c t1 t2)
   rw [hkt] at hres
   -- assembly
@@ -1069,7 +1069,7 @@ structure InsCaps (κ : Caps) (s : Core) : Prop where
   f0 : 0 < κ.lrec .freeG
   pq : PQCaps κ s
   cC : s.C.size ≤ Ccap κ
-  cB : ∀ c, (s.C.getX c).size + 2 < Bcap κ
+  cB : ∀ c, LiveC s c → (s.C.getX c).size + 2 < Bcap κ
 
 theorem linkElem_frame (s : Core) (x y lab h : Nat) :
     (linkElem s x y lab h).Gs.size = s.Gs.size ∧ (linkElem s x y lab h).C = s.C ∧
@@ -1095,7 +1095,7 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
     {κ : Caps} (Lx : Loc) (hLx : Lx "x" = x) (hLh : Lx "h" = hh) (hpow : s.P.a = 2 ^ Nat.log2 s.P.a)
     (K : InsCaps κ s) (Mc : Core → Prop)
     (hM4 : ∀ t, OM.Proof.Top.ts t = OM.Proof.Top.ts s → t.resJob = s.resJob → t.prep = s.prep →
-      t.C.size = s.C.size → t.count = s.count + 1 → PQCaps κ t → Mc t)
+      t.C.size = s.C.size → t.count = s.count + 1 → t.Gs.size ≤ s.Gs.size + 2 → PQCaps κ t → Mc t)
     (hMc : ∀ t, Mc t → TopCaps κ t ∧ PQCaps κ t ∧ t.prep = none ∧
       ∀ c, t.C.size ≤ c → ∀ j, (t.path.getX c).getX j = 0)
     (hMpop : ∀ t c t1, Mc t → pqPopMax.run t = .ok c t1 → Mc t1)
@@ -1142,11 +1142,11 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
     (by rw [hPost.count]; exact hsize) (by rw [hPost.count]; exact hcap) hI5
     (OM.Machine.State.setLocs (fun _ => 0) ["y"] [s.E.size]) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
     hpow (K.pq.of_same fPQ) (by have := hcL.2; have := K.cC; omega)
-    (by rw [fC]; have := K.cB (gC s (eG s x)); omega)
+    (by rw [fC]; have := K.cB (gC s (eG s x)) hcL; omega)
     ⟨by rw [fG]; have := K.G; omega, by rw [fE]; have := K.E; omega, by rw [fC]; exact K.C, K.fl, K.f0⟩
     (by rw [fG]; exact K.G) K.f0 (by rw [fF]; have := hI.freeG_len; have := K.G; have := K.fl; omega)
     (by have := K.E; omega) Mc
-    (fun t hD hq => hM4 t (by
+    (fun t hD hq hGt => hM4 t (by
         have hPt : t.P = s.P := by rw [hD.P, hPost.P]
         have hNt : t.nodes = s.nodes := by rw [hD.top.1, hN2, hsN, fN]
         have hPat : t.path = s.path := by rw [hD.top.2.1, hPa2, hsPa, fPa]
@@ -1160,7 +1160,7 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
         unfold OM.Proof.Top.ts; rw [hPt, hNt, hPat, hct, hlt]; simp only [htag])
       (by rw [hD.top.2.2.2.2.1, hjb2]; rfl)
       (by rw [hD.top.2.2.2.2.2.1, hpr2, hsPr, fPr]) (by rw [hD.Csize, hC2, hsC, fC])
-      (by rw [hD.count, hPost.count]) hq)
+      (by rw [hD.count, hPost.count]) (by rw [fG] at hGt; exact hGt) hq)
     hMc hMpop (hMjob _) (hMsplit _)
   have hxs := hI.size_pos hx
   obtain ⟨hrunI, Li, mi, ei, hyi, hmi⟩ := insertAfterP_agree (κ := κ) (L := Lx) hLx hLh hxs.2 hgL.2.1
