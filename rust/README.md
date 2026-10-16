@@ -28,7 +28,23 @@ cargo run --release --bin growth -- 4000000 50000 1      # results/growth.csv; p
 cargo run --release --bin usage                          # memory in use against the capacities
 ```
 
+**Cross-check with the machine semantics.** `lake exe xrun OPS` (in `lean/`) runs the operations
+with the machine's own semantics `OM.Machine.exec`; `xrun OPS` (here) runs the generated code.
+Both print, per operation, the status, the exact number of steps, the answer and the peak bit
+length, so their outputs must be identical:
+
+```
+python3 scripts/gen_ops.py 4000 7 mix > ops.txt
+(cd ../lean && lake exe xrun ../rust/ops.txt) > lean.out
+cargo run --release --bin xrun -- ops.txt > rust.out && diff lean.out rust.out
+```
+
 ## Results (2026-10-16)
+
+**Faithfulness of the printer and the runtime.** On 14 operation files (20 to 4,000 operations,
+mixed and delete-heavy, through many rebuilds; about 4.3 million machine steps), the generated code
+and Lean's `exec` printed identical lines: the same answers, the same number of steps for every
+operation, the same peak bit length.
 
 **Correctness.** The generated code returned the specification's answers on every operation
 tried:

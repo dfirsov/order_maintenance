@@ -20,3 +20,7 @@ root = "OM.Test.Replay"
 [[lean_exe]]
 name = "extract"
 root = "OM.Extract.Main"
+
+[[lean_exe]]
+name = "xrun"
+root = "OM.Extract.XRun"
