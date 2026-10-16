@@ -786,4 +786,50 @@ theorem mirrorInsW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {hx : Op
           · rw [hl5 y c, hl4' y b, hl3 y a]
           · simp only [Option.map_some, Option.getD_some, Expr.cost] at hk5 ⊢; omega
 
+/-! ### The swap -/
+
+/-- `nxt` replaces `cur`: flip the parity, and `nxt` is gone. -/
+def swapC (p : Nat) : Stmt :=
+  .seq (.store (wa 0) (.lit 0) (.lit (1 - p))) (.store (wa 1) (.lit 0) (.lit 0))
+
+theorem swapW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {n : Core} (hn : om.nxt = some n)
+    {Q : State → Nat → Prop} (hQ : ∀ m' k, WEnc (om.swap n) m' (1 - p) → (∀ x, m'.loc x = m.loc x) → k ≤ 10 → Q m' k) :
+    wp (swapC p) Q m := by
+  have hp := h.p2
+  unfold swapC
+  rw [OM.Machine.wp_seq, OM.Machine.wp_store]
+  refine ⟨0, 1 - p, rfl, rfl, by rw [h.scap 0 (by decide)]; decide, ?_⟩
+  rw [OM.Machine.wp_store]
+  set m1 := ((m.bump (Expr.maxv m (.lit 0))).bump (Expr.maxv m (.lit (1 - p)))).write (wa 0) 0 (1 - p)
+  refine ⟨0, 0, rfl, rfl, by simp [m1, State.write, h.scap 0 (by decide), h.scap 1 (by decide)], ?_⟩
+  set m2 := ((m1.bump (Expr.maxv m1 (.lit 0))).bump (Expr.maxv m1 (.lit 0))).write (wa 1) 0 0
+  apply hQ
+  · have hS : ∀ b, b ≠ wa 0 → b ≠ wa 1 → Same b m m2 := fun b h0 h1 =>
+      ⟨by simp [m2, m1, State.write, h0, h1], by simp [m2, m1, State.write]⟩
+    have hsl : ∀ q, q < 2 → ∀ b, InSlot q b → b ≠ wa 0 ∧ b ≠ wa 1 := fun q hq b hb =>
+      ⟨fun e => wa_notSlot hq (e ▸ hb), fun e => wa_notSlot hq (e ▸ hb)⟩
+    have hpp : 1 - (1 - p) = p := by omega
+    refine ⟨by omega, fun k hk => by simp [m2, m1, State.write, h.scap k hk], ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+      ?_, (fun n2 hn2 => by simp [OM.swap] at hn2), (fun i hi => ?_), (fun hn2 => by simp [OM.swap] at hn2), ?_,
+      (fun n2 hn2 => by simp [OM.swap] at hn2)⟩
+    · simp [m2, m1, State.write, OM.Machine.State.upd, wa_ne (show (0 : Nat) ≠ 1 by decide)]
+    · simp [m2, m1, State.write, OM.Machine.State.upd, OM.swap, b2n]
+    · have := hS (wa 2) (wa_ne (by decide)) (wa_ne (by decide)); rw [this.1]; exact h.cursor
+    · have := hS (wa 3) (wa_ne (by decide)) (wa_ne (by decide)); rw [this.1]; exact h.cset
+    · have := hS (wa 4) (wa_ne (by decide)) (wa_ne (by decide)); rw [this.1]; exact h.live
+    · have := hS (wa 5) (wa_ne (by decide)) (wa_ne (by decide)); rw [this.1]; exact h.next
+    · have := hS (wa 6) (wa_ne (by decide)) (wa_ne (by decide)); rw [this.1]; exact h.reb
+    · have := hS (wa 7) (wa_ne (by decide)) (wa_ne (by decide)); rw [this.1]; exact h.kb
+    · exact (h.nxt n hn).of_same fun b hb => hS b (hsl _ (by omega) b hb).1 (hsl _ (by omega) b hb).2
+    · have hne0 := wa_ne_idx (k := 0) (q := 1 - p) (by decide)
+      have hne1 := wa_ne_idx (k := 1) (q := 1 - p) (by decide)
+      have := hS (wIdx (1 - p)) (Ne.symm hne0) (Ne.symm hne1)
+      rw [this.2] at hi; rw [this.1]; exact h.idxN (by rw [hn]; rfl) i hi
+    · have hne0 := wa_ne_idx (k := 0) (q := 1 - p) (by decide)
+      have hne1 := wa_ne_idx (k := 1) (q := 1 - p) (by decide)
+      have := hS (wIdx (1 - p)) (Ne.symm hne0) (Ne.symm hne1)
+      rw [this.2]; have := h.roomN n hn; show om.nextHandle + (n.P.N - n.count) ≤ _; omega
+  · intro x; simp [m2, m1]
+  · simp [Expr.cost]
+
 end OM.Impl
