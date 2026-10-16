@@ -31,3 +31,4 @@ import OM.Impl.RebuildM
 import OM.Proof.Cost.WrapSafe
 import OM.Impl.OpsM
 import OM.Impl.InitM
+import OM.Impl.TheoremsM

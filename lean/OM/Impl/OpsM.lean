@@ -201,6 +201,59 @@ theorem rebuildW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) (hX : MX o
     · rw [hl2 x hx.2.1 hx.2.2, hl1]
     · unfold rebB; simp only [Expr.cost] at hk2 ⊢; omega
 
+/-! ### `K_B` never changes -/
+
+theorem copy_KB {om : OM} {n : Core} {om' : OM} {n' : Core} (hcp : copyAtCursor om n = .ok (om', n')) :
+    om'.KB = om.KB := by
+  unfold copyAtCursor at hcp
+  cases hl : (om.cur.E.getX om.cursor).live with
+  | false =>
+    simp only [hl, Bool.false_eq_true, if_false, pure, Except.pure] at hcp
+    injection hcp with hcp; injection hcp with h1 h2; subst h1; rfl
+  | true =>
+    simp only [hl, if_true, bind, Except.bind] at hcp
+    split at hcp
+    · cases hcp
+    · injection hcp with hcp; injection hcp with h1 h2; subst h1; rfl
+
+theorem rebuildLoop_KB : ∀ f b (om : OM) (n : Core) (R : OM), rebuildLoop om n f b = .ok R → R.KB = om.KB := by
+  intro f
+  induction f with
+  | zero => intro b om n R h; cases h; rfl
+  | succ f ih =>
+    intro b om n R h
+    unfold rebuildLoop at h
+    split at h
+    · cases h; rfl
+    split at h
+    · simp only [bind, Except.bind] at h
+      split at h
+      · cases h
+      · rename_i v hv
+        split at h
+        · have := ih _ _ _ _ h; exact this
+        · have := ih _ _ _ _ h; exact this
+    split at h
+    · cases h; rfl
+    · simp only [bind, Except.bind] at h
+      split at h
+      · cases h
+      · rename_i v hv
+        obtain ⟨om', n'⟩ := v
+        have := copy_KB hv
+        split at h
+        · cases h; exact this
+        · rw [ih _ _ _ _ h]; exact this
+
+theorem rebuildStep_KB {om R : OM} (h : om.rebuildStep proofParams = .ok R) : R.KB = om.KB := by
+  unfold OM.rebuildStep at h
+  split at h
+  · simp only at h
+    split at h
+    · simp only [newCore_true, bind, Except.bind, pure, Except.pure] at h; cases h; rfl
+    · cases h; rfl
+  · have := rebuildLoop_KB _ _ _ _ _ h; exact this
+
 /-! ### The wrapper invariant at Level M -/
 
 /-- Level F's cost invariant at the proof parameters. -/
@@ -336,7 +389,7 @@ theorem insertW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEn
     {hx : Option Nat} (hv : (insOp hx).Valid Sp) (hhx : m.loc "hx" = b2n hx.isSome)
     (hxl : ∀ x, hx = some x → m.loc "x" = x) :
     ∃ om', om.insert proofParams hx = .ok (Sp.fresh, om') ∧ MInv om' (OM.Spec.step Sp (insOp hx)).1 ∧
-      wp insertWS (fun m' k => (WEnc om' m' 0 ∨ WEnc om' m' 1) ∧ m'.loc "hy" = Sp.fresh ∧
+      om'.KB = om.KB ∧ wp insertWS (fun m' k => (WEnc om' m' 0 ∨ WEnc om' m' 1) ∧ m'.loc "hy" = Sp.fresh ∧
         k ≤ insW om.KB) m := by
   have hp := h.p2
   have hW := hI.1
@@ -364,7 +417,7 @@ theorem insertW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEn
   have hX3 : MX ({ om2 with live := om2.live + 1 } : OM) :=
     ⟨by show Mc (capsOf om2.cur.P) om2.cur.P om2.cur; rw [e1]; show Mc (capsOf c'.P) c'.P c'; rw [hP'']; exact hM'',
       fun n hn => hX2 n hn⟩
-  refine ⟨om', hins, ⟨hW', rebuild_MX hX3 hsafe hR'⟩, ?_⟩
+  refine ⟨om', hins, ⟨hW', rebuild_MX hX3 hsafe hR'⟩, (rebuildStep_KB hR').trans e2, ?_⟩
   -- the machine
   refine wp_byPar h ?_
   have h0 := h.bump (parE.maxv m)
@@ -496,7 +549,7 @@ def delW (KB : Nat) : Nat := 200 + rebB KB
 theorem deleteW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEnc om m p) (hI : MInv om Sp)
     {x : Nat} (hv : x ∈ Sp.list) (hxl : m.loc "x" = x) :
     ∃ om', om.delete proofParams x = .ok om' ∧ MInv om' (OM.Spec.step Sp (.delete x)).1 ∧
-      wp deleteWS (fun m' k => (WEnc om' m' 0 ∨ WEnc om' m' 1) ∧ k ≤ delW om.KB) m := by
+      om'.KB = om.KB ∧ wp deleteWS (fun m' k => (WEnc om' m' 0 ∨ WEnc om' m' 1) ∧ k ≤ delW om.KB) m := by
   have hp := h.p2
   have hW := hI.1
   obtain ⟨hS, hf, A, hR, hL, hIdx, hN⟩ := hW.w
@@ -515,7 +568,7 @@ theorem deleteW_ok {om : OM} {m : State} {p : Nat} {Sp : OM.Spec.State} (h : WEn
   have hX3 : MX ({ om2 with live := om2.live - 1 } : OM) :=
     ⟨by show Mc (capsOf om2.cur.P) om2.cur.P om2.cur; rw [e1]; show Mc (capsOf c'.P) c'.P c'; rw [hP'']; exact hM'',
       fun n hn => hX2 n hn⟩
-  refine ⟨om', hdel, ⟨hW', rebuild_MX hX3 hsafe hR'⟩, ?_⟩
+  refine ⟨om', hdel, ⟨hW', rebuild_MX hX3 hsafe hR'⟩, (rebuildStep_KB hR').trans e2, ?_⟩
   refine wp_byPar h ?_
   have h0 := h.bump (parE.maxv m)
   have hxc : x < om.nextHandle := by have := hS.2 x hv; rw [hf]; exact this
