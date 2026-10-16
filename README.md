@@ -10,6 +10,7 @@ order query on a list) and prove it correct in Lean 4.
 | `docs/PROOF.md` | the algorithm in conventional form, with complete pen-and-paper proofs of correctness and of the O(1) bound |
 | `docs/LEAN.md` | design of the Lean formalization: deep-embedded word RAM with counted steps, two-level proof, milestones |
 | `lean/` | Lean 4 development (`lake build` in `lean/`): list specification, machine model with cost semantics, program logic, executable functional model (`OM/Model`), trace replay (`lake exe replay`) |
+| `rust/` | Rust code printed from the verified machine program (`lake exe extract`), with a random checker against the specification |
 | `prototype/` | executable Python prototype with differential tests and adversarial stress (see its README) |
 | `papers/` | citations of the source papers: Dietz–Sleator 1987, Bender et al. 2002, Kopelowitz 2012, Brodal's slides |
 
