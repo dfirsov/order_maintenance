@@ -748,7 +748,7 @@ theorem insertAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x : Nat
     ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧
       (∃ L' m, evalF κ insertAfterP.body s Lx = .ok s' L' m ∧ L' "y" = s.E.size ∧ m ≤ insBound s.P) ∧
       CostInv (TIat TopInv P) topMu (topJ P) n R (OM.Spec.insertAfterL x s.E.size L) s' ∧
-      s'.count = s.count + 1 ∧ s'.P = s.P := by
+      s'.count = s.count + 1 ∧ s'.P = s.P ∧ Mc κ P s' := by
   have hTC : TopContract (TIat TopInv P) topMu (topJ P) capT := topContract'.at P
   refine insertAgree hTC (fun t h => h.1) hC hx hk hR hn hsize hcap hI5 hh Lx hLx hLh hpow KI (Mc κ P)
     (fun t hts hjob hprt hCs hct hq => ?_) (fun t h => h.caps K) (fun t c t1 h hp => mc_pop h hp)
