@@ -118,6 +118,12 @@ impl M {
             peak: 0,
         }
     }
+    /// Read cell `i` of machine array `arr` (for monitoring; not used by the program).
+    pub fn peek(&self, arr: u64, i: usize) -> W {
+        let a = ARRS.iter().position(|&x| x == arr).expect("array used by the program");
+        let c = self.arrs[a].cells[i];
+        if c & TAG == 0 { W::S(c) } else { norm(self.arrs[a].big[(c & !TAG) as usize].clone()) }
+    }
     /// The number of cells allocated in all arrays.
     pub fn cells(&self) -> usize {
         self.arrs.iter().map(|a| a.cells.len()).sum()

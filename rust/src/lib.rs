@@ -26,6 +26,13 @@ impl Om {
         Om { m, t }
     }
 
+    /// The capacity `N` of the current core (cell 0 of its parameter array; the current core
+    /// is in slot `p`, the parity cell `wa 0`).
+    pub fn capacity(&self) -> u64 {
+        let p = self.m.peek(2000, 0).as_u64();
+        self.m.peek(1000 * p + 110, 0).as_u64()
+    }
+
     fn set(&mut self, f: fn(&mut Top) -> &mut W, v: u64) {
         self.m.cost += 2;
         let w = pk(W::S(v), &mut self.m);
