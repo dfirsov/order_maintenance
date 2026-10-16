@@ -22,3 +22,4 @@ import OM.Impl.GlueTop
 import OM.Impl.GlueCore
 import OM.Impl.Caps
 import OM.Impl.SlotFrame
+import OM.Impl.WCall
