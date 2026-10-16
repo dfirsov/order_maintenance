@@ -1,4 +1,5 @@
 import OM.Impl.NewCore
+import OM.Proof.Top.Setup
 
 /-!
 # M6: the wrapper as machine code
@@ -548,5 +549,49 @@ theorem curInsW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {hx : Optio
   · have : insBound om.cur.P = insBound P := by rw [hP]
     simp [OM.Machine.costList, Expr.cost] at *
     omega
+
+/-! ### Cores in service -/
+
+/-- **A core in service**, as the wrapper's Level M steps need it: Level F's `CoreOK` for the
+proof parameters, room for one more element, and the capacity predicate. -/
+structure InService (c : Core) (L : List Nat) : Prop where
+  ok : CoreOK proofParams TopInv topMu topJ nfP RfP c L
+  room : c.count + 1 ≤ c.P.N
+  mc : Mc (capsOf c.P) c.P c
+
+theorem proofParams_a (N : Nat) : (proofParams N).a = 2 ^ Nat.log2 (proofParams N).a := by
+  show 8 = 2 ^ Nat.log2 8; decide
+
+/-- The parameter conditions of `insertAgreeM`, for a core in service. -/
+theorem InService.params {c : Core} {L : List Nat} (h : InService c L) :
+    1 ≤ c.P.K_R ∧ topJ c.P / c.P.K_R + 1 ≤ RfP c.P ∧ 1 ≤ nfP c.P ∧
+      2 + 2 * ((c.count + 1) / (c.P.theta + 1 - cmax c.P)) ≤ nfP c.P + 1 ∧
+      2 + 2 * ((c.count + 1) / (c.P.theta + 1 - cmax c.P)) ≤ capT c.P ∧
+      (c.P.theta : ℝ) + RfP c.P * (OM.Zeroing.Hn (nfP c.P - 1) + 1) ≤ c.P.T ∧
+      c.P.a = 2 ^ Nat.log2 c.P.a := by
+  have hmk := h.ok.pmk
+  have S := costSetup
+  have hdiv : (c.count + 1) / (c.P.theta + 1 - cmax c.P) ≤ c.P.N / (c.P.theta + 1 - cmax c.P) :=
+    Nat.div_le_div_right h.room
+  have h1 := S.kR c.P.N; have h2 := S.R c.P.N; have h3 := S.n1 c.P.N; have h4 := S.size c.P.N
+  have h5 := S.capc c.P.N; have h6 := S.I5 c.P.N
+  rw [← hmk] at h1 h2 h3 h6
+  have hN : (proofParams c.P.N).N = c.P.N := S.PN _
+  rw [← hmk] at h4 h5
+  refine ⟨h1, h2, h3, by omega, by omega, h6, ?_⟩
+  rw [hmk]; exact proofParams_a _
+
+/-- **An insertion into a core in service**, at Level M. -/
+theorem InService.insert {c : Core} {L : List Nat} (h : InService c L) {x : Nat} (hx : x ∈ L) (hh : Nat)
+    (Lx : Loc) (hLx : Lx "x" = x) (hLh : Lx "h" = hh) :
+    ∃ c', (insertAfter x hh).run c = .ok c.E.size c' ∧
+      (∃ L' m, evalF (capsOf c.P) insertAfterP.body c Lx = .ok c' L' m ∧ L' "y" = c.E.size ∧ m ≤ insBound c.P) ∧
+      CoreOK proofParams TopInv topMu topJ nfP RfP c' (OM.Spec.insertAfterL x c.E.size L) ∧
+      c'.count = c.count + 1 ∧ c'.P = c.P ∧ Mc (capsOf c.P) c.P c' := by
+  obtain ⟨hk, hR, hn, hsize, hcap, hI5, hpow⟩ := h.params
+  obtain ⟨c', hr, he, hC', hcnt', hP', hM'⟩ := insertAgreeM h.ok.cost rfl hx hk hR hn hsize hcap hI5 hh Lx hLx hLh
+    hpow (capsOf_ok c.P) h.ok.cnt h.room h.mc
+  refine ⟨c', hr, he, ⟨by rw [hP']; exact hC', by rw [hcnt', h.ok.cnt, length_insertAfterL hx],
+    by rw [hP']; exact h.ok.pmk⟩, hcnt', hP', hM'⟩
 
 end OM.Impl
