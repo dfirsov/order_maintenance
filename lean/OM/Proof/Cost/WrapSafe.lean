@@ -387,4 +387,142 @@ theorem insert_safe (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {S
             have h2 := hpost A hR.inv
             omega)
 
+/-- **A deletion's rebuild step is safe.** -/
+theorem delete_safe (S : CostSetup mk TI PI μ ν PP Jf capf nf Rf) {om : OM} {Sp : OM.Spec.State}
+    (hW : WC mk TI PI μ ν Jf nf Rf om Sp) {x : Nat} (hv : x ∈ Sp.list) :
+    ∃ c' om2, (markDead (om.curIdx.getX x)).run om.cur = .ok () c' ∧
+      ({ om with cur := c', curIdx := om.curIdx.setX x 0 } : OM).mirrorDelete x = .ok om2 ∧
+      ∀ n, om2.nxt = some n →
+        RLSafeF mk TI μ Jf nf Rf { om2 with live := om2.live - 1, nxt := none } n (om2.KB + 1) om2.KB := by
+  obtain ⟨hS, hf, A, hR, hL, hI, hN⟩ := hW.w
+  have hnd : (liveH om.cur A.elist).Nodup := hL ▸ hS.1
+  obtain ⟨hxi, hlx, hhx⟩ := hI x hv
+  obtain ⟨c', hr, hR', hL', hrec, hhdl, _, hdead⟩ := core_kill hR hxi hlx hnd
+  have hok := hW.cur A hR.inv
+  obtain ⟨c2, hr2, hok', hcnt', hP2⟩ := hok.markDead S (om.curIdx.getX x)
+  rw [hr] at hr2; cases hr2
+  obtain ⟨om2, hm, e1, e2, e3, e4, e5, hN2⟩ := mirrorDelete_ok (om := { om with
+      cur := c'
+      curIdx := om.curIdx.setX x 0 }) (c' := c') hN hR hnd hxi hlx hhx hrec hhdl hdead
+  have hW3 : WInv { om2 with live := om2.live - 1 } (OM.Spec.step Sp (.delete x)).1 := by
+    refine ⟨OM.Spec.step_inv hS hv, by show om2.nextHandle = _; rw [e3]; exact hf, A, ?_, ?_, ?_, ?_⟩
+    · show CoreR om2.cur A; rw [e1]; exact hR'
+    · show liveH om2.cur A.elist = Sp.list.erase x; rw [e1]; show liveH c' A.elist = _
+      rw [hL', hhx, hL]
+    · show IdxOK om2.cur A om2.curIdx (Sp.list.erase x)
+      rw [e1, e2]
+      intro z hz
+      have hzx : z ≠ x := fun e => by subst e; exact (List.Nodup.not_mem_erase hS.1) hz
+      have hz' := List.mem_of_mem_erase hz
+      simp only [Array.getX_setX, if_neg hzx]
+      obtain ⟨h1, h2, h3⟩ := hI z hz'
+      have hne : om.curIdx.getX z ≠ om.curIdx.getX x := fun e => hzx (by rw [← h3, e, hhx])
+      exact ⟨h1, by show live c' _ = true; rw [hrec _ hne]; exact h2,
+        by show hdl c' _ = z; rw [hhdl]; exact h3⟩
+    · show NxtR om2.cur A { om2 with live := om2.live - 1 }
+      rw [e1]; exact hN2
+  have finish : ∀ om4, ({ om2 with live := om2.live - 1 } : OM).rebuildStep mk = .ok om4 →
+      om.delete mk x = .ok om4 := by
+    intro om4 hrb
+    unfold OM.delete
+    rw [onCur_ok hr]
+    simp only [bind, Except.bind]
+    rw [hm]
+    exact hrb
+  have hm2 : ∀ om', ({ om with cur := c', curIdx := om.curIdx.setX x 0 } : OM).mirrorDelete x = .ok om' → om' = om2 := by
+    intro om' h; rw [hm] at h; injection h with h; exact h.symm
+  have hlen : 1 ≤ Sp.list.length := List.length_pos_of_mem hv
+  have hlv3 : om2.live - 1 = (OM.Spec.step Sp (.delete x)).1.list.length := by
+    rw [e4, hW.live]; show _ = (Sp.list.erase x).length; rw [List.length_erase_of_mem hv]
+  have hcur3 : ∀ A'', INV om2.cur A'' → CoreOK mk TI μ Jf nf Rf om2.cur A''.elist := by
+    intro A'' hA''; rw [e1] at hA'' ⊢; rw [INV.elist_unique hA'' hR'.inv]; exact hok'
+  have hPc' : c'.P = om.cur.P := hP2
+  have hbig3 : 64 ≤ om2.cur.P.N := by rw [e1, hPc']; exact hW.big
+  have hkb3 : 4 ≤ om2.KB := by rw [e5]; exact hW.kb
+  have hlv0 : om.live = Sp.list.length := hW.live
+  refine ⟨c', om2, hr, hm, ?_⟩
+  cases hn : om.nxt with
+  | none =>
+    have hmi : ({ om with cur := c', curIdx := om.curIdx.setX x 0 } : OM).mirrorDelete x = .ok { om with cur := c', curIdx := om.curIdx.setX x 0 } := by
+      unfold OM.mirrorDelete; simp only [hn]; rfl
+    have h2 := hm2 _ hmi
+    subst h2
+    exact rebuildStep_safe S hW3 hlv3 hkb3 hcur3
+      (fun n' hn' => by simp only [hn] at hn'; cases hn')
+  | some n =>
+    obtain ⟨c₀, live₀, I, D, hRW⟩ := hW.busy n hn
+    have hIq : I ≤ (c₀ + (om.cur.P.L + 2)) / (om.KB - 1) := by
+      rw [Nat.le_div_iff_mul_le (by have := hW.kb; omega), Nat.mul_comm]
+      cases hs : om.cursorSet
+      · have := (hRW.prep hs).2; omega
+      · have := (hRW.serve hs).2 A hR.inv; omega
+    have hN0 := hN
+    unfold NxtR at hN0; rw [hn] at hN0
+    obtain ⟨B, hRB, hIB, hzB, hcs⟩ := hN0
+    cases hs : om.cursorSet with
+    | false =>
+      rw [if_neg (by simp [hs])] at hcs
+      subst hcs
+      have hx0 : om.nxtIdx.getX x = 0 := by
+        by_contra h; have := hzB x h; rw [liveH_initAbs hRB] at this; simp at this
+      have hmi : ({ om with cur := c', curIdx := om.curIdx.setX x 0 } : OM).mirrorDelete x = .ok { om with cur := c', curIdx := om.curIdx.setX x 0 } := by
+        unfold OM.mirrorDelete; simp only [hn, hx0, bne_self_eq_false, Bool.false_eq_true, if_false]
+        rfl
+      have h2 := hm2 _ hmi
+      subst h2
+      obtain ⟨hprep, hφ⟩ := hRW.prep hs
+      refine rebuildStep_safe S hW3 hlv3 hkb3 hcur3
+        (fun n' hn' => by
+          simp only [hn, Option.some.injEq] at hn'
+          subst hn'
+          refine ⟨c₀, live₀, I, D + 1, ⟨?_, ?_, ?_, ?_, hRW.l0, ?_, fun _ => ⟨hprep, ?_⟩,
+            fun h => by simp [hs] at h⟩⟩
+          · show c₀ ≤ c'.P.N / 2; rw [hPc']; exact hRW.c0
+          · show n.P = _; rw [hRW.nP]; simp only [hPc']
+          · show c'.count ≤ c₀ + I; rw [hcnt']; exact hRW.ccnt
+          · show om.live - 1 + (D + 1) = live₀ + I; have := hRW.live; omega
+          · show I ≤ (c₀ + (c'.P.L + 2)) / (om.KB - 1) + 1; rw [hPc']; omega
+          · show ν n + c'.count + (om.KB - 1) * I ≤ c'.P.L + 2 + c₀ + om.KB
+            rw [hPc', hcnt']; omega)
+    | true =>
+      obtain ⟨hserve, hpost⟩ := hRW.serve hs
+      obtain ⟨hok0, hfill0⟩ := hserve B hRB.inv
+      rw [if_pos hs] at hcs
+      obtain ⟨pre, post, hsplit, hcpost, -, hLB⟩ := hcs
+      have hndB : (liveH n B.elist).Nodup := by
+        rw [hLB]; exact (FM_sub_nodup (hsplit ▸ hnd)).1
+      obtain ⟨om2', hmi, f1, f2, f3, f4, f5, n', hn2, hRB', hok', hfill', hP'⟩ :=
+        mirrorDelete_cost (om := { om with cur := c', curIdx := om.curIdx.setX x 0 }) (x := x)
+          S hn hRB hok0 hfill0 hIB hzB hndB
+      have h2 := hm2 _ hmi
+      subst h2
+      have g1 : om2'.cur = c' := f1
+      have g2 : om2'.cursorSet = om.cursorSet := f2
+      have g3 : om2'.cursor = om.cursor := f3
+      have g4 : om2'.KB = om.KB := f4
+      have g5 : om2'.live = om.live := f5
+      refine rebuildStep_safe S hW3 hlv3 hkb3 hcur3
+        (fun n'' hn'' => by
+          simp only [hn2, Option.some.injEq] at hn''
+          subst hn''
+          refine ⟨c₀, live₀, I, D + 1, ⟨?_, ?_, ?_, ?_, hRW.l0, ?_, fun h => ?_,
+            fun _ => ⟨fun B'' hB'' => ?_, fun A'' hA'' => ?_⟩⟩⟩
+          · show c₀ ≤ om2'.cur.P.N / 2; rw [g1, hPc']; exact hRW.c0
+          · show n'.P = mk (4 * max (live₀ + ((c₀ + (om2'.cur.P.L + 2)) / (om2'.KB - 1) + 1)) 16)
+            rw [hP', hRW.nP, g1, g4, hPc']
+          · show om2'.cur.count ≤ c₀ + I; rw [g1, hcnt']; exact hRW.ccnt
+          · show om2'.live - 1 + (D + 1) = live₀ + I; rw [g5]; have := hRW.live; omega
+          · show I ≤ (c₀ + (om2'.cur.P.L + 2)) / (om2'.KB - 1) + 1
+            rw [g1, g4, hPc']; omega
+          · exfalso; have : om2'.cursorSet = true := by rw [g2]; exact hs
+            simp only at h; rw [this] at h; cases h
+          · rw [INV.elist_unique hB'' hRB'.inv]; exact ⟨hok', hfill'⟩
+          · simp only at hA''
+            rw [g1] at hA''
+            show (postOf A''.elist om2'.cursor).length + (om2'.KB - 1) * I ≤
+              om2'.cur.P.L + 2 + c₀ + om2'.KB
+            rw [g1, g3, g4, INV.elist_unique hA'' hR'.inv, hPc']
+            have := hpost A hR.inv
+            omega)
+
 end OM.Proof
