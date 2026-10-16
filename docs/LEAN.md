@@ -83,6 +83,9 @@ largest value it computes (`State.peak`), so the bound can be measured on the st
 **Not covered:** the running time of the Lean code itself, memory reclamation of a retired core
 (its arrays stay allocated until the slot is reused), and calls with invalid handles.
 
+**Executable code.** The same machine program, printed as Rust by an unverified printer and checked
+against the machine semantics, is in `rust/` (§16).
+
 ---
 
 ## 3. The machine model (`OM/Machine/`)
