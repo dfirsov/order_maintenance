@@ -21,7 +21,7 @@ checker that measures every bound of the proof sketch (`docs/TESTING.md` §8: 0 
 The pen-and-paper proof is now complete (`docs/PROOF.md` v0.3). Every cost lemma has exact
 constants, the conditions are checked for all `L ≥ 8` (`prototype/top_bounds.py`,
 `prototype/lower_bounds.py`), and the exact bounds are measured in testing (`docs/TESTING.md` §9).
-The Lean port has started (`docs/LEAN.md` §7):
+The Lean port (`docs/LEAN.md` §7):
 * **M0:** machine model, cost semantics, program logic and list specification.
 * **M1:** the executable functional model replays 2,292 prototype traces (31 million records)
   exactly (`docs/TESTING.md` §10).
