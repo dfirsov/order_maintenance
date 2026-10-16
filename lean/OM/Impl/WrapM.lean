@@ -1,0 +1,134 @@
+import OM.Impl.NewCore
+
+/-!
+# M6: the wrapper as machine code
+
+**Layout.** The cores live in slots 0 and 1 (arrays `1000·p + code`); the wrapper's own arrays
+are numbered from 2000, outside both slots:
+* one cell each: `wa 0` parity (the slot of `cur`), `wa 1` whether `nxt` exists, `wa 2` cursor,
+  `wa 3` cursorSet, `wa 4` live, `wa 5` nextHandle, `wa 6` rebuilds, `wa 7` `K_B`;
+* the handle maps `wIdx q` (`q` = 0, 1): `curIdx` in `wIdx p`, `nxtIdx` in `wIdx (1 - p)`.
+
+`WEnc om m p` says that machine state `m` holds wrapper state `om` with `cur` in slot `p`.
+The wrapper code tests the parity and runs the code specialized to it.
+-/
+
+namespace OM.Impl
+
+open OM.Model OM.Proof OM.Proof.Top
+open OM.Machine (Reg Arr State Out exec Stmt Same Expr BinOp UnOp wp)
+
+def wa (k : Nat) : Arr := 2000 + k
+def wIdx (q : Nat) : Arr := 2010 + q
+
+theorem wa_notSlot {p k : Nat} (hp : p < 2) : ¬ InSlot p (wa k) := by
+  unfold InSlot wa; omega
+theorem wIdx_notSlot {p q : Nat} (hp : p < 2) : ¬ InSlot p (wIdx q) := by
+  unfold InSlot wIdx; omega
+
+/-- **The encoding of the wrapper state.** -/
+structure WEnc (om : OM) (m : State) (p : Nat) : Prop where
+  p2 : p < 2
+  scap : ∀ k < 8, m.cap (wa k) = 1
+  par : m.mem (wa 0) 0 = p
+  nxtOn : m.mem (wa 1) 0 = b2n om.nxt.isSome
+  cursor : m.mem (wa 2) 0 = om.cursor
+  cset : m.mem (wa 3) 0 = b2n om.cursorSet
+  live : m.mem (wa 4) 0 = om.live
+  next : m.mem (wa 5) 0 = om.nextHandle
+  reb : m.mem (wa 6) 0 = om.rebuilds
+  kb : m.mem (wa 7) 0 = om.KB
+  cur : Enc p (capsOf om.cur.P) om.cur m
+  nxt : ∀ n, om.nxt = some n → Enc (1 - p) (capsOf n.P) n m
+  idxC : ∀ h < m.cap (wIdx p), m.mem (wIdx p) h = om.curIdx.getX h
+  idxN : om.nxt.isSome → ∀ h < m.cap (wIdx (1 - p)), m.mem (wIdx (1 - p)) h = om.nxtIdx.getX h
+  roomC : om.nextHandle + (om.cur.P.N - om.cur.count) ≤ m.cap (wIdx p)
+  roomN : ∀ n, om.nxt = some n →
+    om.nextHandle + (om.cur.P.N - om.cur.count) + (n.P.N - n.count) ≤ m.cap (wIdx (1 - p))
+
+/-- The wrapper state survives anything that keeps slot `p`'s core, the other slot, and the
+wrapper's arrays. -/
+theorem WEnc.of_slot {om : OM} {m m' : State} {p : Nat} (h : WEnc om m p)
+    (hcur : Enc p (capsOf om.cur.P) om.cur m') (hS : ∀ b, ¬ InSlot p b → Same b m m') : WEnc om m' p := by
+  have hp := h.p2
+  have hw : ∀ k, Same (wa k) m m' := fun k => hS _ (wa_notSlot hp)
+  have hi : ∀ q, Same (wIdx q) m m' := fun q => hS _ (wIdx_notSlot hp)
+  refine ⟨hp, fun k hk => by rw [(hw k).2]; exact h.scap k hk, by rw [(hw 0).1]; exact h.par,
+    by rw [(hw 1).1]; exact h.nxtOn, by rw [(hw 2).1]; exact h.cursor, by rw [(hw 3).1]; exact h.cset,
+    by rw [(hw 4).1]; exact h.live, by rw [(hw 5).1]; exact h.next, by rw [(hw 6).1]; exact h.reb,
+    by rw [(hw 7).1]; exact h.kb, hcur, fun n hn => ?_, fun x hx => ?_, fun hn x hx => ?_, ?_, fun n hn => ?_⟩
+  · exact (h.nxt n hn).of_same fun b hb => hS b (fun hpb => inSlot_disj (by omega) hpb hb)
+  · rw [(hi p).2] at hx; rw [(hi p).1]; exact h.idxC x hx
+  · rw [(hi (1 - p)).2] at hx; rw [(hi (1 - p)).1]; exact h.idxN hn x hx
+  · rw [(hi p).2]; exact h.roomC
+  · rw [(hi (1 - p)).2]; exact h.roomN n hn
+
+theorem WEnc.bump {om : OM} {m : State} {p : Nat} (h : WEnc om m p) (v : Nat) : WEnc om (m.bump v) p :=
+  h.of_slot (h.cur.bump v) fun _ _ => ⟨rfl, rfl⟩
+theorem WEnc.setLoc {om : OM} {m : State} {p : Nat} (h : WEnc om m p) (x : Reg) (v : Nat) :
+    WEnc om (m.setLoc x v) p :=
+  h.of_slot (h.cur.setLoc x v) fun _ _ => ⟨rfl, rfl⟩
+
+/-- The parity test. -/
+def parE : Expr := .bin .eq (.load (wa 0) (.lit 0)) (.lit 0)
+
+/-- Run the code specialized to the parity. -/
+def byPar (c : Nat → Stmt) : Stmt := .ite parE (c 0) (c 1)
+
+theorem wp_byPar {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {c : Nat → Stmt} {Q : State → Nat → Prop}
+    (hc : wp (c p) (fun s' n => Q s' (1 + parE.cost + n)) (m.bump (parE.maxv m))) : wp (byPar c) Q m := by
+  unfold byPar
+  rw [OM.Machine.wp_ite]
+  have hev : parE.eval m = some (if p = 0 then 1 else 0) := by
+    simp [parE, Expr.eval, h.scap 0 (by omega), h.par, BinOp.eval]
+  refine ⟨_, hev, ?_⟩
+  have := h.p2
+  by_cases hp : p = 0
+  · subst hp; simpa using hc
+  · have : p = 1 := by omega
+    subst this; simpa using hc
+
+/-! ### Order queries -/
+
+/-- Order of the handles in locals `x`, `y`; the answer in local `r`. -/
+def orderC (p : Nat) : Stmt :=
+  .seq (.assign "xi" (.load (wIdx p) (.var "x"))) (.seq (.assign "yi" (.load (wIdx p) (.var "y")))
+    (.call "order" ["x", "y"] (orderP.body.compile p κ₀) ["r"] [.var "xi", .var "yi"] ["r"]))
+
+def orderWS : Stmt := byPar orderC
+
+theorem order_run_state {x y : Nat} {s s' : Core} {b : Bool} (h : (OM.Model.order x y).run s = .ok b s') :
+    s' = s := by
+  unfold OM.Model.order OM.Model.key at h; simp [getE, getG, getC] at h; exact h.2.symm
+
+/-- **An order query** at the machine level. -/
+theorem orderW_ok {om : OM} {m : State} {p : Nat} (h : WEnc om m p) {x y : Nat}
+    (hx : m.loc "x" = x) (hy : m.loc "y" = y) (hxc : x < m.cap (wIdx p)) (hyc : y < m.cap (wIdx p))
+    {P : Params} {n R : Nat} {L : List Nat} (hC : CostInv (TIat TopInv P) topMu (topJ P) n R L om.cur)
+    (hP : om.cur.P = P) (hxL : om.curIdx.getX x ∈ L) (hyL : om.curIdx.getX y ∈ L)
+    (hcntL : om.cur.count = L.length) (hM : Mc (capsOf P) P om.cur) {b : Bool} {s' : Core}
+    (hr : (OM.Model.order (om.curIdx.getX x) (om.curIdx.getX y)).run om.cur = .ok b s') :
+    wp orderWS (fun m' c => WEnc om m' p ∧ m'.loc "r" = b2n b ∧ c ≤ 100) m := by
+  have e := order_run_state hr; subst e
+  refine wp_byPar h ?_
+  set m0 := m.bump (parE.maxv m)
+  have h0 := h.bump (parE.maxv m)
+  unfold orderC
+  rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+  refine ⟨om.curIdx.getX x, by simp [Expr.eval, m0, hx, hxc, h.idxC x hxc], ?_⟩
+  rw [OM.Machine.wp_seq, OM.Machine.wp_assign]
+  set m1 := (m0.bump _).setLoc "xi" (om.curIdx.getX x)
+  have h1 : WEnc om m1 p := (h0.bump _).setLoc _ _
+  refine ⟨om.curIdx.getX y, by simp [Expr.eval, m1, m0, hy, hyc, h.idxC y hyc], ?_⟩
+  set m2 := (m1.bump _).setLoc "yi" (om.curIdx.getX y)
+  have h2 : WEnc om m2 p := (h1.bump _).setLoc _ _
+  have hcur : Enc p (capsOf P) om.cur m2 := by rw [← hP]; exact h2.cur
+  obtain ⟨L', c, he, hrr, hc⟩ := orderAgreeM hC hP hxL hyL (OM.Machine.State.setLocs (fun _ => 0) ["x", "y"]
+    [om.curIdx.getX x, om.curIdx.getX y]) (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd])
+    (by simp [OM.Machine.State.setLocs, OM.Machine.State.upd]) (capsOf_ok P) hcntL hM hr
+  rw [compile_κ₀ p P]
+  refine wp_coreCall hcur (by simp [OM.Machine.evalList, Expr.eval, m2, m1]) he (fun m3 hE hS hL => ?_)
+  refine ⟨h2.of_slot (by rw [hP]; exact hE) hS, by rw [hL]; simp [OM.Machine.State.setLocs, hrr], ?_⟩
+  simp [OM.Machine.costList, Expr.cost, parE] at *; omega
+
+end OM.Impl

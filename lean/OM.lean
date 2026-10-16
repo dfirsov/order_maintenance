@@ -26,3 +26,4 @@ import OM.Impl.WCall
 import OM.Impl.Fresh
 import OM.Impl.Params
 import OM.Impl.NewCore
+import OM.Impl.WrapM
