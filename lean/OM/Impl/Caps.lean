@@ -1,4 +1,5 @@
 import OM.Impl.GlueCore
+import OM.Impl.Init
 
 /-!
 # M6: the capacities (step 4 of the glue)
@@ -653,6 +654,8 @@ structure CapsOK (κ : Caps) (P : Params) : Prop where
   f0 : 0 < κ.lrec .freeG
   cC : cb P ≤ Ccap κ
   cB : P.N + 2 < Bcap κ
+  pqC : κ.arr .pqPrev = Ccap κ ∧ κ.arr .pqWhere = Ccap κ
+  pqB : κ.arr .nbNext = Bcap κ ∧ κ.arr .nbPrev = Bcap κ
 
 theorem NodeB.le {s : Core} (h : NodeB s) (hC : s.C.size ≤ cb s.P) : s.nodes.size ≤ nbMax s.P := by
   unfold NodeB at h; unfold nbMax; have := Nat.mul_le_mul_left (topJ s.P) hC; omega
@@ -866,5 +869,65 @@ theorem orderAgreeM {P : Params} {n R : Nat} {L : List Nat} {s : Core} {x y : Na
   have hcx' : (s.Gs.getX (s.E.getX x).grp).chk < s.C.size := hcx
   have hcy' : (s.Gs.getX (s.E.getX y).grp).chk < s.C.size := hcy
   exact order_agree κ s Lxy hLx hLy (by omega) (by omega) (by omega) (by omega) (by omega) (by omega) h
+
+/-! ### A fresh core -/
+
+/-- The path rows from 2 on are empty (a core under construction). -/
+def PZ1 (s : Core) : Prop := ∀ c, 2 ≤ c → s.path.getX c = #[]
+
+theorem pz1_initState (P : Params) (r : Bool) : PZ1 (prepStart P r) := fun c _ => by
+  show (#[] : Array (Array Nat)).getX c = #[]; rfl
+
+/-- **A construction step keeps the empty rows.** -/
+theorem prep_pz1 {P : Params} {h : Nat} {s s' : Core} {b : Bool} (S : Stage P h s) (hH1 : 1 ≤ P.H)
+    (hz : PZ1 s) (hr : initStep.run s = .ok b s') : PZ1 s' := by
+  obtain ⟨pa, hp, -, -⟩ := S.pr
+  have hP := S.P
+  by_cases e1 : h = 1
+  · subst e1
+    rw [initStep_first s _ hp rfl (by rw [hP]; exact hH1)] at hr
+    obtain ⟨-, e⟩ := EStateM.Result.ok.inj hr; subst e
+    intro c _; rfl
+  · by_cases eH : h ≤ P.H
+    · rw [initStep_mid s _ hp e1 (by rw [hP]; exact eH)] at hr
+      obtain ⟨-, e⟩ := EStateM.Result.ok.inj hr; subst e
+      exact hz
+    · rw [initStep_last s _ hp e1 (by rw [hP]; show P.H < h; omega)] at hr
+      obtain ⟨-, e⟩ := EStateM.Result.ok.inj hr; subst e
+      intro c hc
+      show (s.path.setX 1 pa).getX c = _
+      rw [OM.Proof.Top.getX_setX', if_neg (by omega)]; exact hz c hc
+
+/-- **A ready fresh core satisfies the capacity predicate.** -/
+theorem mc_final {κ : Caps} {P : Params} (K : CapsOK κ P) (hN : 1 ≤ P.N) {s : Core} (F : Final P s) (hz : PZ1 s) :
+    Mc κ P s := by
+  have hP : s.P = P := F.low.rest.1
+  have hC : s.C.size = 2 := by rw [F.low.Csize]; rfl
+  have hG : s.Gs.size = 2 := by rw [F.low.Gs]; rfl
+  have hcnt : s.count = 1 := by rw [F.low.rest.2.1]; rfl
+  obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := F.low.pq
+  have q1 : s.pqHead = #[] := q1
+  have q2 : s.pqNext = #[] := q2
+  have q3 : s.pqPrev = #[] := q3
+  have q4 : s.pqWhere = #[] := q4
+  have q5 : s.nbNext = #[] := q5
+  have q6 : s.nbPrev = #[] := q6
+  have q7 : s.pqHi = 0 := q7
+  have q8 : s.pqLo = 0 := q8
+  have hcb : 2 ≤ cb P := by unfold cb; omega
+  have hCc := K.cC; have hBc := K.cB
+  have hmu : topMu s = 0 := by unfold topMu; rw [F.res]
+  refine ⟨hP, ?_, by rw [hC]; exact hcb, ⟨K.pqC, K.pqB, fun i => ?_, fun i => ?_, fun i => ?_, fun i => ?_,
+    fun i => ?_, fun i => ?_, ?_, ?_⟩, F.prep, fun c hc j => ?_, by rw [hcnt]; exact hN, by rw [hG, hcnt]; omega⟩
+  · unfold NodeB; rw [F.nsz, hmu, hC, hP]; unfold nb0; omega
+  · rw [q2]; show (#[] : Array Nat).getX i < _; show 0 < _; omega
+  · rw [q3]; show (#[] : Array Nat).getX i < _; show 0 < _; omega
+  · rw [q1]; show (#[] : Array Nat).getX i < _; show 0 < _; omega
+  · rw [q4]; show (#[] : Array Nat).getX i < _; show 0 < _; omega
+  · rw [q5]; show (#[] : Array Nat).getX i < _; show 0 < _; omega
+  · rw [q6]; show (#[] : Array Nat).getX i < _; show 0 < _; omega
+  · rw [q8]; show 0 < _; omega
+  · rw [q7]; show 0 < _; omega
+  · rw [hC] at hc; rw [hz c hc]; rfl
 
 end OM.Impl
