@@ -4,9 +4,10 @@
 //! * A word is a natural number of arbitrary size (`W`): a `u64`, or a `BigUint` above it.
 //! * An array has a capacity; an access at an index beyond it is a machine error (a panic),
 //!   and so is a subtraction below 0. The proofs show that neither happens.
-//! * `alloc` gives an array a capacity with every cell reading 0. The cells are a `Vec<u64>`
-//!   allocated zeroed (the operating system provides zero pages lazily); a cell holding a value
-//!   of 2^63 or more refers to the array's table of large values.
+//! * `alloc` gives an array a capacity with every cell reading 0. The cells live in blocks of
+//!   `BLOCK` cells, each allocated when first written (an unwritten block reads 0), so memory
+//!   follows the cells actually used, not the capacities. A cell holding a value of 2^63 or more
+//!   refers to the array's table of large values.
 //! * `m.cost` counts the machine's steps; `m.peak` is the bit length of the largest value
 //!   computed so far (`State.peak`).
 
@@ -98,9 +99,31 @@ pub enum Uop {
 
 const TAG: u64 = 1 << 63;
 
+/// Cells per block (32 KB).
+pub const BLOCK: usize = 4096;
+
 struct Arr {
-    cells: Vec<u64>,
+    cap: usize,
+    blocks: Vec<Option<Box<[u64; BLOCK]>>>,
     big: Vec<BigUint>,
+}
+
+impl Arr {
+    fn new(cap: usize) -> Arr {
+        Arr { cap, blocks: (0..cap.div_ceil(BLOCK)).map(|_| None).collect(), big: Vec::new() }
+    }
+    #[inline]
+    fn get(&self, i: usize) -> u64 {
+        match &self.blocks[i / BLOCK] {
+            Some(b) => b[i % BLOCK],
+            None => 0,
+        }
+    }
+    #[inline]
+    fn set(&mut self, i: usize, c: u64) {
+        let b = self.blocks[i / BLOCK].get_or_insert_with(|| Box::new([0u64; BLOCK]));
+        b[i % BLOCK] = c;
+    }
 }
 
 /// The machine's memory, step counter and peak.
@@ -113,7 +136,7 @@ pub struct M {
 impl M {
     pub fn new() -> M {
         M {
-            arrs: (0..NARR).map(|_| Arr { cells: Vec::new(), big: Vec::new() }).collect(),
+            arrs: (0..NARR).map(|_| Arr::new(0)).collect(),
             cost: 0,
             peak: 0,
         }
@@ -121,12 +144,21 @@ impl M {
     /// Read cell `i` of machine array `arr` (for monitoring; not used by the program).
     pub fn peek(&self, arr: u64, i: usize) -> W {
         let a = ARRS.iter().position(|&x| x == arr).expect("array used by the program");
-        let c = self.arrs[a].cells[i];
+        let c = self.arrs[a].get(i);
         if c & TAG == 0 { W::S(c) } else { norm(self.arrs[a].big[(c & !TAG) as usize].clone()) }
     }
-    /// The number of cells allocated in all arrays.
+    /// The capacity of machine array `arr` (for monitoring).
+    pub fn cap(&self, arr: u64) -> usize {
+        let a = ARRS.iter().position(|&x| x == arr).expect("array used by the program");
+        self.arrs[a].cap
+    }
+    /// The total capacity of all arrays (the machine's allocated cells).
     pub fn cells(&self) -> usize {
-        self.arrs.iter().map(|a| a.cells.len()).sum()
+        self.arrs.iter().map(|a| a.cap).sum()
+    }
+    /// The cells in blocks actually allocated (memory in use, without the tables of large values).
+    pub fn resident(&self) -> usize {
+        self.arrs.iter().map(|a| a.blocks.iter().filter(|b| b.is_some()).count() * BLOCK).sum()
     }
 }
 
@@ -148,14 +180,14 @@ pub fn pk(v: W, m: &mut M) -> W {
 
 fn index(i: &W, a: usize, m: &M) -> usize {
     match i {
-        W::S(v) if (*v as usize) < m.arrs[a].cells.len() => *v as usize,
-        _ => panic!("machine error: access at {:?} beyond the capacity {} of array {}", i, m.arrs[a].cells.len(), ARRS[a]),
+        W::S(v) if (*v as usize) < m.arrs[a].cap => *v as usize,
+        _ => panic!("machine error: access at {:?} beyond the capacity {} of array {}", i, m.arrs[a].cap, ARRS[a]),
     }
 }
 
 pub fn load(a: usize, i: W, m: &mut M) -> W {
     let ix = index(&i, a, m);
-    let c = m.arrs[a].cells[ix];
+    let c = m.arrs[a].get(ix);
     let v = if c & TAG == 0 { W::S(c) } else { norm(m.arrs[a].big[(c & !TAG) as usize].clone()) };
     pk(v, m)
 }
@@ -163,8 +195,8 @@ pub fn load(a: usize, i: W, m: &mut M) -> W {
 pub fn store(a: usize, i: W, v: W, m: &mut M) {
     let ix = index(&i, a, m);
     let arr = &mut m.arrs[a];
-    let old = arr.cells[ix];
-    arr.cells[ix] = match v {
+    let old = arr.get(ix);
+    let c = match v {
         W::S(x) if x < TAG => x,
         v => {
             let b = v.to_big();
@@ -177,11 +209,12 @@ pub fn store(a: usize, i: W, v: W, m: &mut M) {
             }
         }
     };
+    arr.set(ix, c);
 }
 
 pub fn alloc(a: usize, k: W, m: &mut M) {
     let n = k.as_u64() as usize;
-    m.arrs[a] = Arr { cells: vec![0u64; n], big: Vec::new() };
+    m.arrs[a] = Arr::new(n);
 }
 
 fn shl(a: &W, b: &W) -> W {

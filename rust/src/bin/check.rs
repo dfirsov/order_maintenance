@@ -86,6 +86,6 @@ fn main() {
     println!("  steps per operation: max {maxc} ({maxop}), mean {:.0}", sumc as f64 / ops as f64);
     println!("  bound opB 4 = 1133561742; max / bound = {:.2e}", maxc as f64 / 1133561742.0);
     println!("  peak value: {} bits", om.m.peak);
-    println!("  allocated cells {}", om.m.cells());
+    println!("  allocated cells {} (capacities), {} in blocks in use", om.m.cells(), om.m.resident());
     println!("  time {:.2?} ({:.2} us per operation)", dt, dt.as_secs_f64() * 1e6 / ops as f64);
 }
