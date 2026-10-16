@@ -722,3 +722,23 @@ entries, entries in at most two tables). Then:
 
 Level M takes the same branch as Level F at each step, so an agreement is needed only where its
 branch runs: `walkS_agree` and `afterDS_agree` take each agreement under its branch's condition.
+
+**Glue, step 3 (done, `GlueCore.lean`).** The same method for the core's parts. Each place in
+Level F's cost proof is followed, and its run lemma is paired with the Level M lemma for the same
+branch:
+* `DriveInv.stepAgree`, `ginv_driveAgree`, `groupPhaseAgree`: group split steps, group drives,
+  and the group phase (split start and drive).
+* `CDriveInv.stepAgree`, `cinv_driveAgree`, `driveChunkAgree`: chunk split steps and the chunk
+  phase. A chunk step costs at most 700, not 350: the move lemmas prove 700.
+* `resInv_step` (the step of `reservation_cost`, as a lemma), `reservationAgreeOf`,
+  `reservationAgree_top`: the reservation loop.
+* `bgAgree` and `insertAgree`: the background work and a whole insertion, under the cost
+  invariant `CostInv`, at cost at most `insBound P = bgBound P + 220`.
+
+The drives also return the array sizes after them. Level F's loop lemma is rerun with the size
+frames added to its invariant, so that the capacities can be checked at the next part.
+
+The capacities are hypotheses so far: `GCaps` for the group and chunk programs, `InsCaps` at the
+start of an insertion, and, for the reservation, a predicate `Mc` that gives `TopCaps`, `PQCaps`,
+no preparation in progress, and zero path rows beyond the chunks, and that each round keeps.
+Step 4 provides them.
