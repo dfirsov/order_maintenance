@@ -176,8 +176,10 @@ struct Arr {
     bigs: Vec<Vec<Rc<BigUint>>>,
 }
 
-/// Tables of at least this many bytes are mapped directly from the system (`map_table`).
-const MAP_MIN: usize = 1 << 16;
+/// Tables of at least this many bytes (one page) are mapped directly from the system
+/// (`map_table`): smaller ones are zeroed on the heap, which for up to ~95 tables of 64 KB took up
+/// to 0.6 ms in a rebuild start.
+const MAP_MIN: usize = 4096;
 
 fn table_bytes(n: usize) -> usize {
     n.max(1) * std::mem::size_of::<*mut Block>()
@@ -238,6 +240,11 @@ impl Arr {
         if b.is_null() {
             b = pool.take();
             unsafe { *slot = b };
+            if self.touched.capacity() == 0 {
+                // the full capacity at once (large reservations are mapped lazily), so that the
+                // list never grows by copying
+                self.touched.reserve_exact(self.nblocks);
+            }
             self.touched.push(b);
         }
         unsafe { (*b)[i % BLOCK] = c };
@@ -261,6 +268,10 @@ impl Arr {
             return k as u64;
         }
         if self.bigs.last().map_or(true, |seg| seg.len() == SEG) {
+            if self.bigs.capacity() == 0 {
+                // as for `touched`: enough segments for every cell, reserved once
+                self.bigs.reserve_exact(self.cap / SEG + 1);
+            }
             self.bigs.push(Vec::with_capacity(SEG));
         }
         let k = (self.bigs.len() - 1) * SEG + self.bigs.last().unwrap().len();
