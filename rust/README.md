@@ -119,9 +119,14 @@ took more than 251,000 steps. The runtime did not provide what the model assumes
 
 `rt.rs` now gives every operation a constant amount of memory management: large block tables are
 mapped from lazily zeroed memory (`mmap`), blocks come from the runtime's own pool (carved from
-lazily mapped 2 MB slabs, recycled through an intrusive free list), values of 2⁶³ and more live in
-a per-array arena of limbs inside pool blocks (overwritten in place when they fit), retired blocks
-return to the pool four per update (`M::collect`), and glibc's heap trimming is off. The program and
+lazily mapped 2 MB slabs, recycled through an intrusive free list), retired blocks return to the
+pool four per update (`M::collect`), and glibc's heap trimming is off. Words above 2⁶⁴ are shared
+(reference-counted `BigUint`), and arrays store the shared value, so loading or copying a word
+never allocates: an order query allocates nothing (it made 38 allocations before), an insertion
+23 on average (74 before); queries became about 3 times faster while the structure fits in the
+cache. (Flat arrays, one lazily mapped region per array instead of the block table, gained only
+3–8% and were not adopted: at large sizes the time goes to the cache lines a query touches, one
+per field array and two per large value.) The program and
 its step counts are unchanged: the generated code still prints exactly what Lean's `exec` prints
 (9 operation files, 8.6 million steps), and all 23 prototype workloads replay with the same steps
 and peaks. The slowest operation at 10⁷ elements went from 0.47 s to about 0.5 ms; what remains is

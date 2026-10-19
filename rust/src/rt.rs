@@ -1,7 +1,8 @@
 //! The runtime of the generated code: words, arrays and operators, with the semantics of the
 //! machine (`lean/OM/Machine/Exec.lean`).
 //!
-//! * A word is a natural number of arbitrary size (`W`): a `u64`, or a `BigUint` above it.
+//! * A word is a natural number of arbitrary size (`W`): a `u64`, or a shared `BigUint` above it
+//!   (reference-counted, so that copying a word never allocates).
 //! * An array has a capacity; an access at an index beyond it is a machine error (a panic),
 //!   and so is a subtraction below 0. The proofs show that neither happens.
 //! * `alloc` gives an array a capacity with every cell reading 0, in constant time, as the model
@@ -16,7 +17,9 @@
 
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
+use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::rc::Rc;
 
 use crate::gen::{ARRS, NARR};
 
@@ -24,7 +27,7 @@ use crate::gen::{ARRS, NARR};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum W {
     S(u64),
-    B(Box<BigUint>),
+    B(Rc<BigUint>),
 }
 
 impl Default for W {
@@ -36,7 +39,7 @@ impl Default for W {
 fn norm(b: BigUint) -> W {
     match b.to_u64() {
         Some(v) => W::S(v),
-        None => W::B(Box::new(b)),
+        None => W::B(Rc::new(b)),
     }
 }
 
@@ -55,6 +58,14 @@ impl W {
             W::B(_) => panic!("machine: a value above 2^64 used as a loop bound"),
         }
     }
+    /// The value as a `BigUint`, borrowed when it is one.
+    fn as_big(&self) -> Cow<'_, BigUint> {
+        match self {
+            W::S(v) => Cow::Owned(BigUint::from(*v)),
+            W::B(b) => Cow::Borrowed(&**b),
+        }
+    }
+    #[allow(dead_code)]
     fn to_big(&self) -> BigUint {
         match self {
             W::S(v) => BigUint::from(*v),
@@ -106,6 +117,8 @@ const TAG: u64 = 1 << 63;
 pub const BLOCK: usize = 4096;
 /// Blocks per slab: blocks are carved from slabs of 2 MB, mapped directly by the system.
 const SLAB: usize = 64;
+/// Large values per segment of an array's list of large values.
+const SEG: usize = 256;
 
 type Block = [u64; BLOCK];
 
@@ -152,16 +165,15 @@ impl Pool {
 
 /// An array. Its block table is mapped directly from zeroed memory, which the system maps
 /// lazily, so creating an array of any capacity takes constant time; a block is taken from the
-/// pool when first written. Values of 2^63 and more live in the array's arena of limbs (pool
-/// blocks): a cell then holds `TAG | (block << 12) | offset`, and the arena holds the length
-/// followed by the 64-bit limbs.
+/// pool when first written. Values of 2^63 and more are kept, shared, in the array's segmented
+/// list of large values (`SEG` per segment, so adding one never copies the others): a cell then
+/// holds `TAG | index`, and loading it copies a reference, not the number.
 struct Arr {
     cap: usize,
     table: *mut *mut Block,
     nblocks: usize,
     touched: Vec<*mut Block>,
-    arena: Vec<*mut Block>,
-    apos: usize,
+    bigs: Vec<Vec<Rc<BigUint>>>,
 }
 
 /// Tables of at least this many bytes are mapped directly from the system (`map_table`).
@@ -210,7 +222,7 @@ impl Arr {
     fn new(cap: usize) -> Arr {
         let nblocks = cap.div_ceil(BLOCK);
         let table = map_table(nblocks);
-        Arr { cap, table, nblocks, touched: Vec::new(), arena: Vec::new(), apos: BLOCK }
+        Arr { cap, table, nblocks, touched: Vec::new(), bigs: Vec::new() }
     }
     #[inline]
     fn get(&self, i: usize) -> u64 {
@@ -230,46 +242,30 @@ impl Arr {
         }
         unsafe { (*b)[i % BLOCK] = c };
     }
-    /// The limbs of the large value at arena position `c` (without the tag).
-    fn limbs(&self, c: u64) -> &[u64] {
-        let (blk, off) = ((c >> 12) as usize, (c & 0xfff) as usize);
-        let b = unsafe { &*self.arena[blk] };
-        let len = b[off] as usize;
-        &b[off + 1..off + 1 + len]
+    /// The large value at index `k`, as a word. Values in [2^63, 2^64) are stored here too, but
+    /// a word holds them as `W::S` (`W::B` only above `u64::MAX`).
+    fn big_get(&self, k: u64) -> W {
+        let k = k as usize;
+        let b = &self.bigs[k / SEG][k % SEG];
+        match b.to_u64() {
+            Some(v) => W::S(v),
+            None => W::B(b.clone()),
+        }
     }
-    fn big_get(&self, c: u64) -> BigUint {
-        let mut d: Vec<u32> = Vec::with_capacity(2 * 16);
-        for &l in self.limbs(c) {
-            d.push(l as u32);
-            d.push((l >> 32) as u32);
+    /// Store a large value: in place at index `old` if the cell held one, else appended.
+    /// Returns its index.
+    fn big_put(&mut self, old: Option<u64>, v: Rc<BigUint>) -> u64 {
+        if let Some(k) = old {
+            let k = k as usize;
+            self.bigs[k / SEG][k % SEG] = v;
+            return k as u64;
         }
-        BigUint::new(d)
-    }
-    /// Store a large value: in place at `old` if it fits there, else at the end of the arena.
-    /// Returns its arena position.
-    fn big_put(&mut self, old: Option<u64>, v: &BigUint, pool: &mut Pool) -> u64 {
-        let d = v.to_u64_digits();
-        assert!(d.len() < BLOCK, "value too large for the runtime");
-        if let Some(c) = old {
-            let (blk, off) = ((c >> 12) as usize, (c & 0xfff) as usize);
-            let b = unsafe { &mut *self.arena[blk] };
-            if d.len() <= b[off] as usize {
-                b[off] = d.len() as u64;
-                b[off + 1..off + 1 + d.len()].copy_from_slice(&d);
-                return c;
-            }
+        if self.bigs.last().map_or(true, |seg| seg.len() == SEG) {
+            self.bigs.push(Vec::with_capacity(SEG));
         }
-        if self.apos + 1 + d.len() > BLOCK {
-            self.arena.push(pool.take());
-            self.apos = 0;
-        }
-        let blk = self.arena.len() - 1;
-        let b = unsafe { &mut *self.arena[blk] };
-        b[self.apos] = d.len() as u64;
-        b[self.apos + 1..self.apos + 1 + d.len()].copy_from_slice(&d);
-        let c = ((blk as u64) << 12) | self.apos as u64;
-        self.apos += 1 + d.len();
-        c
+        let k = (self.bigs.len() - 1) * SEG + self.bigs.last().unwrap().len();
+        self.bigs.last_mut().unwrap().push(v);
+        k as u64
     }
 }
 
@@ -279,6 +275,7 @@ impl Arr {
 struct Garbage {
     blocks: Vec<Vec<*mut Block>>,
     tables: Vec<(*mut *mut Block, usize)>,
+    bigs: Vec<Vec<Rc<BigUint>>>,
 }
 
 /// glibc's `free` and `malloc` occasionally do work proportional to the heap (trimming it,
@@ -322,7 +319,7 @@ impl M {
     fn replace(&mut self, a: usize, n: usize) {
         let old = std::mem::replace(&mut self.arrs[a], Arr::new(n));
         if !old.touched.is_empty() { self.garbage.blocks.push(old.touched); }
-        if !old.arena.is_empty() { self.garbage.blocks.push(old.arena); }
+        self.garbage.bigs.extend(old.bigs);
         self.garbage.tables.push((old.table, old.nblocks));
     }
     /// Return at most `k` retired blocks to the pool (and unmap the tables they leave). Called
@@ -334,6 +331,8 @@ impl M {
                     Some(b) => { self.pool.give(b); k -= 1; }
                     None => { self.garbage.blocks.pop(); }
                 }
+            } else if self.garbage.bigs.pop().is_some() {
+                k -= 1;
             } else if let Some((t, n)) = self.garbage.tables.pop() {
                 unmap_table(t, n);
                 k -= 1;
@@ -346,7 +345,7 @@ impl M {
     pub fn peek(&self, arr: u64, i: usize) -> W {
         let a = ARRS.iter().position(|&x| x == arr).expect("array used by the program");
         let c = self.arrs[a].get(i);
-        if c & TAG == 0 { W::S(c) } else { norm(self.arrs[a].big_get(c & !TAG)) }
+        if c & TAG == 0 { W::S(c) } else { self.arrs[a].big_get(c & !TAG) }
     }
     /// The capacity of machine array `arr` (for monitoring).
     pub fn cap(&self, arr: u64) -> usize {
@@ -404,7 +403,7 @@ fn index(i: &W, a: usize, m: &M) -> usize {
 pub fn load(a: usize, i: W, m: &mut M) -> W {
     let ix = index(&i, a, m);
     let c = m.arrs[a].get(ix);
-    let v = if c & TAG == 0 { W::S(c) } else { norm(m.arrs[a].big_get(c & !TAG)) };
+    let v = if c & TAG == 0 { W::S(c) } else { m.arrs[a].big_get(c & !TAG) };
     pk(v, m)
 }
 
@@ -416,7 +415,8 @@ pub fn store(a: usize, i: W, v: W, m: &mut M) {
         W::S(x) if x < TAG => x,
         v => {
             let prev = if old & TAG != 0 { Some(old & !TAG) } else { None };
-            TAG | arr.big_put(prev, &v.to_big(), &mut m.pool)
+            let rc = match v { W::B(b) => b, W::S(x) => Rc::new(BigUint::from(x)) };
+            TAG | arr.big_put(prev, rc)
         }
     };
     arr.set(ix, c, &mut m.pool);
@@ -440,7 +440,7 @@ fn shl(a: &W, b: &W) -> W {
             return W::S(x << s);
         }
     }
-    norm(a.to_big() << (s as usize))
+    norm(&*a.as_big() << (s as usize))
 }
 
 fn shr(a: &W, b: &W) -> W {
@@ -451,7 +451,7 @@ fn shr(a: &W, b: &W) -> W {
     match a {
         W::S(x) => W::S(if s >= 64 { 0 } else { x >> s }),
         W::B(x) => {
-            if s >= x.bits() { W::S(0) } else { norm((**x).clone() >> (s as usize)) }
+            if s >= x.bits() { W::S(0) } else { norm(&**x >> (s as usize)) }
         }
     }
 }
@@ -463,8 +463,8 @@ fn b2w(b: bool) -> W {
 pub fn bin(op: Op, a: W, b: W, m: &mut M) -> W {
     let v = match op {
         Op::Add => match (&a, &b) {
-            (W::S(x), W::S(y)) => match x.checked_add(*y) { Some(z) => W::S(z), None => norm(a.to_big() + b.to_big()) },
-            _ => norm(a.to_big() + b.to_big()),
+            (W::S(x), W::S(y)) => match x.checked_add(*y) { Some(z) => W::S(z), None => norm(&*a.as_big() + &*b.as_big()) },
+            _ => norm(&*a.as_big() + &*b.as_big()),
         },
         Op::Sub => {
             if a < b {
@@ -472,18 +472,18 @@ pub fn bin(op: Op, a: W, b: W, m: &mut M) -> W {
             }
             match (&a, &b) {
                 (W::S(x), W::S(y)) => W::S(x - y),
-                _ => norm(a.to_big() - b.to_big()),
+                _ => norm(&*a.as_big() - &*b.as_big()),
             }
         }
         Op::Mul => match (&a, &b) {
-            (W::S(x), W::S(y)) => match x.checked_mul(*y) { Some(z) => W::S(z), None => norm(a.to_big() * b.to_big()) },
-            _ => norm(a.to_big() * b.to_big()),
+            (W::S(x), W::S(y)) => match x.checked_mul(*y) { Some(z) => W::S(z), None => norm(&*a.as_big() * &*b.as_big()) },
+            _ => norm(&*a.as_big() * &*b.as_big()),
         },
         Op::Div => {
             if !b.nz() { W::S(0) } else {
                 match (&a, &b) {
                     (W::S(x), W::S(y)) => W::S(x / y),
-                    _ => norm(a.to_big() / b.to_big()),
+                    _ => norm(&*a.as_big() / &*b.as_big()),
                 }
             }
         }
@@ -491,7 +491,7 @@ pub fn bin(op: Op, a: W, b: W, m: &mut M) -> W {
             if !b.nz() { a.clone() } else {
                 match (&a, &b) {
                     (W::S(x), W::S(y)) => W::S(x % y),
-                    _ => norm(a.to_big() % b.to_big()),
+                    _ => norm(&*a.as_big() % &*b.as_big()),
                 }
             }
         }
