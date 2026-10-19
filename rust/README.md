@@ -77,7 +77,7 @@ the top structure (`startDrain`, mostly its list searches), two at 10⁵, three 
 The top tree gains about one level per decade (branching parameter 8), and a job's walk can start a
 drain at each level it passes. `scripts/profile/instrument.sh` builds a profiling copy whose
 `pieces` reports the pieces of the slowest operations (`results/pieces_random.csv`,
-`results/pieces_hammer.csv`, to 5·10⁷ elements):
+`results/pieces_hammer.csv`, to 5·10⁷ elements; plot: `results/plot_pieces.py`):
 * the largest single job step (essentially one drain start) flattens at 64,048 steps (random) and
   69,714 (hammer) from 10⁶ elements on;
 * the most job steps in one operation reach 48 (six core insertions × `K_R`) at 10⁷ and cannot grow;
