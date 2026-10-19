@@ -65,13 +65,14 @@ for imp, (label, color, marker) in SERIES.items():
     ns = sorted(by_n)
     worst = [max(r["max_ns"] for r in by_n[n]) / 1e6 for n in ns]
     means = [[r["mean_ns"] / 1e3 for r in by_n[n]] for n in ns]
+    rnd = [next(r["mean_ns"] / 1e3 for r in by_n[n] if r["workload"] == "random") for n in ns]
     axes[0].plot(ns, worst, color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
     axes[1].fill_between(ns, [min(m) for m in means], [max(m) for m in means], color=color, alpha=0.18, linewidth=0)
-    axes[1].plot(ns, [statistics.median(m) for m in means], color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
+    axes[1].plot(ns, rnd, color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
 
 axes[0].set_ylabel("slowest operation (ms)")
 axes[1].set_ylabel("mean time per operation (µs)")
-for ax, title in zip(axes, ["(a) slowest single operation", "(b) mean, range over workloads"]):
+for ax, title in zip(axes, ["(a) slowest single operation", "(b) mean time (line: random insertion)"]):
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("elements")

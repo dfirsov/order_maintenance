@@ -148,8 +148,14 @@ performance cores only, one core per run (`results/compare/run.sh`, `summary.csv
 | 5·10⁷ | 0.29–0.38 ms (hammer, random) | | 3.2–5.5 µs | |
 | 10⁸ | (not run: memory) | 5.3 ms | | 23–712 ns |
 
-The baseline is about 100 times faster on average (it computes with machine words and counts
-nothing). Its slowest insertion relabels a whole tag range and grows linearly with the size (it is
+On average the baseline is faster, by a factor that depends on its cache behaviour. On random
+insertions the gap shrinks as the list outgrows the caches: 37 times at 10⁵ elements, 30 at 10⁶,
+8 at 10⁷ (4.3 µs against 0.53 µs). On the sequential workloads (hammer, append, front) the baseline
+keeps touching the same few groups, stays in the cache, and takes about 23 ns at every size, about
+100 times less. Our cost: about 1,360 machine steps per insertion on average (deamortization does
+a share of future work every time: split moves, top jobs, and while the list grows, 2.35 core
+insertions per user insertion because of rebuild copies), at 1.3–3.4 ns per step in unoptimized
+generated code (arbitrary-precision words, step counting; value-peak tracking alone is 9%). Its slowest insertion relabels a whole tag range and grows linearly with the size (it is
 always the operation with the most work); the verified code's stays below half a millisecond and is
 the faster of the two in the worst case from about 10⁷ elements on. The verified code's slowest
 operation is the one with the most steps, except at 10⁷, where it is the start of a rebuild (about 300
