@@ -69,13 +69,17 @@ one update was 200,469 (workload `harmonic_half`); growing to 10⁷ elements it 
 bound is `opB 4 = 1,133,561,742`, about 4,500 times more. An order query always took 65 steps.
 
 The largest step count grows slowly with the size, by about 60,000 steps per decade (127,759 at 10⁵
-elements, 190,189 at 10⁶, 250,929 at 10⁷; `maxop`). Profiling the generated code (inclusive steps
+elements, 190,189 at 10⁶, 250,929 at 10⁷, 314,088 at 5·10⁷; `maxop`, `compare`); it does not flatten
+in the range we can run. Profiling the generated code (inclusive steps
 per procedure) shows why: the most expensive operations run during a rebuild (the operation's own
 insertion and `K_B` copy insertions into the next core), and 95% of their steps are drain starts in
 the top structure (`startDrain`, mostly its list searches), two at 10⁵, three at 10⁶, four at 10⁷.
 The top tree gains about one level per decade (branching parameter 8), and a job's walk can start a
-drain at each level it passes. A core insertion performs only `K_R = 8` job steps, so the growth
-stops once the tree has about 8 levels (around 10¹⁰ elements); the theorem bounds every size.
+drain at each level it passes. The growth is bounded, as the theorem says: an operation performs at
+most `K_B + 3 = 7` core insertions (its own, a mirrored one, `K_B + 1` copies), each with at most
+`K_R = 8` job steps. But during a rebuild the copies all advance the next core's job, so one operation
+can take a job's walk through many levels, and the bound is reached only when the top tree has dozens
+of levels, far beyond any list that fits in memory. The plateau cannot be observed.
 
 **Word size.** The largest value computed grows with the capacity, as expected: 301 bits for a few
 live elements (workload `flicker`), 660 at 160,000 (`random`), 780 at 4 million (`L = 24`). These are the
