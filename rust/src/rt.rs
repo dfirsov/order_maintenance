@@ -275,7 +275,8 @@ impl Arr {
 struct Garbage {
     blocks: Vec<Vec<*mut Block>>,
     tables: Vec<(*mut *mut Block, usize)>,
-    bigs: Vec<Vec<Rc<BigUint>>>,
+    /// Retired arrays' lists of large values, each handed over whole (constant time).
+    bigs: Vec<Vec<Vec<Rc<BigUint>>>>,
 }
 
 /// glibc's `free` and `malloc` occasionally do work proportional to the heap (trimming it,
@@ -319,7 +320,7 @@ impl M {
     fn replace(&mut self, a: usize, n: usize) {
         let old = std::mem::replace(&mut self.arrs[a], Arr::new(n));
         if !old.touched.is_empty() { self.garbage.blocks.push(old.touched); }
-        self.garbage.bigs.extend(old.bigs);
+        if !old.bigs.is_empty() { self.garbage.bigs.push(old.bigs); }
         self.garbage.tables.push((old.table, old.nblocks));
     }
     /// Return at most `k` retired blocks to the pool (and unmap the tables they leave). Called
@@ -331,8 +332,11 @@ impl M {
                     Some(b) => { self.pool.give(b); k -= 1; }
                     None => { self.garbage.blocks.pop(); }
                 }
-            } else if self.garbage.bigs.pop().is_some() {
-                k -= 1;
+            } else if let Some(v) = self.garbage.bigs.last_mut() {
+                match v.pop() {
+                    Some(seg) => { drop(seg); k -= 1; }
+                    None => { self.garbage.bigs.pop(); }
+                }
             } else if let Some((t, n)) = self.garbage.tables.pop() {
                 unmap_table(t, n);
                 k -= 1;

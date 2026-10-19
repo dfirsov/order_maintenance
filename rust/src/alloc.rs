@@ -5,10 +5,10 @@
 //!
 //! Objects of up to `SMALL_MAX` bytes (alignment at most 16) are served from per-size-class free
 //! lists (a freed object holds the link to the next one); a list that is empty takes the next
-//! object of its class's current chunk, and a used-up chunk is replaced by a new one of `CHUNK`
-//! bytes from the system allocator. Memory of freed objects is reused, never returned. Larger
-//! objects go to the system allocator directly (`calloc` for zeroed ones, so that large zeroed
-//! memory is still mapped lazily).
+//! bytes of the current chunk (shared by all classes), and a used-up chunk is replaced by a new
+//! one of `CHUNK` bytes from the system allocator (the rest of the old one is left unused).
+//! Memory of freed objects is reused, never returned. Larger objects go to the system allocator
+//! directly (`calloc` for zeroed ones, so that large zeroed memory is still mapped lazily).
 //!
 //! The program is single-threaded; a spin flag makes the allocator safe anyway.
 
@@ -25,8 +25,10 @@ const CHUNK: usize = 1 << 16;
 
 struct State {
     free: [*mut u8; CLASSES],
-    next: [*mut u8; CLASSES],
-    left: [usize; CLASSES],
+    /// The current chunk, shared by all classes, so that objects allocated one after the other
+    /// (a shared number and its digits) lie next to each other, as with the C allocator.
+    next: *mut u8,
+    left: usize,
 }
 
 pub struct Alloc {
@@ -42,8 +44,8 @@ impl Alloc {
             lock: AtomicBool::new(false),
             st: UnsafeCell::new(State {
                 free: [std::ptr::null_mut(); CLASSES],
-                next: [std::ptr::null_mut(); CLASSES],
-                left: [0; CLASSES],
+                next: std::ptr::null_mut(),
+                left: 0,
             }),
         }
     }
@@ -74,15 +76,15 @@ unsafe impl GlobalAlloc for Alloc {
             p
         } else {
             let size = (c + 1) * 16;
-            if st.left[c] == 0 {
+            if st.left < size {
                 let chunk = System.alloc(Layout::from_size_align_unchecked(CHUNK, 16));
                 if chunk.is_null() { self.unlock(); return chunk; }
-                st.next[c] = chunk;
-                st.left[c] = CHUNK / size;
+                st.next = chunk;
+                st.left = CHUNK;
             }
-            let p = st.next[c];
-            st.next[c] = p.add(size);
-            st.left[c] -= 1;
+            let p = st.next;
+            st.next = p.add(size);
+            st.left -= size;
             p
         };
         self.unlock();
