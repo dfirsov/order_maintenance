@@ -5,6 +5,7 @@
 //! assignments are charged as in `opS`). Handles are the insertion counter: the k-th insertion
 //! returns handle k.
 
+pub mod avl;
 pub mod baseline;
 pub mod gen;
 pub mod rt;

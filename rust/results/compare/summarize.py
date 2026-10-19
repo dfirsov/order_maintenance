@@ -47,9 +47,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-SERIES = {  # categorical slots 1 and 2 of the reference palette, with distinct markers
+SERIES = {  # categorical slots 1-3 of the reference palette, with distinct markers
     "om": ("verified worst-case O(1)", "#2a78d6", "o"),
-    "bender": ("amortized baseline", "#eb6834", "s"),
+    "bender": ("amortized O(1) (Bender et al.)", "#eb6834", "s"),
+    "avl": ("balanced tree, O(log n)", "#1baf7a", "^"),
 }
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 plt.rcParams.update({"font.size": 8, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -60,12 +61,12 @@ MIN_N = 1000
 for imp, (label, color, marker) in SERIES.items():
     by_n = defaultdict(list)
     for r in rows:
-        if r["impl"] == imp and r["elements"] >= MIN_N:
+        if r["impl"] == imp and r["elements"] >= MIN_N and not r["workload"].startswith("query"):
             by_n[r["elements"]].append(r)
     ns = sorted(by_n)
     worst = [max(r["max_ns"] for r in by_n[n]) / 1e6 for n in ns]
     means = [[r["mean_ns"] / 1e3 for r in by_n[n]] for n in ns]
-    rnd = [next(r["mean_ns"] / 1e3 for r in by_n[n] if r["workload"] == "random") for n in ns]
+    rnd = [next((r["mean_ns"] / 1e3 for r in by_n[n] if r["workload"] == "random"), float("nan")) for n in ns]
     axes[0].plot(ns, worst, color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
     axes[1].fill_between(ns, [min(m) for m in means], [max(m) for m in means], color=color, alpha=0.18, linewidth=0)
     axes[1].plot(ns, rnd, color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
@@ -86,3 +87,43 @@ fig.tight_layout()
 for ext in ("pdf", "png"):
     fig.savefig(os.path.join(HERE, f"compare.{ext}"), dpi=200)
 print(f"{len(rows)} rows -> summary.csv, compare.pdf, compare.png")
+
+# ---- queries: one random order query after every insertion (queries/*.csv) ----
+q = defaultdict(dict)
+for path in sorted(glob.glob(os.path.join(HERE, "queries", "*.csv"))):
+    with open(path) as f:
+        for row in csv.reader(f):
+            r = dict(zip(COLS, row))
+            if r["workload"].startswith("query-") and int(r["to"]) >= MIN_N:
+                q[r["impl"]][int(r["to"])] = r
+if q:
+    with open(os.path.join(HERE, "queries", "summary.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["impl", "elements", "mean_ns", "p99_ns", "max_ns", "mean_work", "max_work"])
+        for imp in q:
+            for n in sorted(q[imp]):
+                r = q[imp][n]
+                w.writerow([imp, n, r["mean_ns"], r["p99_ns"], r["max_ns"], r["mean_work"], r["max_work"]])
+    fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.5))
+    for imp, (label, color, marker) in SERIES.items():
+        if imp not in q:
+            continue
+        ns = sorted(q[imp])
+        axes[0].plot(ns, [float(q[imp][n]["mean_ns"]) for n in ns], color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
+        axes[1].plot(ns, [int(q[imp][n]["p99_ns"]) for n in ns], color=color, marker=marker, markersize=4, linewidth=1.5, label=label)
+    axes[0].set_ylabel("mean time per query (ns)")
+    axes[1].set_ylabel("99th percentile (ns)")
+    for ax, title in zip(axes, ["(a) order query, mean", "(b) order query, 99th percentile"]):
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("elements")
+        ax.set_title(title, fontsize=8, color=INK, loc="left")
+        ax.grid(True, which="major", color=GRID, linewidth=0.6)
+        ax.set_axisbelow(True)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+    axes[0].legend(frameon=False, loc="upper left", labelcolor=INK, fontsize=7)
+    fig.tight_layout()
+    for ext in ("pdf", "png"):
+        fig.savefig(os.path.join(HERE, f"queries.{ext}"), dpi=200)
+    print("queries/summary.csv, queries.pdf, queries.png")
