@@ -890,7 +890,10 @@ the peak, so the generated code counts the machine's steps exactly.
 would not do.
 An access beyond an array's capacity or a subtraction below 0 panics (a machine error). An array's
 cells live in blocks allocated when first written, so memory follows the cells used (at 4 million
-elements: 57 million cells in use, against capacities totalling 33.8 billion).
+elements: 57 million cells in use, against capacities totalling 33.8 billion). The runtime also has to
+provide the model's constant-time allocation: large block tables are mapped from lazily zeroed memory,
+blocks come from the runtime's own pool, and a retired core's blocks return to it a few per update.
+Without this, single operations took up to half a second at 10⁷ elements (`rust/README.md`).
 
 **What is trusted.** The printer (about 330 lines of Lean) and the runtime (about 300 lines of Rust)
 are not verified. They are checked against the machine semantics: `lake exe xrun` runs operation

@@ -5,11 +5,16 @@
 //! assignments are charged as in `opS`). Handles are the insertion counter: the k-th insertion
 //! returns handle k.
 
+pub mod baseline;
 pub mod gen;
 pub mod rt;
 
 use gen::Top;
 use rt::{pk, W, M};
+
+/// Retired blocks freed per update (`M::collect`). A rebuild retires a core of capacity `N`,
+/// whose blocks number far fewer than the `Ω(N)` operations before the next rebuild.
+const COLLECT: usize = 4;
 
 pub struct Om {
     pub m: M,
@@ -43,6 +48,7 @@ impl Om {
     pub fn insert_first(&mut self) -> u64 {
         self.set(|t| &mut t.l_hx, 0);
         gen::insert_ws(&mut self.t, &mut self.m).expect("insertion failed");
+        self.m.collect(COLLECT);
         self.t.l_hy.as_u64()
     }
 
@@ -51,6 +57,7 @@ impl Om {
         self.set(|t| &mut t.l_hx, 1);
         self.set(|t| &mut t.l_x, x);
         gen::insert_ws(&mut self.t, &mut self.m).expect("insertion failed");
+        self.m.collect(COLLECT);
         self.t.l_hy.as_u64()
     }
 
@@ -58,6 +65,7 @@ impl Om {
     pub fn delete(&mut self, x: u64) {
         self.set(|t| &mut t.l_x, x);
         gen::delete_ws(&mut self.t, &mut self.m).expect("deletion failed");
+        self.m.collect(COLLECT);
     }
 
     /// Whether the element with handle `x` comes before the one with handle `y`.

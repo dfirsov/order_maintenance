@@ -2019,6 +2019,7 @@ pub fn order_ws(t: &mut Top, m: &mut M) -> R<()> {
   Ok(())
 }
 
+/// `prepInit`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f0(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -2038,6 +2039,7 @@ fn f0(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `prepSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f1(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_h: W = W::S(0);
@@ -2055,6 +2057,7 @@ fn f1(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `initStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f2(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_done: W = W::S(0);
@@ -2167,6 +2170,7 @@ fn f2(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_done.clone()])
 }
 
+/// `initCore`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f3(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_lz: W = W::S(0);
@@ -2276,6 +2280,7 @@ fn f3(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `insertElem`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f4(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -2368,6 +2373,7 @@ fn f4(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_y.clone()])
 }
 
+/// `pqLinkAfter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f5(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_s: W = W::S(0);
@@ -2406,6 +2412,7 @@ fn f5(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqAdd`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f6(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -2446,6 +2453,7 @@ fn f6(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqInsertScan`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f7(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -2492,6 +2500,7 @@ fn f7(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqDel`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f8(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -2563,6 +2572,7 @@ fn f8(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqAdjust`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f9(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -2652,6 +2662,7 @@ fn f9(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `chunkSize`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f10(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -2679,6 +2690,7 @@ fn f10(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `labBefore`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f11(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_g: W = W::S(0);
@@ -2721,6 +2733,7 @@ fn f11(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_lab.clone()])
 }
 
+/// `labAfter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f12(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_g: W = W::S(0);
@@ -2769,6 +2782,7 @@ fn f12(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_lab.clone()])
 }
 
+/// `newGroup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f13(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_c: W = W::S(0);
@@ -2818,6 +2832,7 @@ fn f13(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_gn.clone()])
 }
 
+/// `startGroupSplit`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f14(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -2929,6 +2944,7 @@ fn f14(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `move`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f15(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -2974,6 +2990,7 @@ fn f15(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `move`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f16(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -3019,6 +3036,7 @@ fn f16(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `groupSplitStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f17(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_g: W = W::S(0);
@@ -3255,6 +3273,7 @@ fn f17(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_ok.clone()])
 }
 
+/// `driveGroupFrom`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f18(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -3290,6 +3309,7 @@ fn f18(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `driveGroup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f19(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -3319,6 +3339,7 @@ fn f19(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqEnterIfAbove`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f20(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -3340,6 +3361,7 @@ fn f20(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `chunkSplitStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f21(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -3679,6 +3701,7 @@ fn f21(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_ok.clone()])
 }
 
+/// `driveChunkFrom`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f22(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -3714,6 +3737,7 @@ fn f22(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `driveChunk`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f23(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -3743,6 +3767,7 @@ fn f23(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pcSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f24(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   let mut l_t: W = W::S(0);
@@ -3768,6 +3793,7 @@ fn f24(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `assocSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f25(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -3811,6 +3837,7 @@ fn f25(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f26(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -3844,6 +3871,7 @@ fn f26(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f27(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -3877,6 +3905,7 @@ fn f27(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `lookup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f28(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   let mut l_i: W = W::S(0);
@@ -3909,6 +3938,7 @@ fn f28(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   Ok([l_f.clone(), l_v.clone()])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f29(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -3942,6 +3972,7 @@ fn f29(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `roomNextTo`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f30(args: [W; 3], m: &mut M) -> R<[W; 1]> {
   let mut l_t: W = W::S(0);
@@ -4007,6 +4038,7 @@ fn f30(args: [W; 3], m: &mut M) -> R<[W; 1]> {
   Ok([l_l.clone()])
 }
 
+/// `insertIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f31(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -4061,6 +4093,7 @@ fn f31(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `tableInsert`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f32(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   let mut l_t: W = W::S(0);
@@ -4133,6 +4166,7 @@ fn f32(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `insertIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f33(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -4187,6 +4221,7 @@ fn f33(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `startDrain`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f34(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_v: W = W::S(0);
@@ -4886,6 +4921,7 @@ fn f34(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f35(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -4919,6 +4955,7 @@ fn f35(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `eraseIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f36(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -4946,6 +4983,7 @@ fn f36(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f37(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -4979,6 +5017,7 @@ fn f37(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `eraseIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f38(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -5006,6 +5045,7 @@ fn f38(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `filter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f39(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -5049,6 +5089,7 @@ fn f39(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `filter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f40(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -5092,6 +5133,7 @@ fn f40(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `lookup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f41(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   let mut l_i: W = W::S(0);
@@ -5124,6 +5166,7 @@ fn f41(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   Ok([l_f.clone(), l_v.clone()])
 }
 
+/// `guardedSetTag`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f42(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -5165,6 +5208,7 @@ fn f42(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `drainStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f43(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_v: W = W::S(0);
@@ -5538,6 +5582,7 @@ fn f43(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_ok.clone()])
 }
 
+/// `jobStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f44(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   let mut l_jx: W = W::S(0);
@@ -5994,6 +6039,7 @@ fn f44(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqEmpty`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f45(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_r: W = W::S(0);
@@ -6002,6 +6048,7 @@ fn f45(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `pqPopMax`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f46(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_c: W = W::S(0);
@@ -6022,6 +6069,7 @@ fn f46(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_c.clone()])
 }
 
+/// `jobSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f47(args: [W; 8], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -6061,6 +6109,7 @@ fn f47(args: [W; 8], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `splitChunkStart`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f48(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -6335,6 +6384,7 @@ fn f48(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `reservation`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f49(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   let mut l_dn: W = W::S(0);
@@ -6385,6 +6435,7 @@ fn f49(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `background`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f50(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_y: W = W::S(0);
@@ -6436,6 +6487,7 @@ fn f50(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `insertAfter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f51(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -6475,6 +6527,7 @@ fn f51(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_y.clone()])
 }
 
+/// `insertElem`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f52(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -6567,6 +6620,7 @@ fn f52(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_y.clone()])
 }
 
+/// `pqLinkAfter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f53(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_s: W = W::S(0);
@@ -6605,6 +6659,7 @@ fn f53(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqAdd`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f54(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -6645,6 +6700,7 @@ fn f54(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqInsertScan`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f55(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -6691,6 +6747,7 @@ fn f55(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqDel`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f56(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -6762,6 +6819,7 @@ fn f56(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqAdjust`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f57(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -6851,6 +6909,7 @@ fn f57(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `chunkSize`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f58(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -6878,6 +6937,7 @@ fn f58(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `labBefore`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f59(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_g: W = W::S(0);
@@ -6920,6 +6980,7 @@ fn f59(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_lab.clone()])
 }
 
+/// `labAfter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f60(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_g: W = W::S(0);
@@ -6968,6 +7029,7 @@ fn f60(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_lab.clone()])
 }
 
+/// `newGroup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f61(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_c: W = W::S(0);
@@ -7017,6 +7079,7 @@ fn f61(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_gn.clone()])
 }
 
+/// `startGroupSplit`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f62(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -7128,6 +7191,7 @@ fn f62(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `move`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f63(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -7173,6 +7237,7 @@ fn f63(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `move`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f64(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -7218,6 +7283,7 @@ fn f64(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `groupSplitStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f65(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_g: W = W::S(0);
@@ -7454,6 +7520,7 @@ fn f65(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_ok.clone()])
 }
 
+/// `driveGroupFrom`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f66(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -7489,6 +7556,7 @@ fn f66(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `driveGroup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f67(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_g: W = W::S(0);
@@ -7518,6 +7586,7 @@ fn f67(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqEnterIfAbove`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f68(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -7539,6 +7608,7 @@ fn f68(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `chunkSplitStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f69(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -7878,6 +7948,7 @@ fn f69(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_ok.clone()])
 }
 
+/// `driveChunkFrom`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f70(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -7913,6 +7984,7 @@ fn f70(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `driveChunk`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f71(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -7942,6 +8014,7 @@ fn f71(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pcSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f72(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   let mut l_t: W = W::S(0);
@@ -7967,6 +8040,7 @@ fn f72(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `assocSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f73(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -8010,6 +8084,7 @@ fn f73(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f74(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -8043,6 +8118,7 @@ fn f74(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f75(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -8076,6 +8152,7 @@ fn f75(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `lookup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f76(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   let mut l_i: W = W::S(0);
@@ -8108,6 +8185,7 @@ fn f76(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   Ok([l_f.clone(), l_v.clone()])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f77(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -8141,6 +8219,7 @@ fn f77(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `roomNextTo`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f78(args: [W; 3], m: &mut M) -> R<[W; 1]> {
   let mut l_t: W = W::S(0);
@@ -8206,6 +8285,7 @@ fn f78(args: [W; 3], m: &mut M) -> R<[W; 1]> {
   Ok([l_l.clone()])
 }
 
+/// `insertIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f79(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -8260,6 +8340,7 @@ fn f79(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `tableInsert`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f80(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   let mut l_t: W = W::S(0);
@@ -8332,6 +8413,7 @@ fn f80(args: [W; 5], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `insertIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f81(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -8386,6 +8468,7 @@ fn f81(args: [W; 4], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `startDrain`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f82(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_v: W = W::S(0);
@@ -9085,6 +9168,7 @@ fn f82(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f83(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -9118,6 +9202,7 @@ fn f83(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `eraseIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f84(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -9145,6 +9230,7 @@ fn f84(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `find`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f85(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_i: W = W::S(0);
@@ -9178,6 +9264,7 @@ fn f85(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `eraseIdx`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f86(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -9205,6 +9292,7 @@ fn f86(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `filter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f87(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -9248,6 +9336,7 @@ fn f87(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `filter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f88(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_i: W = W::S(0);
@@ -9291,6 +9380,7 @@ fn f88(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `lookup`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f89(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   let mut l_i: W = W::S(0);
@@ -9323,6 +9413,7 @@ fn f89(args: [W; 2], m: &mut M) -> R<[W; 2]> {
   Ok([l_f.clone(), l_v.clone()])
 }
 
+/// `guardedSetTag`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f90(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -9364,6 +9455,7 @@ fn f90(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `drainStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f91(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   let mut l_v: W = W::S(0);
@@ -9737,6 +9829,7 @@ fn f91(args: [W; 1], m: &mut M) -> R<[W; 1]> {
   Ok([l_ok.clone()])
 }
 
+/// `jobStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f92(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   let mut l_jx: W = W::S(0);
@@ -10193,6 +10286,7 @@ fn f92(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `pqEmpty`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f93(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_r: W = W::S(0);
@@ -10201,6 +10295,7 @@ fn f93(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `pqPopMax`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f94(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_c: W = W::S(0);
@@ -10221,6 +10316,7 @@ fn f94(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_c.clone()])
 }
 
+/// `jobSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f95(args: [W; 8], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -10260,6 +10356,7 @@ fn f95(args: [W; 8], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `splitChunkStart`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f96(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -10534,6 +10631,7 @@ fn f96(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `reservation`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f97(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   let mut l_dn: W = W::S(0);
@@ -10584,6 +10682,7 @@ fn f97(args: [W; 0], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `background`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f98(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_y: W = W::S(0);
@@ -10635,6 +10734,7 @@ fn f98(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `insertAfter`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f99(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -10674,6 +10774,7 @@ fn f99(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_y.clone()])
 }
 
+/// `prepInit`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f100(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   let mut l_c: W = W::S(0);
@@ -10693,6 +10794,7 @@ fn f100(args: [W; 2], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `prepSet`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f101(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   let mut l_h: W = W::S(0);
@@ -10710,6 +10812,7 @@ fn f101(args: [W; 3], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `initStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f102(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_done: W = W::S(0);
@@ -10822,6 +10925,7 @@ fn f102(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_done.clone()])
 }
 
+/// `initCore`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f103(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_lz: W = W::S(0);
@@ -10931,6 +11035,7 @@ fn f103(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `prepareStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f104(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_r: W = W::S(0);
@@ -10957,6 +11062,7 @@ fn f104(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `prepareStep`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f105(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   let mut l_r: W = W::S(0);
@@ -10983,6 +11089,7 @@ fn f105(args: [W; 0], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `markDead`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f106(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -10992,6 +11099,7 @@ fn f106(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `markDead`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f107(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   let mut l_x: W = W::S(0);
@@ -11001,6 +11109,7 @@ fn f107(args: [W; 1], m: &mut M) -> R<[W; 0]> {
   Ok([])
 }
 
+/// `order`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f108(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);
@@ -11035,6 +11144,7 @@ fn f108(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   Ok([l_r.clone()])
 }
 
+/// `order`
 #[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]
 fn f109(args: [W; 2], m: &mut M) -> R<[W; 1]> {
   let mut l_x: W = W::S(0);

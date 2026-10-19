@@ -106,8 +106,8 @@ partial def stmt (loc : Reg → String) (d : Nat) : Stmt → GenM String
     return s!"{ind d}m.cost += {1 + c.cost};\n{ind d}if {← expr loc c}.nz() \{\n{← stmt loc (d + 1) s}{ind d}} else \{\n{← stmt loc (d + 1) t}{ind d}}\n"
   | .loop x n b => do
     return s!"{ind d}m.cost += {1 + n.cost};\n{ind d}\{ let n = {← expr loc n}.as_u64(); for k in 0..n \{\n{ind (d + 1)}m.cost += 1;\n{ind (d + 1)}{loc x} = W::S(k);\n{← stmt loc (d + 1) b}{ind d}} }\n"
-  | .call _ ps body rs args ds => do
-    let f ← proc ps body rs args.length
+  | .call nm ps body rs args ds => do
+    let f ← proc nm ps body rs args.length
     let mut s := s!"{ind d}m.cost += {1 + costList args + ds.length};\n{ind d}\{\n"
     let mut i := 0
     for a in args do
@@ -124,8 +124,9 @@ partial def stmt (loc : Reg → String) (d : Nat) : Stmt → GenM String
   | .catch c h => do
     return s!"{ind d}m.cost += 1;\n{ind d}let r: R<()> = (|| -> R<()> \{\n{← stmt loc (d + 1) c}{ind (d + 1)}Ok(())\n{ind d}})();\n{ind d}if r.is_err() \{\n{← stmt loc (d + 1) h}{ind d}}\n"
 
-/-- The Rust function of a callee: parameters, results and body. Returns its name. -/
-partial def proc (ps : List Reg) (body : Stmt) (rs : List Reg) (nargs : Nat) : GenM String := do
+/-- The Rust function of a callee: parameters, results and body. Returns its name. The machine
+procedure's name `nm` (of the first call printed) becomes a doc comment. -/
+partial def proc (nm : String) (ps : List Reg) (body : Stmt) (rs : List Reg) (nargs : Nat) : GenM String := do
   let txt ← stmt ident 1 body
   let key := s!"{ps}|{rs}|{nargs}\n{txt}"
   match (← get).idx.get? key with
@@ -134,7 +135,7 @@ partial def proc (ps : List Reg) (body : Stmt) (rs : List Reg) (nargs : Nat) : G
     let i := (← get).fns.size
     modify fun g => { g with idx := g.idx.insert key i, fns := g.fns.push "" }
     let locs := dedup (ps ++ rs ++ stmtLocals body)
-    let mut s := s!"#[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]\nfn f{i}(args: [W; {nargs}], m: &mut M) -> R<[W; {rs.length}]> \{\n"
+    let mut s := s!"/// `{nm}`\n#[allow(unused_mut, unused_variables, unused_assignments, non_snake_case, unreachable_code)]\nfn f{i}(args: [W; {nargs}], m: &mut M) -> R<[W; {rs.length}]> \{\n"
     for x in locs do
       s := s ++ s!"  let mut {ident x}: W = W::S(0);\n"
     let mut j := 0
