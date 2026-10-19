@@ -41,13 +41,15 @@ Full citations are in `papers/README.md`.
     background with two timestamped versions of every field. A max-priority
     "reservation process" decides which depth-1 node gets new siblings next. The
     *zeroing-game theorem* (their Thm 5) bounds how full a node can get while it waits.
-  * The appendix pseudocode has bugs. For example, `IncrementalSplit` updates only
-    `nleaves` of `pred(x)`, not of its ancestors.
+  * The appendix pseudocode (technical report CMU-CS-88-113) has bugs. `PlaceAfter` tests
+    `x = first(children(p))` where it needs `last`, and `PlaceBefore` the reverse (Fig. 3).
+    `IncrementalSplit`'s first move into a fresh overflow sibling calls
+    `PlaceAfter(last(children(pred(x))), y)` while that sibling has no children (Figs. 4–5).
 * **Bender, Cole, Demaine, Farach-Colton, Zito 2002**, *Two simplified algorithms…*
   (ESA). It gives a simple amortized "tag-range
   relabeling" algorithm with an easy proof. Its worst-case O(1) algorithm is deferred to a
-  "full paper" that **was never published** (confirmed by Kopelowitz 2012). Its §5
-  (O(log² n) worst-case file maintenance) has proofs left "to the full version".
+  "full paper" that had not been published by 2012 (Kopelowitz 2012). Its §5
+  (O(log² n) worst-case file maintenance) leaves a case and a proof to the full version.
 * **Kopelowitz 2012**, *On-line indexing for general alphabets via predecessor queries on
   subsets of an ordered list* (FOCS; arXiv:1208.3798).
   * §3: list labeling with **O(log n) worst-case** cost and polynomial label space, built
@@ -55,9 +57,10 @@ Full citations are in `papers/README.md`.
     tag. After a node split, a background "tag-process" rewrites that field in the
     subtree. An extra epoch bit keeps queries correct while a rewrite is half done.
   * §4: O(1) worst-case order maintenance via chunks of size O(log² n).
-  * Weak spot: the handling of overlapping parent/child processes (§3.3.2) is a sketch.
-    The paper itself says "many believe [prior worst-case solutions'] correctness is
-    questionable".
+  * Weak spots: insertions are O(1) worst-case *expected* time; deletions are deferred to
+    the full version; several details of §4 are omitted. The paper itself says "to date
+    there is no published version of a worst-case solution for the OMP which is not
+    considered highly complex".
 * I found no prior formal verification of order maintenance in Coq, Isabelle or Lean.
 
 **Our synthesis:** the lower levels and scheduling come from Dietz–Sleator. They are local
