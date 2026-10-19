@@ -1,0 +1,9 @@
+workload,from,to,max_op_steps,op_jobsteps,op_drains,op_inserts,max_jobstep_steps,max_drain_steps,max_jobsteps_per_op,max_drains_per_op,max_inserts_per_op
+random,1,10,350,0,0,1,0,0,0,0,1
+random,10,100,4423,0,0,6,0,0,0,0,6
+random,100,1000,9912,11,0,6,122,0,11,0,6
+random,1000,10000,67559,14,1,6,57135,57025,24,1,6
+random,10000,100000,127759,17,2,6,60790,60677,31,2,6
+random,100000,1000000,190189,15,3,6,64048,63935,40,3,6
+random,1000000,10000000,250929,23,4,6,64048,63935,40,4,6
+random,10000000,50000000,314088,23,5,6,64048,63935,40,5,6

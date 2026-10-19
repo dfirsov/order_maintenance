@@ -1,0 +1,9 @@
+workload,from,to,max_op_steps,op_jobsteps,op_drains,op_inserts,max_jobstep_steps,max_drain_steps,max_jobsteps_per_op,max_drains_per_op,max_inserts_per_op
+hammer,1,10,350,0,0,1,0,0,0,0,1
+hammer,10,100,4591,0,0,6,0,0,0,0,6
+hammer,100,1000,8893,7,0,6,122,0,11,0,6
+hammer,1000,10000,74534,7,1,6,64849,64739,24,1,6
+hammer,10000,100000,127474,17,2,6,70290,70180,33,2,6
+hammer,100000,1000000,192464,20,3,6,69714,69604,40,3,6
+hammer,1000000,10000000,251007,23,4,6,69714,69604,48,4,6
+hammer,10000000,50000000,251928,23,4,6,69714,69604,48,4,6

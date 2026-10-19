@@ -75,7 +75,17 @@ per procedure) shows why: the most expensive operations run during a rebuild (th
 insertion and `K_B` copy insertions into the next core), and 95% of their steps are drain starts in
 the top structure (`startDrain`, mostly its list searches), two at 10⁵, three at 10⁶, four at 10⁷.
 The top tree gains about one level per decade (branching parameter 8), and a job's walk can start a
-drain at each level it passes. The growth is bounded, as the theorem says: an operation performs at
+drain at each level it passes. `scripts/profile/instrument.sh` builds a profiling copy whose
+`pieces` reports the pieces of the slowest operations (`results/pieces_random.csv`,
+`results/pieces_hammer.csv`, to 5·10⁷ elements):
+* the largest single job step (essentially one drain start) flattens at 64,048 steps (random) and
+  69,714 (hammer) from 10⁶ elements on;
+* the most job steps in one operation reach 48 (six core insertions × `K_R`) at 10⁷ and cannot grow;
+* the drains started in the slowest operation grow by one per decade: 1, 2, 3, 4, 5 from 10⁴ to 5·10⁷
+  (random). Only this factor grows, and it is bounded by the previous one; multiplying the observed
+  maxima suggests a realistic ceiling of about 48 × 70,000 ≈ 3.4 million steps (an extrapolation).
+
+The growth is bounded, as the theorem says: an operation performs at
 most `K_B + 3 = 7` core insertions (its own, a mirrored one, `K_B + 1` copies), each with at most
 `K_R = 8` job steps. But during a rebuild the copies all advance the next core's job, so one operation
 can take a job's walk through many levels, and the bound is reached only when the top tree has dozens
