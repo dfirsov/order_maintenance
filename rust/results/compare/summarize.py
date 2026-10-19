@@ -56,7 +56,7 @@ INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 plt.rcParams.update({"font.size": 8, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
                      "xtick.color": MUTED, "ytick.color": MUTED, "font.family": "serif"})
 
-fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.5))
+fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.75))
 MIN_N = 1000
 for imp, (label, color, marker) in SERIES.items():
     by_n = defaultdict(list)
@@ -82,8 +82,9 @@ for ax, title in zip(axes, ["(a) slowest single operation", "(b) mean time (line
     ax.set_axisbelow(True)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
-axes[0].legend(frameon=False, loc="upper left", labelcolor=INK)
-fig.tight_layout()
+h, l = axes[0].get_legend_handles_labels()
+fig.legend(h, l, frameon=False, loc="lower center", ncol=3, labelcolor=INK)
+fig.tight_layout(rect=(0, 0.08, 1, 1))
 for ext in ("pdf", "png"):
     fig.savefig(os.path.join(HERE, f"compare.{ext}"), dpi=200)
 print(f"{len(rows)} rows -> summary.csv, compare.pdf, compare.png")
@@ -104,7 +105,7 @@ if q:
             for n in sorted(q[imp]):
                 r = q[imp][n]
                 w.writerow([imp, n, r["mean_ns"], r["p99_ns"], r["max_ns"], r["mean_work"], r["max_work"]])
-    fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.5))
+    fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.75))
     for imp, (label, color, marker) in SERIES.items():
         if imp not in q:
             continue
@@ -122,8 +123,9 @@ if q:
         ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
-    axes[0].legend(frameon=False, loc="upper left", labelcolor=INK, fontsize=7)
-    fig.tight_layout()
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, frameon=False, loc="lower center", ncol=3, labelcolor=INK)
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     for ext in ("pdf", "png"):
         fig.savefig(os.path.join(HERE, f"queries.{ext}"), dpi=200)
     print("queries/summary.csv, queries.pdf, queries.png")

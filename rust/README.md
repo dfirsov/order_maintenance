@@ -137,36 +137,49 @@ and peaks. The slowest operation at 10⁷ elements went from 0.47 s to about 0.5
 the operations with the most steps, page faults when a rebuild starts (bounded by the number of
 arrays), and the noise of the operating system (about 0.3 ms).
 
-## Comparison with an amortized algorithm (2026-10-19)
+## Comparison with two unverified implementations (2026-10-19)
 
 `compare` times every operation of four insertion workloads (`random`: after a random element;
-`hammer`: always after the first element; `append`; `front`), for this code and for the amortized
-baseline (`src/baseline.rs`: groups of at most 64 elements, tag-range relabeling of 62-bit group
-tags with T = 1.4). Every workload runs three times in one process; the workloads are
-deterministic, so the k-th operation is the same in every run, and its time is taken as the minimum
-over the runs (interruptions of 4–7 ms by the operating system hit single runs at random, but
-practically never the same operation in all three). Per decade of the list size we report the
-slowest operation and the median of the runs' means. Intel Core Ultra 9 285K, Linux 7.0,
-performance cores only, one core per run (`results/compare/run.sh`, `summary.csv`, `compare.png`).
+`hammer`: always after the first element; `append`; `front`) and, with a fifth argument, random
+order queries after every insertion, for this code and for two baselines written for comparison
+(not verified; unit tests check them against a plain list):
+* `src/baseline.rs`: the amortized O(1) algorithm of Bender et al. (ESA 2002): groups of at most 64
+  elements, tag-range relabeling of 62-bit group tags with T = 1.4;
+* `src/avl.rs`: the textbook O(log n) solution, an AVL tree with parent pointers; a query compares
+  the paths to the lowest common ancestor (no deletion: the workloads do not delete).
 
-| elements | this code: slowest operation | baseline: slowest (hammer/front/append) | this code: mean | baseline: mean |
-|---|---|---|---|---|
-| 10⁵ | 0.14–0.15 ms | 4.1–4.3 µs | 1.4–1.7 µs | 22–38 ns |
-| 10⁶ | 0.22–0.24 ms | 46–55 µs | 2.5–2.9 µs | 22–98 ns |
-| 10⁷ | 0.43–0.45 ms | 0.56–0.58 ms | 2.5–4.3 µs | 23–534 ns |
-| 5·10⁷ | 0.29–0.38 ms (hammer, random) | | 3.2–5.5 µs | |
-| 10⁸ | (not run: memory) | 5.3 ms | | 23–712 ns |
+Every workload runs three times in one process; the workloads are deterministic, so the k-th
+operation is the same in every run, and its time is taken as the minimum over the runs
+(interruptions of 4–7 ms by the operating system hit single runs at random, but practically never
+the same operation in all three). Per decade of the list size we report the slowest operation and
+the median of the runs' means. Intel Core Ultra 9 285K, Linux 7.0, performance cores only, one core
+per run (`results/compare/run.sh`, `summarize.py`, `summary.csv`, `compare.png`, `queries.png`).
 
-On average the baseline is faster, by a factor that depends on its cache behaviour. On random
-insertions the gap shrinks as the list outgrows the caches: 37 times at 10⁵ elements, 30 at 10⁶,
-8 at 10⁷ (4.3 µs against 0.53 µs). On the sequential workloads (hammer, append, front) the baseline
-keeps touching the same few groups, stays in the cache, and takes about 23 ns at every size, about
-100 times less. Our cost: about 1,360 machine steps per insertion on average (deamortization does
-a share of future work every time: split moves, top jobs, and while the list grows, 2.35 core
-insertions per user insertion because of rebuild copies), at 1.3–3.4 ns per step in unoptimized
-generated code (arbitrary-precision words, step counting; value-peak tracking alone is 9%). Its slowest insertion relabels a whole tag range and grows linearly with the size (it is
-always the operation with the most work); the verified code's stays below half a millisecond and is
-the faster of the two in the worst case from about 10⁷ elements on. The verified code's slowest
-operation is the one with the most steps, except at 10⁷, where it is the start of a rebuild (about 300
-page faults on the first writes into the new core's arrays, bounded by the number of arrays). The
-baseline's `random` workload never triggers large relabelings (at most 98 units of work).
+Slowest insertion (over the four workloads) and mean random insertion:
+
+| elements | this code: slowest | amortized: slowest | AVL: slowest | this code: mean | amortized: mean | AVL: mean |
+|---|---|---|---|---|---|---|
+| 10⁵ | 0.13–0.15 ms | 4.1–4.3 µs | 2.7–3.0 µs | 1.38 µs | 38 ns | 62 ns |
+| 10⁶ | 0.22–0.24 ms | 46–55 µs | 3.1–3.6 µs | 3.35 µs | 98 ns | 123 ns |
+| 10⁷ | 0.29–0.31 ms | 0.56–0.58 ms | 3.3–5.2 µs | 4.58 µs | 534 ns | 607 ns |
+| 5·10⁷ | 0.30–0.38 ms (hammer, random) | | | 5.96 µs | | |
+| 10⁸ | (not run: memory) | 5.3 ms | 3.3–7.0 µs | | 712 ns | 954 ns |
+
+Order queries (mean): this code 97 ns at 10³, 134 ns at 10⁵, 706 ns at 10⁶, 1,376 ns at 10⁷; AVL 36,
+59, 106, 515 ns; amortized 12, 14, 31, 193 ns.
+
+* Worst case: the amortized baseline's slowest insertion relabels a whole tag range and grows
+  linearly with the size; this code's grows only with the number of drain starts (above) and is the
+  smaller of the two from about 10⁷ elements on. In every decade from 10⁵ to 5·10⁷ this code's slowest
+  operation is the one with the most machine steps. The AVL tree's slowest insertion (O(log n), tiny
+  constants) is far below both.
+* Average: both baselines are much faster. Against the amortized one, the factor depends on its cache
+  behaviour: 36 times at 10⁵ and 9 times at 10⁷ on random insertions, about 100 times on the
+  sequential workloads, where it stays in the cache (about 23 ns at every size). Our cost: about 1,360
+  machine steps per insertion on average (deamortization does a share of future work every time:
+  split moves, top jobs, and while the list grows, 2.35 core insertions per user insertion because of
+  rebuild copies), in unoptimized generated code (arbitrary-precision words, step counting).
+* Queries: 65 machine steps always, against 25–78 node visits for the tree between 10³ and 10⁷; in time
+  both grow about 14-fold over that range, dominated by cache misses, and the tree stays 2.3–6.7 times
+  faster. We did not observe a size at which the constant-time query wins: our query touches one cache
+  line per field array of the machine program and two per large word.
