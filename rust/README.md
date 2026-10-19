@@ -126,7 +126,11 @@ never allocates: an order query allocates nothing (it made 38 allocations before
 23 on average (74 before); queries became about 3 times faster while the structure fits in the
 cache. (Flat arrays, one lazily mapped region per array instead of the block table, gained only
 3–8% and were not adopted: at large sizes the time goes to the cache lines a query touches, one
-per field array and two per large value.) The program and
+per field array and two per large value.) Shared words are freed when their last copy goes,
+many at a time when a retired core's values are released, and glibc's `free` then paused single
+operations for up to 14 ms; `src/alloc.rs` is therefore the global allocator: constant-time
+size-class free lists for objects up to 4 KB (memory reused, never returned), the system allocator
+above that. The program and
 its step counts are unchanged: the generated code still prints exactly what Lean's `exec` prints
 (9 operation files, 8.6 million steps), and all 23 prototype workloads replay with the same steps
 and peaks. The slowest operation at 10⁷ elements went from 0.47 s to about 0.5 ms; what remains is

@@ -5,12 +5,17 @@
 //! assignments are charged as in `opS`). Handles are the insertion counter: the k-th insertion
 //! returns handle k.
 
+pub mod alloc;
 pub mod avl;
 pub mod baseline;
 pub mod gen;
 pub mod rt;
 
 use gen::Top;
+
+/// Constant-time allocation for small objects (`alloc.rs`), for every program using this crate.
+#[global_allocator]
+static GLOBAL: alloc::Alloc = alloc::Alloc::new();
 use rt::{pk, W, M};
 
 /// Retired blocks freed per update (`M::collect`). A rebuild retires a core of capacity `N`,
