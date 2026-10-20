@@ -165,6 +165,10 @@ Slowest insertion (over the four workloads) and mean random insertion:
 | 5·10⁷ | 0.30–0.38 ms (hammer, random) | | | 5.96 µs | | |
 | 10⁸ | (not run: memory) | 5.3 ms | 3.3–7.0 µs | | 712 ns | 954 ns |
 
+The slowest-insertion columns of the baselines need two qualifications (next section): the AVL
+figures are mostly page faults, not the tree, and the amortized figures are from the clustered
+workloads; on random insertions its slowest stays at 3–14 µs.
+
 Order queries (mean): this code 97 ns at 10³, 134 ns at 10⁵, 706 ns at 10⁶, 1,376 ns at 10⁷; AVL 36,
 59, 106, 515 ns; amortized 12, 14, 31, 193 ns.
 
@@ -183,3 +187,67 @@ Order queries (mean): this code 97 ns at 10³, 134 ns at 10⁵, 706 ns at 10⁶,
   both grow about 14-fold over that range, dominated by cache misses, and the tree stays 2.3–6.7 times
   faster. We did not observe a size at which the constant-time query wins: our query touches one cache
   line per field array of the machine program and two per large word.
+
+## Page faults and cold caches (2026-10-20)
+
+**Page faults.** The slowest AVL insertions above visited only 2 nodes: they are page faults, taken
+when a node array (reserved with `Vec::with_capacity`, mapped by the system on first touch) reaches a
+fresh 4 KB page, about one insertion in a thousand at about 2.6 µs. Allocation is deterministic, so
+the same insertion faults in every run and the per-operation minimum keeps it. With the arrays
+touched beforehand (a variant of `Avl::new` filling and clearing each vector; not committed), the
+slowest AVL insertion is the deepest one and grows with log n and cache misses:
+
+| elements | hammer: as above | hammer: pre-touched | random: as above | random: pre-touched |
+|---|---|---|---|---|
+| 10⁵ | 2.9 µs (2 nodes) | 0.21 µs (15 nodes) | 2.8 µs (3) | 0.19 µs (4) |
+| 10⁶ | 3.1 µs (2) | 0.32 µs (20) | 3.5 µs (9) | 0.74 µs (9) |
+| 10⁷ | 3.2 µs (2) | 1.26 µs (23) | 5.7 µs (16) | 3.8 µs (22) |
+
+This code pays page faults too (its pool and tables are mapped lazily), but a few microseconds are
+negligible against its 0.13–0.38 ms. The amortized baseline's slowest random insertion (3–14 µs) is
+probably also mostly page faults. Each baseline's adversary differs: clustered insertion for the
+amortized one (it relabels a dense range), while for the tree clustered insertion is close to its
+best case (the same path every time, in the cache); its worst is random insertion into a large tree
+with cold caches.
+
+**Cold caches.** `cold` (`src/bin/cold.rs`, `results/cold/run.sh`, one run at a time on one
+performance core) reads a 128 MB buffer (4 KB pages) before every measured operation, evicting the
+structure from L2, L3 and the TLBs (instruction cache and branch predictors stay warm; an empty
+operation measured this way takes about 12 ns). A warm run records the work of every insertion; per
+decade, the 500 insertions with the most work, 500 evenly spaced ones and one random query after
+each of the latter (cold, then again warm) are measured in two more runs. Page faults are recorded:
+the time of an operation is its minimum over the runs without a fault, or over both runs if it
+faulted in both (this code's heaviest insertions allocate and fault in every run, so they are kept).
+
+Slowest insertion, cold (this code including page faults; the baselines without, which add 2–20 µs):
+
+| elements | this code (4 workloads) | amortized: clustered | amortized: random | AVL (worst workload) |
+|---|---|---|---|---|
+| 10⁵ | 0.20–0.22 ms | 6.0–6.4 µs | 10 µs | 4.2 µs |
+| 10⁶ | 0.29–0.33 ms | 47–48 µs | 12 µs | 5.4 µs |
+| 10⁷ | 0.34–0.35 ms | 0.55 ms | 16 µs | 6.4 µs |
+| 10⁸ | (not run) | 5.0 ms | 22 µs | 8.7 µs |
+
+Order queries, cold (mean / slowest of 500 per decade):
+
+| elements | this code | AVL | amortized |
+|---|---|---|---|
+| 10⁵ | 4.3–4.6 / 6.3–6.6 µs | 1.7–2.0 / 2.4–2.8 µs | 0.7–0.8 / 1.0–1.2 µs |
+| 10⁶ | 4.9–5.6 / 7.5–8.7 µs | 2.4–2.7 / 4.5–5.6 µs | 0.7–0.8 / 1.0 µs |
+| 10⁷ | 4.0–6.7 / 5.5–9.7 µs | 3.2–3.6 / 4.0–8.0 µs | 0.6–0.8 / 1.0 µs |
+| 10⁸ | (not run) | 4.3–5.5 / 6.7–9.0 µs | 0.5–0.8 / 0.8–1.1 µs |
+
+(Ranges are over the workloads run: all four for this code, random, hammer and front for the
+baselines; the amortized clustered column is hammer and front. Warm, the same queries take 0.1–0.25 µs, 0.04–0.2 µs and 0.01 µs.)
+
+* Insertions: the tree's slowest cold insertion (at most 52 node visits at 10⁸) stays 50–60 times
+  below this code's. Cold caches double the tree's worst case but change this code's little (0.31 →
+  0.35 ms at 10⁷): its heaviest insertions stream through so much memory that they miss the cache
+  when warm too. The amortized baseline's clustered worst case does not change: relabeling dominates.
+* Queries: cold, this code's query does not grow with the size (65 steps; tens of cache lines over
+  the field arrays and the shared large words), while the tree's grows with its depth (its mean
+  triples from 10⁵ to 10⁸). On random insertions at 10⁷ this code's slowest cold query is below the
+  tree's (5.5 against 8.0 µs) and the means are within 10% (4.0 against 3.6 µs); on the clustered
+  workloads the tree is still about twice as fast. Not yet measured: this code cold at 5·10⁷
+  (about 10 GB), which would show whether the means cross. The amortized baseline compares two
+  64-bit tags (about two cache misses) and is fastest throughout.
