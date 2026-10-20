@@ -1,0 +1,7 @@
+om,random,1,10,9,4175,4277,4277,4277,303.6,308,308,faults_of_slowest=4,slowest_without_faults=0
+om,random,10,100,90,11596,116629,116629,116629,960.9,4727,2422,faults_of_slowest=118,slowest_without_faults=0
+om,random,100,1000,900,7519,12178,38135,38135,1209.7,4964,1086,faults_of_slowest=43,slowest_without_faults=1033
+om,random,1000,10000,9000,1776,6728,28334,28334,1009.5,12810,12810,faults_of_slowest=0,slowest_without_faults=28334
+om,random,10000,100000,90000,1389,6236,27597,35306,1053.2,22451,3550,faults_of_slowest=4,slowest_without_faults=34299
+om,random,100000,1000000,900000,3390,11492,35234,60211,1176.2,31814,3641,faults_of_slowest=4,slowest_without_faults=53566
+om,random,1000000,10000000,9000000,4686,14315,47128,153180,966.3,33277,3641,faults_of_slowest=2,slowest_without_faults=149605

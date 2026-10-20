@@ -1,0 +1,587 @@
+--- a/rust/src/rt.rs
++++ b/rust/src/rt.rs
+@@ -115,51 +115,243 @@
+ 
+ /// Cells per block (32 KB).
+ pub const BLOCK: usize = 4096;
+-/// Blocks per slab: blocks are carved from slabs of 2 MB, mapped directly by the system.
+-const SLAB: usize = 64;
++/// Blocks per slab: blocks are carved from slabs of 8 MB, mapped directly by the system.
++const SLAB: usize = 256;
+ /// Large values per segment of an array's list of large values.
+ const SEG: usize = 256;
+ 
+ type Block = [u64; BLOCK];
+ 
+ /// The runtime's own memory for blocks, so that no operation calls `malloc` or `free` for
+-/// them: free blocks form an intrusive list (the link in cell 0); otherwise the next block of the
+-/// current slab is used, and a new slab is mapped when it is used up. Slabs come from zeroed
+-/// memory that the system maps lazily, so a block's pages are touched only when it is used.
++/// them, and no operation pays for touching or zeroing many pages at once:
++/// * blocks are carved from slabs of 2 MB of zeroed memory, which the system maps lazily (a page
++///   costs a fault the first time it is written); `prepare` touches up to `PRE_PAGES` pages per
++///   update ahead of the carving point, keeping `RESERVE` pages touched in advance (the next slab
++///   is mapped in advance when the reserve reaches into it);
++/// * a freed block goes to the dirty list; `prepare` zeroes up to `ZERO_PAGES` of its pages per
++///   update and then moves it to the clean list (intrusive: the link in cell 0).
++/// `take` uses a clean block, or carves the next one; it never touches more than one cell.
+ struct Pool {
+     free: *mut Block,
++    dirty: *mut Block,
++    /// The dirty block being zeroed (off both lists) and its pages zeroed so far.
++    zblk: *mut Block,
++    zpos: usize,
+     slab: *mut Block,
+     left: usize,
++    /// The next slab, mapped in advance, and its pages touched so far.
++    next: *mut Block,
++    pre_next: usize,
++    /// Pages of the current slab touched so far (from its start).
++    pre: usize,
+     /// Every slab mapped, for `Drop`.
+     slabs: Vec<*mut Block>,
+ }
+ 
++const PAGE_CELLS: usize = 512;
++const PAGES: usize = BLOCK / PAGE_CELLS;
++const SLAB_PAGES: usize = SLAB * PAGES;
++const RESERVE: usize = 2048;
++const PRE_PAGES: usize = 4;
++const ZERO_PAGES: usize = 2;
++
+ fn slab_layout() -> std::alloc::Layout {
+     std::alloc::Layout::from_size_align(SLAB * BLOCK * 8, 16).unwrap()
+ }
+ 
++fn touch(b: *mut Block, page: usize) {
++    unsafe { std::ptr::write_volatile((b as *mut u64).add(page * PAGE_CELLS), 0) };
++}
++
+ impl Pool {
++    fn new() -> Pool {
++        Pool {
++            free: std::ptr::null_mut(), dirty: std::ptr::null_mut(), zblk: std::ptr::null_mut(), zpos: 0,
++            slab: std::ptr::null_mut(), left: 0, next: std::ptr::null_mut(), pre_next: 0, pre: 0,
++            slabs: Vec::new(),
++        }
++    }
++    /// A slab of fresh zero pages straight from the system (`calloc` may hand out reused heap
++    /// memory and zero all of it at once).
++    fn map_slab(&mut self) -> *mut Block {
++        const PROT_RW: i32 = 1 | 2;
++        const MAP_PRIVATE_ANON: i32 = 0x02 | 0x20;
++        let s = unsafe { mmap(std::ptr::null_mut(), SLAB * BLOCK * 8, PROT_RW, MAP_PRIVATE_ANON, -1, 0) } as *mut Block;
++        assert!(s as isize != -1, "out of memory");
++        self.slabs.push(s);
++        s
++    }
+     fn take(&mut self) -> *mut Block {
+         if !self.free.is_null() {
+             let b = self.free;
+             unsafe {
+                 self.free = (*b)[0] as *mut Block;
+-                (*b).fill(0);
++                (*b)[0] = 0;
+             }
+             return b;
+         }
+         if self.left == 0 {
+-            self.slab = unsafe { std::alloc::alloc_zeroed(slab_layout()) } as *mut Block;
+-            assert!(!self.slab.is_null(), "out of memory");
+-            self.slabs.push(self.slab);
++            if self.next.is_null() {
++                self.slab = self.map_slab();
++                self.pre = 0;
++            } else {
++                self.slab = self.next;
++                self.pre = self.pre_next;
++                self.next = std::ptr::null_mut();
++                self.pre_next = 0;
++            }
+             self.left = SLAB;
+         }
+         self.left -= 1;
+         unsafe { self.slab.add(SLAB - 1 - self.left) }
+     }
+     fn give(&mut self, b: *mut Block) {
+-        unsafe { (*b)[0] = self.free as u64 };
+-        self.free = b;
++        unsafe { (*b)[0] = self.dirty as u64 };
++        self.dirty = b;
++    }
++    /// The bounded work of one update: zero dirty pages, touch pages ahead.
++    fn prepare(&mut self) {
++        let mut z = ZERO_PAGES;
++        while z > 0 {
++            if self.zblk.is_null() {
++                if self.dirty.is_null() { break; }
++                self.zblk = self.dirty;
++                self.dirty = unsafe { (*self.zblk)[0] } as *mut Block;
++                self.zpos = 0;
++            }
++            unsafe { std::ptr::write_bytes((self.zblk as *mut u64).add(self.zpos * PAGE_CELLS), 0, PAGE_CELLS) };
++            self.zpos += 1;
++            z -= 1;
++            if self.zpos == PAGES {
++                unsafe { (*self.zblk)[0] = self.free as u64 };
++                self.free = self.zblk;
++                self.zblk = std::ptr::null_mut();
++            }
++        }
++        if self.slab.is_null() { return; }
++        let carved = (SLAB - self.left) * PAGES;
++        if self.pre < carved { self.pre = carved; }
++        let goal = carved + RESERVE;
++        let mut k = PRE_PAGES;
++        while k > 0 && self.pre < goal.min(SLAB_PAGES) {
++            touch(self.slab, self.pre);
++            self.pre += 1;
++            k -= 1;
++        }
++        if goal > SLAB_PAGES {
++            if self.next.is_null() && k > 0 {
++                self.next = self.map_slab();
++                self.pre_next = 0;
++            }
++            while k > 0 && !self.next.is_null() && self.pre_next < (goal - SLAB_PAGES).min(SLAB_PAGES) {
++                touch(self.next, self.pre_next);
++                self.pre_next += 1;
++                k -= 1;
++            }
++        }
++    }
++}
++
++/// A list of words in pool blocks: a radix tree with `BLOCK` entries per node whose height grows
++/// with the length (one leaf up to `BLOCK` entries, then a node above it, and so on: a new root
++/// holds the old one as its first child). Appending, reading and overwriting take constant time
++/// and touch only pool memory, which `Pool::prepare` faults in ahead of use; no list ever needs a
++/// large reservation or a copy. A retired list is emptied from the end a few entries at a time.
++struct PList {
++    root: *mut Block,
++    /// Levels: 0 (empty), 1 (the root is a leaf), 2 or 3.
++    height: u32,
++    len: usize,
++}
++
++impl PList {
++    const fn new() -> PList { PList { root: std::ptr::null_mut(), height: 0, len: 0 } }
++    #[inline]
++    fn leaf(&self, i: usize) -> *mut Block {
++        unsafe {
++            match self.height {
++                1 => self.root,
++                2 => (*self.root)[i / BLOCK] as *mut Block,
++                _ => {
++                    let mid = (*self.root)[i / (BLOCK * BLOCK)] as *mut Block;
++                    (*mid)[(i / BLOCK) % BLOCK] as *mut Block
++                }
++            }
++        }
++    }
++    #[inline]
++    fn get(&self, i: usize) -> u64 {
++        debug_assert!(i < self.len);
++        unsafe { (*self.leaf(i))[i % BLOCK] }
++    }
++    #[inline]
++    fn set(&mut self, i: usize, v: u64) {
++        debug_assert!(i < self.len);
++        unsafe { (*self.leaf(i))[i % BLOCK] = v };
++    }
++    fn push(&mut self, v: u64, pool: &mut Pool) {
++        let i = self.len;
++        unsafe {
++            if self.height == 0 {
++                self.root = pool.take();
++                self.height = 1;
++            } else if (self.height == 1 && i == BLOCK) || (self.height == 2 && i == BLOCK * BLOCK) {
++                let r = pool.take();
++                (*r)[0] = self.root as u64;
++                self.root = r;
++                self.height += 1;
++            }
++            assert!(i < BLOCK * BLOCK * BLOCK, "list too long");
++            let leaf = match self.height {
++                1 => self.root,
++                2 => {
++                    let slot = &mut (*self.root)[i / BLOCK];
++                    if *slot == 0 { *slot = pool.take() as u64; }
++                    *slot as *mut Block
++                }
++                _ => {
++                    let mslot = &mut (*self.root)[i / (BLOCK * BLOCK)];
++                    if *mslot == 0 { *mslot = pool.take() as u64; }
++                    let lslot = &mut (*(*mslot as *mut Block))[(i / BLOCK) % BLOCK];
++                    if *lslot == 0 { *lslot = pool.take() as u64; }
++                    *lslot as *mut Block
++                }
++            };
++            (*leaf)[i % BLOCK] = v;
++        }
++        self.len += 1;
++    }
++    /// Remove the last entry, giving emptied blocks back to the pool (the root stays until the
++    /// list is empty; `PList` is only emptied, never refilled, once retired).
++    fn pop(&mut self, pool: &mut Pool) -> Option<u64> {
++        if self.len == 0 { return None; }
++        self.len -= 1;
++        let i = self.len;
++        unsafe {
++            let leaf = self.leaf(i);
++            let v = (*leaf)[i % BLOCK];
++            (*leaf)[i % BLOCK] = 0;
++            if i % BLOCK == 0 && self.height >= 2 {
++                match self.height {
++                    2 => { (*self.root)[i / BLOCK] = 0; }
++                    _ => {
++                        let mid = (*self.root)[i / (BLOCK * BLOCK)] as *mut Block;
++                        (*mid)[(i / BLOCK) % BLOCK] = 0;
++                        if (i / BLOCK) % BLOCK == 0 {
++                            (*self.root)[i / (BLOCK * BLOCK)] = 0;
++                            pool.give(mid);
++                        }
++                    }
++                }
++                pool.give(leaf);
++            }
++            if i == 0 {
++                pool.give(self.root);
++                self.root = std::ptr::null_mut();
++                self.height = 0;
++            }
++            Some(v)
++        }
+     }
+ }
+ 
+@@ -172,8 +364,10 @@
+     cap: usize,
+     table: *mut *mut Block,
+     nblocks: usize,
+-    touched: Vec<*mut Block>,
+-    bigs: Vec<Vec<Rc<BigUint>>>,
++    /// The blocks taken, for retirement.
++    touched: PList,
++    /// The large values, as `Rc::into_raw` pointers.
++    bigs: PList,
+ }
+ 
+ /// Tables of at least this many bytes (one page) are mapped directly from the system
+@@ -224,7 +418,7 @@
+     fn new(cap: usize) -> Arr {
+         let nblocks = cap.div_ceil(BLOCK);
+         let table = map_table(nblocks);
+-        Arr { cap, table, nblocks, touched: Vec::new(), bigs: Vec::new() }
++        Arr { cap, table, nblocks, touched: PList::new(), bigs: PList::new() }
+     }
+     #[inline]
+     fn get(&self, i: usize) -> u64 {
+@@ -240,43 +434,36 @@
+         if b.is_null() {
+             b = pool.take();
+             unsafe { *slot = b };
+-            if self.touched.capacity() == 0 {
+-                // the full capacity at once (large reservations are mapped lazily), so that the
+-                // list never grows by copying
+-                self.touched.reserve_exact(self.nblocks);
+-            }
+-            self.touched.push(b);
++            self.touched.push(b as u64, pool);
+         }
+         unsafe { (*b)[i % BLOCK] = c };
+     }
+     /// The large value at index `k`, as a word. Values in [2^63, 2^64) are stored here too, but
+     /// a word holds them as `W::S` (`W::B` only above `u64::MAX`).
+     fn big_get(&self, k: u64) -> W {
+-        let k = k as usize;
+-        let b = &self.bigs[k / SEG][k % SEG];
++        let raw = self.bigs.get(k as usize) as *const BigUint;
++        let b = unsafe { &*raw };
+         match b.to_u64() {
+             Some(v) => W::S(v),
+-            None => W::B(b.clone()),
++            None => {
++                unsafe { Rc::increment_strong_count(raw) };
++                W::B(unsafe { Rc::from_raw(raw) })
++            }
+         }
+     }
+     /// Store a large value: in place at index `old` if the cell held one, else appended.
+     /// Returns its index.
+-    fn big_put(&mut self, old: Option<u64>, v: Rc<BigUint>) -> u64 {
++    fn big_put(&mut self, old: Option<u64>, v: Rc<BigUint>, pool: &mut Pool) -> u64 {
++        let raw = Rc::into_raw(v) as u64;
+         if let Some(k) = old {
+             let k = k as usize;
+-            self.bigs[k / SEG][k % SEG] = v;
++            let prev = self.bigs.get(k) as *const BigUint;
++            self.bigs.set(k, raw);
++            drop(unsafe { Rc::from_raw(prev) });
+             return k as u64;
+         }
+-        if self.bigs.last().map_or(true, |seg| seg.len() == SEG) {
+-            if self.bigs.capacity() == 0 {
+-                // as for `touched`: enough segments for every cell, reserved once
+-                self.bigs.reserve_exact(self.cap / SEG + 1);
+-            }
+-            self.bigs.push(Vec::with_capacity(SEG));
+-        }
+-        let k = (self.bigs.len() - 1) * SEG + self.bigs.last().unwrap().len();
+-        self.bigs.last_mut().unwrap().push(v);
+-        k as u64
++        self.bigs.push(raw, pool);
++        (self.bigs.len - 1) as u64
+     }
+ }
+ 
+@@ -284,10 +471,10 @@
+ /// operation pays for a whole core.
+ #[derive(Default)]
+ struct Garbage {
+-    blocks: Vec<Vec<*mut Block>>,
++    blocks: Vec<PList>,
+     tables: Vec<(*mut *mut Block, usize)>,
+     /// Retired arrays' lists of large values, each handed over whole (constant time).
+-    bigs: Vec<Vec<Vec<Rc<BigUint>>>>,
++    bigs: Vec<PList>,
+ }
+ 
+ /// glibc's `free` and `malloc` occasionally do work proportional to the heap (trimming it,
+@@ -321,7 +508,7 @@
+         tune_malloc();
+         M {
+             arrs: (0..NARR).map(|_| Arr::new(0)).collect(),
+-            pool: Pool { free: std::ptr::null_mut(), slab: std::ptr::null_mut(), left: 0, slabs: Vec::new() },
++            pool: Pool::new(),
+             garbage: Garbage::default(),
+             cost: 0,
+             peak: 0,
+@@ -330,8 +517,8 @@
+     /// Retire array `a`'s memory and give it a new, empty one of capacity `n` (constant time).
+     fn replace(&mut self, a: usize, n: usize) {
+         let old = std::mem::replace(&mut self.arrs[a], Arr::new(n));
+-        if !old.touched.is_empty() { self.garbage.blocks.push(old.touched); }
+-        if !old.bigs.is_empty() { self.garbage.bigs.push(old.bigs); }
++        if old.touched.len > 0 { self.garbage.blocks.push(old.touched); }
++        if old.bigs.len > 0 { self.garbage.bigs.push(old.bigs); }
+         self.garbage.tables.push((old.table, old.nblocks));
+     }
+     /// Return at most `k` retired blocks to the pool (and unmap the tables they leave). Called
+@@ -339,15 +526,20 @@
+     pub fn collect(&mut self, mut k: usize) {
+         while k > 0 {
+             if let Some(v) = self.garbage.blocks.last_mut() {
+-                match v.pop() {
+-                    Some(b) => { self.pool.give(b); k -= 1; }
++                match v.pop(&mut self.pool) {
++                    Some(b) => { self.pool.give(b as *mut Block); k -= 1; }
+                     None => { self.garbage.blocks.pop(); }
+                 }
+             } else if let Some(v) = self.garbage.bigs.last_mut() {
+-                match v.pop() {
+-                    Some(seg) => { drop(seg); k -= 1; }
+-                    None => { self.garbage.bigs.pop(); }
++                // up to `SEG` large values per unit
++                let mut j = 0;
++                while j < SEG {
++                    match v.pop(&mut self.pool) {
++                        Some(r) => { drop(unsafe { Rc::from_raw(r as *const BigUint) }); j += 1; }
++                        None => break,
++                    }
+                 }
++                if j == 0 { self.garbage.bigs.pop(); } else { k -= 1; }
+             } else if let Some((t, n)) = self.garbage.tables.pop() {
+                 unmap_table(t, n);
+                 k -= 1;
+@@ -355,6 +547,8 @@
+                 break;
+             }
+         }
++        self.pool.prepare();
++        crate::GLOBAL.prepare();
+     }
+     /// Read cell `i` of machine array `arr` (for monitoring; not used by the program).
+     pub fn peek(&self, arr: u64, i: usize) -> W {
+@@ -373,13 +567,16 @@
+     }
+     /// The cells in blocks actually allocated (memory in use, without the tables of large values).
+     pub fn resident(&self) -> usize {
+-        self.arrs.iter().map(|a| a.touched.len() * BLOCK).sum()
++        self.arrs.iter().map(|a| a.touched.len * BLOCK).sum()
+     }
+ }
+ 
+ /// Teardown (not part of any operation): unmap every table and slab. Every block lies in a slab.
+ impl Drop for M {
+     fn drop(&mut self) {
++        for l in self.arrs.iter().map(|a| &a.bigs).chain(self.garbage.bigs.iter()) {
++            for i in 0..l.len { drop(unsafe { Rc::from_raw(l.get(i) as *const BigUint) }); }
++        }
+         for a in &self.arrs {
+             unmap_table(a.table, a.nblocks);
+         }
+@@ -387,7 +584,7 @@
+             unmap_table(t, n);
+         }
+         for &s in &self.pool.slabs {
+-            unsafe { std::alloc::dealloc(s as *mut u8, slab_layout()) };
++            unsafe { munmap(s as *mut u8, SLAB * BLOCK * 8) };
+         }
+     }
+ }
+@@ -431,7 +628,7 @@
+         v => {
+             let prev = if old & TAG != 0 { Some(old & !TAG) } else { None };
+             let rc = match v { W::B(b) => b, W::S(x) => Rc::new(BigUint::from(x)) };
+-            TAG | arr.big_put(prev, rc)
++            TAG | arr.big_put(prev, rc, &mut m.pool)
+         }
+     };
+     arr.set(ix, c, &mut m.pool);
+--- a/rust/src/alloc.rs
++++ b/rust/src/alloc.rs
+@@ -29,6 +29,9 @@
+     /// (a shared number and its digits) lie next to each other, as with the C allocator.
+     next: *mut u8,
+     left: usize,
++    /// The next chunk, mapped in advance, and its pages touched so far (`prepare`).
++    spare: *mut u8,
++    spare_touched: usize,
+ }
+ 
+ pub struct Alloc {
+@@ -46,6 +49,8 @@
+                 free: [std::ptr::null_mut(); CLASSES],
+                 next: std::ptr::null_mut(),
+                 left: 0,
++                spare: std::ptr::null_mut(),
++                spare_touched: 0,
+             }),
+         }
+     }
+@@ -65,6 +70,37 @@
+     }
+ }
+ 
++extern "C" {
++    fn mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fd: i32, off: i64) -> *mut u8;
++}
++
++/// A chunk of fresh zero pages straight from the system.
++fn map_chunk() -> *mut u8 {
++    let p = unsafe { mmap(std::ptr::null_mut(), CHUNK, 1 | 2, 0x02 | 0x20, -1, 0) };
++    if p as isize == -1 { std::ptr::null_mut() } else { p }
++}
++
++impl Alloc {
++    /// The bounded work of one update: map the next chunk in advance and touch up to
++    /// `PRE_PAGES` of its pages, so that carving never faults.
++    pub fn prepare(&self) {
++        const PRE_PAGES: usize = 2;
++        self.lock();
++        let st = unsafe { &mut *self.st.get() };
++        if st.spare.is_null() {
++            st.spare = map_chunk();
++            st.spare_touched = 0;
++        }
++        let mut k = PRE_PAGES;
++        while k > 0 && !st.spare.is_null() && st.spare_touched < CHUNK / 4096 {
++            unsafe { std::ptr::write_volatile(st.spare.add(st.spare_touched * 4096), 0) };
++            st.spare_touched += 1;
++            k -= 1;
++        }
++        self.unlock();
++    }
++}
++
+ unsafe impl GlobalAlloc for Alloc {
+     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+         let Some(c) = Self::class(&l) else { return System.alloc(l) };
+@@ -77,7 +113,8 @@
+         } else {
+             let size = (c + 1) * 16;
+             if st.left < size {
+-                let chunk = System.alloc(Layout::from_size_align_unchecked(CHUNK, 16));
++                let chunk = if st.spare.is_null() { map_chunk() } else { std::mem::replace(&mut st.spare, std::ptr::null_mut()) };
++                st.spare_touched = 0;
+                 if chunk.is_null() { self.unlock(); return chunk; }
+                 st.next = chunk;
+                 st.left = CHUNK;
+--- a/rust/src/lib.rs
++++ b/rust/src/lib.rs
+@@ -15,7 +15,7 @@
+ 
+ /// Constant-time allocation for small objects (`alloc.rs`), for every program using this crate.
+ #[global_allocator]
+-static GLOBAL: alloc::Alloc = alloc::Alloc::new();
++pub(crate) static GLOBAL: alloc::Alloc = alloc::Alloc::new();
+ use rt::{pk, W, M};
+ 
+ /// Retired blocks freed per update (`M::collect`). A rebuild retires a core of capacity `N`,
+--- a/rust/src/bin/compare.rs
++++ b/rust/src/bin/compare.rs
+@@ -25,6 +25,12 @@
+ use om::baseline::Bender;
+ use om::Om;
+ use std::time::Instant;
++#[repr(C)]
++struct Rusage { a: [i64; 4], b: [i64; 4], minflt: i64, majflt: i64, c: [i64; 8] }
++extern "C" { fn getrusage(who: i32, usage: *mut Rusage) -> i32; }
++fn faults() -> i64 { let mut u: Rusage = unsafe { std::mem::zeroed() }; unsafe { getrusage(1, &mut u) }; u.minflt + u.majflt }
++static mut FLT: Vec<u32> = Vec::new();
++static mut BFLT: Vec<u32> = Vec::new();
+ 
+ enum S {
+     Om(Om),
+@@ -64,12 +70,14 @@
+     let first = s.insert_first();
+     live.push(first);
+     times.clear();
++    unsafe { FLT.clear(); }
+     works.clear();
+     qtimes.clear();
+     qworks.clear();
+     let mut sink = 0u64;
+     while live.len() < n {
+         let w0 = s.work();
++        let f0 = faults();
+         let t0 = Instant::now();
+         let h = match wl {
+             "random" => { let x = live[(rnd() % live.len() as u64) as usize]; s.insert_after(x) }
+@@ -80,6 +88,7 @@
+         };
+         let dt = t0.elapsed().as_nanos();
+         times.push(dt.min(u32::MAX as u128) as u32);
++        unsafe { FLT.push((faults() - f0) as u32); }
+         works.push((s.work() - w0).min(u32::MAX as u64) as u32);
+         live.push(h);
+         for _ in 0..qpi {
+@@ -114,7 +123,10 @@
+         let mut sorted = ts.to_vec();
+         sorted.sort_unstable();
+         let pct = |p: f64| sorted[((k as f64 * p) as usize).min(k - 1)];
+-        println!("{imp},{wl},{from},{to},{k},{mean_t:.0},{},{},{},{mean_w:.1},{max_w},{}",
++        let fl = if per == 1 { unsafe { BFLT[(from - 1) + slowest] } } else { 0 };
++        let mut nf = 0usize; let mut maxnf = 0u32;
++        if per == 1 { for i in 0..k { let f = unsafe { BFLT[(from - 1) + i] }; if f == 0 { nf += 1; maxnf = maxnf.max(ts[i]); } } }
++        println!("{imp},{wl},{from},{to},{k},{mean_t:.0},{},{},{},{mean_w:.1},{max_w},{},faults_of_slowest={fl},slowest_without_faults={maxnf}",
+             pct(0.99), pct(0.9999), sorted[k - 1], ws[slowest]);
+     }
+ }
+@@ -144,13 +156,14 @@
+         run(&imp, &wl, n, qpi, &mut times, &mut works, &mut qtimes, &mut qworks);
+         if r == 0 {
+             best = times.clone();
++            unsafe { BFLT = FLT.clone(); }
+             work = works.clone();
+             qbest = qtimes.clone();
+             qwork = qworks.clone();
+         } else {
+             assert_eq!(work, works, "the work differs between runs");
+             assert_eq!(qwork, qworks, "the query work differs between runs");
+-            for (b, &t) in best.iter_mut().zip(times.iter()) { *b = (*b).min(t); }
++            for (i, (b, &t)) in best.iter_mut().zip(times.iter()).enumerate() { if t < *b { *b = t; unsafe { BFLT[i] = FLT[i]; } } }
+             for (b, &t) in qbest.iter_mut().zip(qtimes.iter()) { *b = (*b).min(t); }
+         }
+         means.push(decade_means(&bounds, 1, &times));

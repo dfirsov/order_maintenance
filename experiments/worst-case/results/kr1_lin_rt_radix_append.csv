@@ -1,0 +1,7 @@
+om,append,1,10,9,4166,3920,3920,3920,308.0,308,308,faults_of_slowest=4,slowest_without_faults=0
+om,append,10,100,90,10048,102202,102202,102202,1008.7,3881,1878,faults_of_slowest=118,slowest_without_faults=0
+om,append,100,1000,900,6773,12318,37647,37647,1344.4,4665,1549,faults_of_slowest=44,slowest_without_faults=1101
+om,append,1000,10000,9000,1902,6946,25826,25826,1123.3,12340,11903,faults_of_slowest=0,slowest_without_faults=25826
+om,append,10000,100000,90000,1461,6871,31814,41758,1164.5,23033,3555,faults_of_slowest=4,slowest_without_faults=37790
+om,append,100000,1000000,900000,2143,8459,38341,70507,1364.4,24317,3646,faults_of_slowest=4,slowest_without_faults=42860
+om,append,1000000,10000000,9000000,1812,7381,37344,83957,1085.4,26038,5379,faults_of_slowest=0,slowest_without_faults=83957

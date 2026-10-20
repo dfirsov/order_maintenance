@@ -1,0 +1,7 @@
+om,front,1,10,9,4015,4186,4186,4186,301.0,301,301,faults_of_slowest=4,slowest_without_faults=0
+om,front,10,100,90,10329,73923,73923,73923,1026.0,4659,1871,faults_of_slowest=60,slowest_without_faults=0
+om,front,100,1000,900,7405,11318,27334,27334,1282.7,5395,2322,faults_of_slowest=5,slowest_without_faults=5974
+om,front,1000,10000,9000,1440,6307,27982,27982,1073.3,12173,12173,faults_of_slowest=4,slowest_without_faults=24957
+om,front,10000,100000,90000,1305,6546,31365,53732,1164.6,22962,1662,faults_of_slowest=5,slowest_without_faults=32588
+om,front,100000,1000000,900000,1906,8097,35494,63900,1284.6,33178,2420,faults_of_slowest=20,slowest_without_faults=47192
+om,front,1000000,10000000,9000000,1593,7277,38263,85015,1034.3,31780,15518,faults_of_slowest=12,slowest_without_faults=62313
