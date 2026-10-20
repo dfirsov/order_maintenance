@@ -1,0 +1,4 @@
+grow: grow seed 1: max steps 127818, mean 860 | linear: max steps 50797, mean 839 | digests identical at 301 checkpoints: yes
+churn: churn seed 2: max steps 68237, mean 521 | linear: max steps 29426, mean 521 | digests identical at 301 checkpoints: yes
+mix: mix seed 3: max steps 127121, mean 517 | linear: max steps 47187, mean 505 | digests identical at 301 checkpoints: yes
+hot: hot seed 4: max steps 132175, mean 1065 | linear: max steps 57297, mean 1022 | digests identical at 301 checkpoints: yes
