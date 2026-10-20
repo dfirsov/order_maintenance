@@ -1,6 +1,6 @@
 """Export operation traces for the Lean model's replay test (lean/OM/Test/Replay.lean).
 
-    python3 trace.py OUT.jsonl WORKLOAD N [--preset default|proof|tiny|tinytop|beta3] [--seed S] [--K_B K]
+    python3 trace.py OUT.jsonl WORKLOAD N [--preset default|proof|verified|tiny|tinytop|beta3] [--seed S] [--K_B K]
 
 Runs a stress workload (stress.WORKLOADS) on the full structure and writes one JSON value
 per line:
@@ -61,7 +61,32 @@ def beta3(N: int) -> Params:
     return P
 
 
+def verified(N: int) -> Params:
+    """The parameters of the verified machine program (`proofParams N`,
+    lean/OM/Impl/Params.lean): K_R = 8, a = 8, s = 11, beta = 64, H = L/3 + 1, and the label
+    widths and push steps of the proof."""
+    L = max(8, N.bit_length())
+    G, T = 2 * L, 3 * L * L
+    kg, gm = G // 3 + 1, (G - 2) // 2
+    UG = G + kg + max(kg - gm, 0)
+    uT = T // gm + 1
+    kc = uT // 3 + 1
+    Mu = uT + kc
+    csB = (T + 2 * kc) // gm
+    rsB = 3 * Mu + 1
+    HC = 2 * (csB + rsB)
+    PC = 3 * Mu + rsB + csB
+    H = L // 3 + 1
+    P = Params(N=N, L=L, G=G, T=T, theta=2 * L * L,
+               B_e=UG + (G + kg).bit_length() + 1, B_g=HC + PC.bit_length() + 1, B_t=0,
+               D_e=1 << UG, D_g=1 << HC, K_G=4, K_C=4, K_R=8, J=0, top="wbbt")
+    P.top_a, P.top_s, P.top_beta = 8, 11, 64
+    P.m_max = 8 ** (H - 1)              # makes the top structure choose exactly this H
+    return P
+
+
 PRESETS = {
+    "verified": verified,
     "default": lambda N: Params.for_capacity(N, top="wbbt"),
     "proof": Params.proof,
     "tiny": tiny,

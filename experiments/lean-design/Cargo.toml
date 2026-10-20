@@ -1,0 +1,13 @@
+[package]
+name = "lean-design"
+version = "0.1.0"
+edition = "2021"
+description = "Experiment (not verified): the order-maintenance algorithm written directly in Rust"
+license = "Apache-2.0"
+
+[dependencies]
+om = { path = "../../rust" }
+num-bigint = "=0.4.6"
+
+[profile.release]
+debug = false
