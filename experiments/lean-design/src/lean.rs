@@ -193,8 +193,8 @@ impl Spare {
         }
         false
     }
-    /// Map and clear what is left (normally nothing: there are Ω(N) operations between a swap and
-    /// the next rebuild).
+    /// Map and clear what is left (normally nothing: the spare is prepared while the previous
+    /// rebuild runs, Ω(N) operations before it is needed).
     fn finish(&mut self) {
         while self.ptrs.iter().any(|p| p.is_null()) || self.clear < 8 {
             self.touch_one();
@@ -1969,6 +1969,13 @@ pub struct Native<GL: GLab> {
     rr: usize,
     /// Rebuilds whose core did not fit the spare mapping (mapped in the operation itself).
     pub spare_misses: u64,
+    /// The memory action of the last operation (diagnostic): 0 `cur`, 1 `nxt`, 2 handles, 3 spare
+    /// (4 if a new spare was taken), 9 none.
+    pub last_action: u8,
+    /// Nanoseconds of the last operation's parts (feature `prof`, diagnostic): upkeep, the spare's
+    /// remaining preparation at a rebuild start, the creation of the next core, the rest.
+    #[cfg(feature = "prof")]
+    pub prof: [u64; 4],
 }
 
 impl<GL: GLab> Native<GL> {
@@ -1996,6 +2003,9 @@ impl<GL: GLab> Native<GL> {
             spare: None,
             rr: 0,
             spare_misses: 0,
+            last_action: 9,
+            #[cfg(feature = "prof")]
+            prof: [0; 4],
         }
     }
 
@@ -2006,8 +2016,8 @@ impl<GL: GLab> Native<GL> {
 
     /// Per-operation upkeep, at most one memory action (round robin among those with something
     /// to do): map a page ahead in `cur`, in `nxt` or in the handles; prepare the spare mapping for
-    /// the next core (take a retired core's mapping that fits, or map a new one; then map a page
-    /// ahead in one of its arrays or clear one of its queue arrays).
+    /// the next core to be created (take a retired core's mapping that fits, or map a new one;
+    /// then map a page ahead in one of its arrays or clear one of its queue arrays).
     #[inline]
     fn upkeep(&mut self) {
         for i in 0..4 {
@@ -2018,9 +2028,12 @@ impl<GL: GLab> Native<GL> {
                 2 => self.hs.prefault(2 * PAGE),
                 _ => match self.spare.as_mut() {
                     Some(sp) => sp.touch_one(),
-                    None if self.nxt.is_none() => {
-                        // the next core's capacity is at most 4N (Lemma W)
-                        let p = (self.mk)(4 * self.cur.p.n);
+                    None => {
+                        // the next core's capacity is at most 4N (Lemma W); while a rebuild runs,
+                        // the mapping is prepared for the core after it, whose rebuild can start
+                        // right at the swap (when deletions empty the new core while it is built)
+                        let base = self.nxt.as_ref().map_or(self.cur.p.n, |n| n.p.n);
+                        let p = (self.mk)(4 * base);
                         let fit = (0..self.retired.len()).filter(|&i| self.retired[i].region_fits(&p))
                             .min_by_key(|&i| self.retired[i].region_bytes());
                         self.spare = Some(match fit {
@@ -2029,14 +2042,15 @@ impl<GL: GLab> Native<GL> {
                         });
                         true
                     }
-                    None => false,
                 },
             };
             if did {
                 self.rr = a + 1;
+                self.last_action = a as u8;
                 return;
             }
         }
+        self.last_action = 9;
     }
 
     pub fn insert_first(&mut self) -> u64 {
@@ -2074,7 +2088,11 @@ impl<GL: GLab> Native<GL> {
     }
 
     pub fn delete(&mut self, x: u64) {
+        #[cfg(feature = "prof")]
+        let t0 = std::time::Instant::now();
         self.upkeep();
+        #[cfg(feature = "prof")]
+        { self.prof = [t0.elapsed().as_nanos() as u64, 0, 0, 0]; }
         let (cs, ns) = (self.cs(), self.ns());
         let hr = self.hs[x as u32];
         self.cur.mark_dead(hr.slot[cs]);
@@ -2103,6 +2121,15 @@ impl<GL: GLab> Native<GL> {
         self.retired_work + self.cur.work + self.nxt.as_ref().map_or(0, |n| n.work)
     }
 
+    /// The spare mapping's state (diagnostic): arrays not yet mapped, queue arrays not yet
+    /// cleared, pages not yet mapped ahead.
+    pub fn spare_state(&self) -> Option<(usize, usize, usize)> {
+        self.spare.as_ref().map(|sp| {
+            let todo = (0..5).map(|i| PRE.min(sp.slots[i]).saturating_sub(sp.done[i]) / PAGE).sum();
+            (sp.ptrs.iter().filter(|p| p.is_null()).count(), 8 - sp.clear, todo)
+        })
+    }
+
     /// Retired cores kept for reuse.
     pub fn retired(&self) -> usize {
         self.retired.len()
@@ -2119,8 +2146,13 @@ impl<GL: GLab> Native<GL> {
             let n = self.cur.p.n;
             if self.cur.count >= n / 2 || (n > N_MIN && self.live < n / 8) {
                 let p = (self.mk)(self.next_capacity());
+                #[cfg(feature = "prof")]
+                let t1 = std::time::Instant::now();
                 let sp = match self.spare.take() {
-                    Some(sp) if Core::<GL>::fits(&p, &sp) => Some(sp),
+                    Some(mut sp) if Core::<GL>::fits(&p, &sp) => {
+                        sp.finish();
+                        Some(sp)
+                    }
                     other => {
                         if let Some(o) = other {
                             o.unmap();
@@ -2129,7 +2161,11 @@ impl<GL: GLab> Native<GL> {
                         None
                     }
                 };
+                #[cfg(feature = "prof")]
+                let t2 = std::time::Instant::now();
                 self.nxt = Some(Core::create_in(p, true, false, sp));
+                #[cfg(feature = "prof")]
+                { self.prof[1] = (t2 - t1).as_nanos() as u64; self.prof[2] = t2.elapsed().as_nanos() as u64; }
                 self.cursor_set = false;
                 self.rebuilds += 1;
             }
@@ -2169,7 +2205,7 @@ impl<GL: GLab> Native<GL> {
                 // the retired core's mapping becomes the spare for the next core if it is large
                 // enough (no system call, no page fault); otherwise it is kept for later reuse
                 let next = (self.mk)(4 * self.cur.p.n);
-                if old.region_fits(&next) {
+                if self.spare.is_none() && old.region_fits(&next) {
                     self.spare = Some(old.into_spare());
                 } else {
                     self.retired.push(old);

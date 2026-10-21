@@ -6,7 +6,7 @@
 //!   way up: O(log n) worst case.
 //! * `order(x, y)` finds the lowest common ancestor by walking both nodes up (after lifting the
 //!   deeper one to the same depth) and compares the sides they come from: O(log n) worst case.
-//! * Deletion is not implemented: the benchmark workloads only insert and query.
+//! * `delete(x)` unlinks the node and rebalances on the way up: O(log n) worst case.
 //!
 //! `work` counts the nodes visited, a machine-independent proxy for the time of an operation.
 
@@ -159,6 +159,57 @@ impl Avl {
         y
     }
 
+    /// Restore the AVL property from `v` up, after a deletion below `v`: unlike after an
+    /// insertion, a rotation can lower the subtree's height, so the walk continues above it.
+    fn retrace_delete(&mut self, mut v: u32) {
+        while v != NIL {
+            self.work += 1;
+            let old = self.height[v as usize];
+            let bal = self.h(self.left[v as usize]) - self.h(self.right[v as usize]);
+            let top = if bal > 1 {
+                let l = self.left[v as usize];
+                if self.h(self.left[l as usize]) < self.h(self.right[l as usize]) { self.rotate_left(l); }
+                self.rotate_right(v)
+            } else if bal < -1 {
+                let r = self.right[v as usize];
+                if self.h(self.right[r as usize]) < self.h(self.left[r as usize]) { self.rotate_right(r); }
+                self.rotate_left(v)
+            } else {
+                self.fix_height(v);
+                v
+            };
+            if self.height[top as usize] == old { return; }
+            v = self.parent[top as usize];
+        }
+    }
+
+    /// Delete element `x`: unlink its node (if it has two children, its in-order successor takes
+    /// its place) and rebalance on the way up: O(log n) worst case. Handles are not reused.
+    pub fn delete(&mut self, x: u32) {
+        let (l, r, p) = (self.left[x as usize], self.right[x as usize], self.parent[x as usize]);
+        let start;
+        if l == NIL || r == NIL {
+            self.relink(p, x, if l == NIL { r } else { l });
+            start = p;
+        } else {
+            let mut y = r;
+            while self.left[y as usize] != NIL { y = self.left[y as usize]; self.work += 1; }
+            if y == r {
+                start = y;
+            } else {
+                start = self.parent[y as usize];
+                self.relink(start, y, self.right[y as usize]);
+                self.right[y as usize] = r;
+                self.parent[r as usize] = y;
+            }
+            self.left[y as usize] = l;
+            self.parent[l as usize] = y;
+            self.height[y as usize] = self.height[x as usize];
+            self.relink(p, x, y);
+        }
+        self.retrace_delete(start);
+    }
+
     fn depth(&mut self, mut v: u32) -> u32 {
         let mut d = 0;
         while self.parent[v as usize] != NIL { v = self.parent[v as usize]; d += 1; }
@@ -218,6 +269,50 @@ mod tests {
             // AVL height bound: h < 1.45 log2(n + 2)
             let n = list.len() as f64;
             assert!((t.h(t.root) as f64) < 1.45 * (n + 2.0).log2());
+        }
+    }
+
+    /// Checks heights, balance and parent links of the subtree at `v`; returns its height.
+    fn check(t: &Avl, v: u32) -> i32 {
+        if v == NIL { return 0; }
+        for c in [t.left[v as usize], t.right[v as usize]] {
+            if c != NIL { assert_eq!(t.parent[c as usize], v); }
+        }
+        let (hl, hr) = (check(t, t.left[v as usize]), check(t, t.right[v as usize]));
+        assert!((hl - hr).abs() <= 1, "unbalanced");
+        assert_eq!(t.h(v), 1 + hl.max(hr), "height");
+        1 + hl.max(hr)
+    }
+
+    /// Insertions, deletions (also down to the empty list) and queries against a plain list.
+    #[test]
+    fn with_deletions() {
+        for (seed, hot) in [(4u64, false), (5, true), (6, false)] {
+            let mut s = seed * 0x9E3779B97F4A7C15 | 1;
+            let mut rnd = move || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+            let mut t = Avl::new(200_000);
+            let mut list: Vec<u32> = Vec::new();
+            for step in 0..200_000 {
+                let grow = (step / 20_000) % 2 == 0;
+                let k = rnd() % 10;
+                if list.is_empty() || (grow && k < 6) || (!grow && k < 3) {
+                    let i = if list.is_empty() || rnd() % 5 == 0 { 0 } else if hot { 1.min(list.len()) } else { (rnd() as usize % list.len()) + 1 };
+                    let y = if i == 0 { t.insert_first() } else { t.insert_after(list[i - 1]) };
+                    list.insert(i, y);
+                } else if k < 8 {
+                    let i = if hot { 0 } else { rnd() as usize % list.len() };
+                    t.delete(list.remove(i));
+                    if list.is_empty() { assert_eq!(t.root, NIL); }
+                } else {
+                    let (i, j) = (rnd() as usize % list.len(), rnd() as usize % list.len());
+                    assert_eq!(t.order(list[i], list[j]), i < j);
+                }
+                if step % 10_000 == 0 { check(&t, t.root); }
+            }
+            check(&t, t.root);
+            for w in list.windows(2) { assert!(t.order(w[0], w[1]) && !t.order(w[1], w[0])); }
+            while let Some(x) = list.pop() { t.delete(x); }
+            assert_eq!(t.root, NIL);
         }
     }
 }

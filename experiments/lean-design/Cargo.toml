@@ -11,3 +11,7 @@ num-bigint = "=0.4.6"
 
 [profile.release]
 debug = false
+
+[features]
+# timings of the parts of an operation (diagnostic: bin dspikes)
+prof = []

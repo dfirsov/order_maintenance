@@ -1,0 +1,3 @@
+bender,random,churn-delete,1000000,1000000,151,176,277,314,1.0,1,1
+bender,random,churn-insert,1000000,1000000,251,302,6767,7613,1.3,98,98
+bender,random,drain-delete,1000000,1000000,144,174,291,603,1.0,1,1

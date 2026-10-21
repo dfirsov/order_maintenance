@@ -1,0 +1,8 @@
+bender,random,insert,10,77824,77824,7782.4
+bender,random,insert,100,81920,81920,819.2
+bender,random,insert,1000,86016,86016,86.0
+bender,random,insert,10000,270336,270336,27.0
+bender,random,insert,100000,2129920,2129920,21.3
+bender,random,insert,1000000,20680704,20680704,20.7
+bender,random,insert,10000000,206352384,206352384,20.6
+bender,random,insert,100000000,2062925824,2062925824,20.6
