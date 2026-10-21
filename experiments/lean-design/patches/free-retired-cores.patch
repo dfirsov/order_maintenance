@@ -1,0 +1,311 @@
+diff --git a/experiments/lean-design/src/lean.rs b/experiments/lean-design/src/lean.rs
+index 42fc9f9..8a43af4 100644
+--- a/experiments/lean-design/src/lean.rs
++++ b/experiments/lean-design/src/lean.rs
+@@ -58,8 +58,8 @@ fn resident(ptr: *mut u8, bytes: usize) -> usize {
+     assert_eq!(unsafe { mincore(ptr, bytes, v.as_mut_ptr()) }, 0, "mincore failed");
+     v.iter().filter(|&&b| b & 1 != 0).count() * PAGE
+ }
+-const MADV_DONTNEED: i32 = 4;
+ const PAGE: usize = 4096;
++const MADV_DONTNEED: i32 = 4;
+ 
+ /// An array of records at full capacity in anonymous memory (the system supplies zero pages
+ /// when first touched); a core maps all its arrays with one `mmap` (`Region`). `prefault` maps at
+@@ -159,13 +159,11 @@ struct Region {
+ 
+ /// A mapping prepared for a future core, one mapping per array (`ptrs`, null until mapped:
+ /// mapping all at once costs several µs in one operation): the arrays' sizes (`slots`), the bytes
+-/// mapped ahead at the start of each (`done`, up to `PRE` for the record arrays), and, for the
+-/// mappings of a retired core, the queue arrays still to clear (`clear..8`).
++/// mapped ahead at the start of each (`done`, up to `PRE` for the record arrays).
+ pub struct Spare {
+     ptrs: [*mut u8; 8],
+     slots: [usize; 8],
+     done: [usize; 8],
+-    clear: usize,
+ }
+ 
+ /// Bytes mapped ahead at the start of each record array of a spare.
+@@ -173,7 +171,7 @@ const PRE: usize = 16 * PAGE;
+ 
+ impl Spare {
+     fn new(slots: [usize; 8]) -> Spare {
+-        Spare { ptrs: [std::ptr::null_mut(); 8], slots, done: [0; 8], clear: 8 }
++        Spare { ptrs: [std::ptr::null_mut(); 8], slots, done: [0; 8] }
+     }
+     fn unmap(self) {
+         for i in 0..8 {
+@@ -182,19 +180,12 @@ impl Spare {
+             }
+         }
+     }
+-    /// Map one array, or clear one queue array (`MADV_DONTNEED`: it reads as zero again), or map
+-    /// one page ahead in a record array; true if it did.
++    /// Map one array, or map one page ahead in a record array; true if it did.
+     fn touch_one(&mut self) -> bool {
+         if let Some(i) = self.ptrs.iter().position(|p| p.is_null()) {
+             self.ptrs[i] = Region::map(self.slots[i]).ptr;
+             return true;
+         }
+-        if self.clear < 8 {
+-            let i = self.clear;
+-            unsafe { madvise(self.ptrs[i], self.slots[i], MADV_DONTNEED) };
+-            self.clear += 1;
+-            return true;
+-        }
+         for i in 0..5 {
+             if self.done[i] < PRE.min(self.slots[i]) {
+                 unsafe { self.ptrs[i].add(self.done[i]).write_volatile(0) };
+@@ -204,15 +195,41 @@ impl Spare {
+         }
+         false
+     }
+-    /// Map and clear what is left (normally nothing: the spare is prepared while the previous
+-    /// rebuild runs, Ω(N) operations before it is needed).
++    /// Map what is left (normally nothing: the spare is prepared while the previous rebuild runs,
++    /// Ω(N) operations before it is needed).
+     fn finish(&mut self) {
+-        while self.ptrs.iter().any(|p| p.is_null()) || self.clear < 8 {
++        while self.ptrs.iter().any(|p| p.is_null()) {
+             self.touch_one();
+         }
+     }
+ }
+ 
++/// A retired core's mapping whose resident pages are being freed, one page per step: the arrays
++/// (`ptrs`, `slots` bytes each) and, per array, the first `touched` bytes, which may be resident
++/// (records are written from the start of an array). Freed, the mapping becomes a spare mapping
++/// for a later core: its pages read as zero again. On this machine, freeing one page with
++/// `MADV_DONTNEED` costs about 0.4 µs (0.8 µs at p99.9), while `munmap` takes 7-14 µs at p99 in
++/// a process with much resident memory, so mappings are never unmapped while operating.
++struct Zap {
++    ptrs: [*mut u8; 8],
++    slots: [usize; 8],
++    touched: [usize; 8],
++}
++
++impl Zap {
++    /// Free the last possibly resident page; true when none is left.
++    fn step(&mut self) -> bool {
++        if let Some(i) = (0..8).rev().find(|&i| self.touched[i] > 0) {
++            self.touched[i] -= PAGE;
++            unsafe { madvise(self.ptrs[i].add(self.touched[i]), PAGE, MADV_DONTNEED) };
++        }
++        self.touched.iter().all(|&t| t == 0)
++    }
++    fn into_spare(self) -> Spare {
++        Spare { ptrs: self.ptrs, slots: self.slots, done: [0; 8] }
++    }
++}
++
+ impl Region {
+     fn map(bytes: usize) -> Region {
+         // PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE
+@@ -629,16 +646,21 @@ impl<GL: GLab> Core<GL> {
+         Spare::new(Self::slots(p).1)
+     }
+ 
+-    /// This (retired) core's mapping, as a spare for a later core: the records left in it are
+-    /// overwritten before being read, except the queue arrays, which the spare clears first.
+-    fn into_spare(self) -> Spare {
+-        let slots = [self.e.bytes, self.g.bytes, self.c.bytes, self.n.bytes, self.free_g.bytes,
+-            self.pq_head.bytes, self.pq_nbn.bytes, self.pq_nbp.bytes];
+-        let ptrs = [self.e.ptr as *mut u8, self.g.ptr as *mut u8, self.c.ptr as *mut u8, self.n.ptr as *mut u8,
+-            self.free_g.ptr as *mut u8, self.pq_head.ptr as *mut u8, self.pq_nbn.ptr as *mut u8, self.pq_nbp.ptr as *mut u8];
+-        let sp = Spare { ptrs, slots, done: [0; 8], clear: 5 };
++    /// This (retired) core's mapping, whose resident pages are to be freed (`Zap`).
++    fn into_zap(self) -> Zap {
++        fn arr<T: Copy>(a: &Arena<T>) -> (*mut u8, usize, usize) {
++            let used = (a.len * std::mem::size_of::<T>()).div_ceil(PAGE) * PAGE;
++            (a.ptr as *mut u8, a.bytes, a.mapped.max(used).min(a.bytes))
++        }
++        let a = [arr(&self.e), arr(&self.g), arr(&self.c), arr(&self.n), arr(&self.free_g), arr(&self.pq_head),
++            arr(&self.pq_nbn), arr(&self.pq_nbp)];
+         std::mem::forget(self);
+-        sp
++        Zap { ptrs: a.map(|x| x.0), slots: a.map(|x| x.1), touched: a.map(|x| x.2) }
++    }
++
++    /// Bytes of the mapping `sp`.
++    fn spare_bytes(sp: &Spare) -> usize {
++        sp.slots.iter().sum()
+     }
+ 
+     /// Memory by array (diagnostic): (array, bytes of the records in use, resident bytes).
+@@ -656,19 +678,6 @@ impl<GL: GLab> Core<GL> {
+         [std::mem::size_of::<Elem>(), std::mem::size_of::<Group<GL>>(), std::mem::size_of::<Chunk>(), std::mem::size_of::<Node>()]
+     }
+ 
+-    /// Bytes of this core's mapping.
+-    fn region_bytes(&self) -> usize {
+-        self.e.bytes + self.g.bytes + self.c.bytes + self.n.bytes + self.free_g.bytes
+-            + self.pq_head.bytes + self.pq_nbn.bytes + self.pq_nbp.bytes
+-    }
+-
+-    /// Whether a core with parameters `p` fits in this core's mapping.
+-    fn region_fits(&self, p: &Params) -> bool {
+-        let have = [self.e.bytes, self.g.bytes, self.c.bytes, self.n.bytes, self.free_g.bytes,
+-            self.pq_head.bytes, self.pq_nbn.bytes, self.pq_nbp.bytes];
+-        Self::slots(p).1.iter().zip(have.iter()).all(|(a, b)| a <= b)
+-    }
+-
+     /// Whether a core with parameters `p` fits in spare `sp`.
+     fn fits(p: &Params, sp: &Spare) -> bool {
+         Self::slots(p).1.iter().zip(sp.slots.iter()).all(|(a, b)| a <= b)
+@@ -1986,17 +1995,19 @@ pub struct Native<GL: GLab> {
+     pub rebuilds: u64,
+     epoch: u32,
+     hs: Arena<Hrec>,
+-    /// Retired cores, kept for reuse as the mapping of a later core (their memory is not given
+-    /// back to the system: doing so costs up to tens of µs in single operations).
+-    retired: Vec<Core<GL>>,
++    /// Retired cores' mappings whose resident pages are being freed, one page per operation
++    /// (freeing all at once costs up to tens of µs in a single operation).
++    retired: Vec<Zap>,
++    /// Freed mappings, without resident pages, for reuse as spare mappings.
++    pool: Vec<Spare>,
+     mk: fn(u64) -> Params,
+     retired_work: u64,
+     spare: Option<Spare>,
+     rr: usize,
+     /// Rebuilds whose core did not fit the spare mapping (mapped in the operation itself).
+     pub spare_misses: u64,
+-    /// The memory action of the last operation (diagnostic): 0 `cur`, 1 `nxt`, 2 handles, 3 spare
+-    /// (4 if a new spare was taken), 9 none.
++    /// The memory action of the last operation (diagnostic): 0 `cur`, 1 `nxt`, 2 handles, 3 release,
++    /// 4 spare, 9 none.
+     pub last_action: u8,
+     /// Nanoseconds of the last operation's parts (feature `prof`, diagnostic): upkeep, the spare's
+     /// remaining preparation at a rebuild start, the creation of the next core, the rest.
+@@ -2024,6 +2035,7 @@ impl<GL: GLab> Native<GL> {
+             epoch: 0,
+             hs: Arena::new(max_handles + 1, false),
+             retired: Vec::new(),
++            pool: Vec::new(),
+             mk,
+             retired_work: 0,
+             spare: None,
+@@ -2041,17 +2053,27 @@ impl<GL: GLab> Native<GL> {
+     fn ns(&self) -> usize { ((self.epoch + 1) & 1) as usize }
+ 
+     /// Per-operation upkeep, at most one memory action (round robin among those with something
+-    /// to do): map a page ahead in `cur`, in `nxt` or in the handles; prepare the spare mapping for
+-    /// the next core to be created (take a retired core's mapping that fits, or map a new one;
+-    /// then map a page ahead in one of its arrays or clear one of its queue arrays).
++    /// to do): map a page ahead in `cur`, in `nxt` or in the handles; give a few pages of a retired
++    /// core back to the system; prepare the spare mapping for the next core to be created (map one
++    /// of its arrays, then map a page ahead in one of them).
+     #[inline]
+     fn upkeep(&mut self) {
+-        for i in 0..4 {
+-            let a = (self.rr + i) % 4;
++        for i in 0..5 {
++            let a = (self.rr + i) % 5;
+             let did = match a {
+                 0 => self.cur.prefault(),
+                 1 => self.nxt.as_mut().is_some_and(|n| n.prefault()),
+                 2 => self.hs.prefault(2 * PAGE),
++                3 => match self.retired.last_mut() {
++                    Some(z) => {
++                        if z.step() {
++                            let z = self.retired.pop().unwrap();
++                            self.pool.push(z.into_spare());
++                        }
++                        true
++                    }
++                    None => false,
++                },
+                 _ => match self.spare.as_mut() {
+                     Some(sp) => sp.touch_one(),
+                     None => {
+@@ -2060,10 +2082,10 @@ impl<GL: GLab> Native<GL> {
+                         // right at the swap (when deletions empty the new core while it is built)
+                         let base = self.nxt.as_ref().map_or(self.cur.p.n, |n| n.p.n);
+                         let p = (self.mk)(4 * base);
+-                        let fit = (0..self.retired.len()).filter(|&i| self.retired[i].region_fits(&p))
+-                            .min_by_key(|&i| self.retired[i].region_bytes());
++                        let fit = (0..self.pool.len()).filter(|&i| Core::<GL>::fits(&p, &self.pool[i]))
++                            .min_by_key(|&i| Core::<GL>::spare_bytes(&self.pool[i]));
+                         self.spare = Some(match fit {
+-                            Some(i) => self.retired.swap_remove(i).into_spare(),
++                            Some(i) => self.pool.swap_remove(i),
+                             None => Core::<GL>::spare_for(&p),
+                         });
+                         true
+@@ -2152,7 +2174,7 @@ impl<GL: GLab> Native<GL> {
+     pub fn spare_state(&self) -> Option<(usize, usize, usize)> {
+         self.spare.as_ref().map(|sp| {
+             let todo = (0..5).map(|i| PRE.min(sp.slots[i]).saturating_sub(sp.done[i]) / PAGE).sum();
+-            (sp.ptrs.iter().filter(|p| p.is_null()).count(), 8 - sp.clear, todo)
++            (sp.ptrs.iter().filter(|p| p.is_null()).count(), 0, todo)
+         })
+     }
+ 
+@@ -2167,7 +2189,9 @@ impl<GL: GLab> Native<GL> {
+                 }
+             }
+         }
+-        let ret: usize = self.retired.iter().map(|c| c.mem_parts().iter().map(|x| x.2).sum::<usize>()).sum();
++        let res = |ptrs: &[*mut u8; 8], slots: &[usize; 8]| (0..8).map(|i| resident(ptrs[i], slots[i])).sum::<usize>();
++        let ret = self.retired.iter().map(|z| res(&z.ptrs, &z.slots)).sum::<usize>()
++            + self.pool.iter().map(|sp| res(&sp.ptrs, &sp.slots)).sum::<usize>();
+         out.push((format!("retired({})", self.retired.len()), 0, ret));
+         let sp = self.spare.as_ref().map_or(0, |sp| (0..8).map(|i| resident(sp.ptrs[i], sp.slots[i])).sum());
+         out.push(("spare".into(), 0, sp));
+@@ -2175,7 +2199,14 @@ impl<GL: GLab> Native<GL> {
+         out
+     }
+ 
+-    /// Retired cores kept for reuse.
++    /// The array being freed in the newest retired core and its bytes still possibly resident
++    /// (diagnostic).
++    pub fn zap_state(&self) -> Option<(usize, usize)> {
++        let z = self.retired.last()?;
++        (0..8).rev().find(|&i| z.touched[i] > 0).map(|i| (i, z.touched[i]))
++    }
++
++    /// Retired cores whose pages are not yet all freed.
+     pub fn retired(&self) -> usize {
+         self.retired.len()
+     }
+@@ -2199,8 +2230,9 @@ impl<GL: GLab> Native<GL> {
+                         Some(sp)
+                     }
+                     other => {
++                        // a spare too small: its few resident pages are freed, and it joins the pool
+                         if let Some(o) = other {
+-                            o.unmap();
++                            self.retired.push(Zap { ptrs: o.ptrs, slots: o.slots, touched: o.done });
+                         }
+                         self.spare_misses += 1;
+                         None
+@@ -2247,14 +2279,7 @@ impl<GL: GLab> Native<GL> {
+                 let n = self.nxt.take().unwrap();
+                 let old = std::mem::replace(&mut self.cur, n);
+                 self.retired_work += old.work;
+-                // the retired core's mapping becomes the spare for the next core if it is large
+-                // enough (no system call, no page fault); otherwise it is kept for later reuse
+-                let next = (self.mk)(4 * self.cur.p.n);
+-                if self.spare.is_none() && old.region_fits(&next) {
+-                    self.spare = Some(old.into_spare());
+-                } else {
+-                    self.retired.push(old);
+-                }
++                self.retired.push(old.into_zap());
+                 self.epoch += 1;
+                 return;
+             }
+@@ -2273,6 +2298,12 @@ impl<GL: GLab> Native<GL> {
+ 
+ impl<GL: GLab> Drop for Native<GL> {
+     fn drop(&mut self) {
++        for z in self.retired.drain(..) {
++            z.into_spare().unmap();
++        }
++        for sp in self.pool.drain(..) {
++            sp.unmap();
++        }
+         if let Some(sp) = self.spare.take() {
+             sp.unmap();
+         }

@@ -1,6 +1,6 @@
-//! The slowest deletions of `Native<Wide>` in the drain phase of `deletes random` (diagnostic).
+//! The slowest deletions of `Native<Wide>` in the churn and drain phases of `deletes` (diagnostic).
 //!
-//!     dspikes N [TOP]
+//!     dspikes N [TOP] [random|fifo]
 use lean_design::lean::{Native, Wide};
 use std::time::Instant;
 #[repr(C)]
@@ -11,29 +11,29 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let n: usize = a[1].parse().unwrap();
     let top: usize = a.get(2).map(|s| s.parse().unwrap()).unwrap_or(15);
+    let fifo = a.get(3).is_some_and(|w| w == "fifo");
     // minimum over three runs per operation, events of the last run
     let mut best: Vec<(u64, usize, String)> = Vec::new();
     for _ in 0..3 {
-        let ops = run(n);
+        let ops = run(n, fifo);
         if best.is_empty() { best = ops; } else { for (b, o) in best.iter_mut().zip(ops) { *b = (b.0.min(o.0), o.1, o.2); } }
     }
     best.sort_by(|a, b| b.0.cmp(&a.0));
     for (dt, k, ev) in best.iter().take(top) { println!("{dt:>9} ns at {k:>8}: {ev}"); }
 }
 
-fn run(n: usize) -> Vec<(u64, usize, String)> {
+fn run(n: usize, fifo: bool) -> Vec<(u64, usize, String)> {
     let mut s: Native<Wide> = Native::new(4, 2 * n + 2);
     let mut seed: u64 = 0x9E3779B97F4A7C15 | 1;
     let mut rnd = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
-    let mut live = vec![s.insert_first()];
-    while live.len() < n { let x = live[(rnd() % live.len() as u64) as usize]; live.push(s.insert_after(x)); }
+    let mut live = std::collections::VecDeque::from([s.insert_first()]);
+    while live.len() < n { let x = if fifo { live[live.len() - 1] } else { live[(rnd() % live.len() as u64) as usize] }; live.push_back(s.insert_after(x)); }
     let mut ops: Vec<(u64, usize, String)> = Vec::new();
     for phase in 0..2 {
         let rounds = n;
         for k in 0..rounds {
             if live.is_empty() { break; }
-            let i = (rnd() % live.len() as u64) as usize;
-            let x = live.swap_remove(i);
+            let x = if fifo { live.pop_front().unwrap() } else { let i = (rnd() % live.len() as u64) as usize; live.swap_remove_back(i).unwrap() };
             let sp0 = s.spare_state(); let (r0, nx0, w0, f0, m0, c0) = (s.rebuilds, s.nxt.is_some(), s.work(), ru(), s.spare_misses, s.cursor_set);
             let t0 = Instant::now();
             s.delete(x);
@@ -45,8 +45,8 @@ fn run(n: usize) -> Vec<(u64, usize, String)> {
             }
             ops.push((dt, k, ev));
             if phase == 0 {
-                let y = if live.is_empty() { s.insert_first() } else { let y = live[(rnd() % live.len() as u64) as usize]; s.insert_after(y) };
-                live.push(y);
+                let y = if live.is_empty() { s.insert_first() } else if fifo { s.insert_after(live[live.len() - 1]) } else { let y = live[(rnd() % live.len() as u64) as usize]; s.insert_after(y) };
+                live.push_back(y);
             }
         }
     }

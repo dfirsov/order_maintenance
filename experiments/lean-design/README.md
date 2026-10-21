@@ -182,6 +182,24 @@ an indirection), and, while a rebuild runs, the second core: right at the end of
 and the new core both hold every live element, about 2 · 48 + 12 = 108 bytes per element even with
 no retired core kept.
 
+**Freeing the retired cores instead (tried, not adopted; `patches/free-retired-cores.patch`).**
+Each retired core's resident pages are freed one per operation (`MADV_DONTNEED`, about 0.4 µs),
+and its address range is kept and reused as the spare mapping of a later core, so nothing is
+unmapped while operating (`munmap` costs 7-14 µs at p99 in a process with much resident memory,
+whether in one call or in pieces). Against the version above, at 10⁷ (back to back, same
+conditions):
+
+| | kept (adopted) | freed |
+|---|---|---|
+| bytes per element: 10⁷ / 10⁸ insertions | 106 / 112 | 63 / 80 |
+| bytes per element: churn / drain | 215 / 249 | 133 / 133 |
+| mean, p99.99 | | unchanged, except drain p99.99 2.2 → 2.5-5 µs |
+| slowest: random insertion / drain deletion | 7 / 8 µs | 9.3 / 11-18 µs |
+
+The slow operations of the freeing version are single `MADV_DONTNEED` calls of one page that take
+10-18 µs inside the kernel, about 1 in 1,000 (transparent huge pages are not involved). Moving
+retired pages into the next core (`mremap`) instead of freeing them is untried.
+
 ## Memory handling (trusted, like the verified program's runtime)
 
 The slowest operations are decided by memory management as much as by the algorithm. Each of the
@@ -227,6 +245,7 @@ That was wrong as a statement about the algorithm. That variant is the last abla
   fixed-capacity configuration.
 * `src/bin/deletes.rs`, `src/bin/mem.rs`, `src/bin/membreak.rs`: deletion timings, memory use,
   and memory by part.
+* `patches/free-retired-cores.patch`: the variant that frees retired cores (above).
 * `src/bin/faults.rs`, `src/bin/spikes.rs`, `src/bin/dspikes.rs`: diagnostics (which operations
   take page faults; the slowest insertions and deletions of `Native` and what happened in them;
   `dspikes` uses timers built with `--features prof`).
