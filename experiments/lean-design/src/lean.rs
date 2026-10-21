@@ -46,6 +46,17 @@ extern "C" {
     fn mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fd: i32, off: i64) -> *mut u8;
     fn munmap(addr: *mut u8, len: usize) -> i32;
     fn madvise(addr: *mut u8, len: usize, advice: i32) -> i32;
+    fn mincore(addr: *mut u8, len: usize, vec: *mut u8) -> i32;
+}
+
+/// Resident bytes of the mapping `[ptr, ptr + bytes)` (diagnostic).
+fn resident(ptr: *mut u8, bytes: usize) -> usize {
+    if ptr.is_null() || bytes == 0 {
+        return 0;
+    }
+    let mut v = vec![0u8; bytes.div_ceil(PAGE)];
+    assert_eq!(unsafe { mincore(ptr, bytes, v.as_mut_ptr()) }, 0, "mincore failed");
+    v.iter().filter(|&&b| b & 1 != 0).count() * PAGE
 }
 const MADV_DONTNEED: i32 = 4;
 const PAGE: usize = 4096;
@@ -628,6 +639,21 @@ impl<GL: GLab> Core<GL> {
         let sp = Spare { ptrs, slots, done: [0; 8], clear: 5 };
         std::mem::forget(self);
         sp
+    }
+
+    /// Memory by array (diagnostic): (array, bytes of the records in use, resident bytes).
+    pub fn mem_parts(&self) -> [(&'static str, usize, usize); 8] {
+        fn part<T: Copy>(name: &'static str, a: &Arena<T>) -> (&'static str, usize, usize) {
+            (name, a.len * std::mem::size_of::<T>(), resident(a.ptr as *mut u8, a.bytes))
+        }
+        [part("elems", &self.e), part("groups", &self.g), part("chunks", &self.c), part("nodes", &self.n),
+            part("free_g", &self.free_g), part("pq_head", &self.pq_head), part("pq_nbn", &self.pq_nbn),
+            part("pq_nbp", &self.pq_nbp)]
+    }
+
+    /// Record sizes in bytes (diagnostic): element, group, chunk, top node.
+    pub fn record_sizes() -> [usize; 4] {
+        [std::mem::size_of::<Elem>(), std::mem::size_of::<Group<GL>>(), std::mem::size_of::<Chunk>(), std::mem::size_of::<Node>()]
     }
 
     /// Bytes of this core's mapping.
@@ -2128,6 +2154,25 @@ impl<GL: GLab> Native<GL> {
             let todo = (0..5).map(|i| PRE.min(sp.slots[i]).saturating_sub(sp.done[i]) / PAGE).sum();
             (sp.ptrs.iter().filter(|p| p.is_null()).count(), 8 - sp.clear, todo)
         })
+    }
+
+    /// Memory by part (diagnostic): (part, bytes of the records in use, resident bytes). The
+    /// parts are the arrays of `cur` and `nxt`, the retired cores, the spare and the handles.
+    pub fn mem_parts(&self) -> Vec<(String, usize, usize)> {
+        let mut out = Vec::new();
+        for (name, c) in [("cur", Some(&self.cur)), ("nxt", self.nxt.as_ref())] {
+            if let Some(c) = c {
+                for (a, used, res) in c.mem_parts() {
+                    out.push((format!("{name}.{a}"), used, res));
+                }
+            }
+        }
+        let ret: usize = self.retired.iter().map(|c| c.mem_parts().iter().map(|x| x.2).sum::<usize>()).sum();
+        out.push((format!("retired({})", self.retired.len()), 0, ret));
+        let sp = self.spare.as_ref().map_or(0, |sp| (0..8).map(|i| resident(sp.ptrs[i], sp.slots[i])).sum());
+        out.push(("spare".into(), 0, sp));
+        out.push(("handles".into(), self.hs.len * std::mem::size_of::<Hrec>(), resident(self.hs.ptr as *mut u8, self.hs.bytes)));
+        out
     }
 
     /// Retired cores kept for reuse.

@@ -161,6 +161,27 @@ structure is created. *core* is the single core of the ablation (insertions only
   * The single core is not the algorithm. It works only for a capacity fixed in advance, and its own
     theorem is not proved.
 
+Where the memory goes (`src/bin/membreak.rs`: resident pages of each part counted with
+`mincore`, at the sample with the most memory; bytes per element; record sizes: element 40,
+group 168 with 1,000-bit labels, chunk 312, top node 1,080, handle 12):
+
+| part | 10⁷ insertions | 10⁸ insertions | 10⁷ churn | 10⁷ drain |
+|---|---|---|---|---|
+| current core: elements | 40 | 40 | 67 (tombstones) | 9 |
+| current core: groups, chunks, top | 8 | 5 | 13 | 2 |
+| core being built | – | 23 (half copied) | – | 80 (in a reused mapping) |
+| retired cores, kept | 46 (13 cores) | 32 (15) | 111 (14) | 111 (14) |
+| spare mapping | 0 | 0 | 0 | 23 |
+| handle records | 12 | 12 | 24 (2·10⁷ handles) | 24 |
+| total (process peak) | 106 (108) | 112 (116) | 215 (222) | 249 (256) |
+
+So the retired cores are a third to a half of the total: a runtime choice, not the algorithm.
+Inherent to the design are the core (an element record is a 128-bit label, four 32-bit links and
+a flag: 40 bytes, 32 if packed), the handle records (elements move between cores, so a handle is
+an indirection), and, while a rebuild runs, the second core: right at the end of a rebuild the old
+and the new core both hold every live element, about 2 · 48 + 12 = 108 bytes per element even with
+no retired core kept.
+
 ## Memory handling (trusted, like the verified program's runtime)
 
 The slowest operations are decided by memory management as much as by the algorithm. Each of the
@@ -204,7 +225,8 @@ That was wrong as a statement about the algorithm. That variant is the last abla
   configurations above.
 * `src/bin/trace.rs`: the trace replay. `src/bin/check.rs`: the differential check of the
   fixed-capacity configuration.
-* `src/bin/deletes.rs`, `src/bin/mem.rs`: deletion timings and memory use.
+* `src/bin/deletes.rs`, `src/bin/mem.rs`, `src/bin/membreak.rs`: deletion timings, memory use,
+  and memory by part.
 * `src/bin/faults.rs`, `src/bin/spikes.rs`, `src/bin/dspikes.rs`: diagnostics (which operations
   take page faults; the slowest insertions and deletions of `Native` and what happened in them;
   `dspikes` uses timers built with `--features prof`).
