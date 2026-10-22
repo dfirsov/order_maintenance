@@ -36,3 +36,4 @@ import OM.Impl.Memory
 import OM.Proof.Word.Insert
 import OM.Proof.Word.TopWB
 import OM.Proof.Word.Serve
+import OM.Proof.Word.Wrap
