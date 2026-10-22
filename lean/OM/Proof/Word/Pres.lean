@@ -194,7 +194,7 @@ macro_rules
       | (with_reducible apply WB.cNext; assumption) | (with_reducible apply WB.cPrev; assumption) | (with_reducible apply WB.cFirst; assumption)
       | (with_reducible apply WB.cLast; assumption) | (with_reducible apply WB.cSize; assumption) | (with_reducible apply WB.cSrc; assumption)
       | (with_reducible apply WB.cL; assumption) | (with_reducible apply WB.cR; assumption) | (with_reducible apply WB.cTag; assumption)
-      | (exact lt_of_le_of_lt (Nat.sub_le _ _) (by vb))
+      | (with_reducible exact lt_of_le_of_lt (Nat.sub_le _ _) (by vb))
       | (split <;> vb)
       | ((try simp only [ElemB, GroupB, ChunkB, NIL] at *); omega))
 
@@ -322,6 +322,18 @@ theorem HT.forIn_list {γ : Type} (l : List γ) (b : β) {f : γ → β → CM (
     | done b' => exact HT.pure hr
     | yield b' => exact ih b' hr
 
+/-- A loop over a list, each iteration knowing its element is in the list. -/
+theorem HT.forIn_mem {γ : Type} {f : γ → β → CM (ForInStep β)} {I : β → Prop} :
+    ∀ (l : List γ) (b : β), I b → (∀ x ∈ l, ∀ b, I b → HT K P0 (f x b) (fun r => I r.value)) →
+      HT K P0 (forIn l b f) I
+  | [], b, hb, _ => HT.pure hb
+  | x :: t, b, hb, hf => by
+    simp only [List.forIn_cons]
+    refine HT.bind (hf x (by simp) b hb) fun r hr => ?_
+    cases r with
+    | done b' => exact HT.pure hr
+    | yield b' => exact HT.forIn_mem t b' hr (fun y hy => hf y (by simp [hy]))
+
 theorem HT.forM_list {γ : Type} (l : List γ) {f : γ → CM PUnit}
     (hf : ∀ x ∈ l, HT K P0 (f x) (fun _ => True)) : HT K P0 (l.forM f) (fun _ => True) := by
   induction l with
@@ -365,6 +377,13 @@ theorem HT.getC (i : Nat) : HT K P0 (getC i) (ChunkB K) := fun _ hs hP => ⟨⟨
 theorem HT.getN (i : Nat) : HT K P0 (getN i) (NodeB K) := fun _ hs hP => ⟨⟨hs, hP⟩, hs.nodes i⟩
 theorem HT.getP : HT K P0 getP (fun P => P = P0 ∧ ParamsB K P) :=
   fun _ hs hP => ⟨⟨hs, hP⟩, hP, hs.P⟩
+/-- Reading the parameters gives `P0`. -/
+theorem HT.getP_bind {f : Params → CM β} {Q : β → Prop} (h : HT K P0 (f P0) Q) :
+    HT K P0 (OM.Model.getP >>= f) Q := by
+  intro s hs hP
+  have := h s hs hP
+  rw [run_getP_bind, hP]; exact this
+
 theorem HT.pqEmpty : HT K P0 pqEmpty (fun _ => True) := fun _ hs hP => ⟨⟨hs, hP⟩, trivial⟩
 
 theorem HT.require {b : Bool} {msg : String} : HT K P0 (OM.Model.require b msg) (fun _ => True) := by
@@ -395,12 +414,14 @@ macro_rules
       | with_reducible exact HT.require
       | with_reducible exact HT.pure_eq
       | with_reducible refine HT.pure ?_
+      | with_reducible refine HT.getP_bind ?_
       | with_reducible refine HT.bind (Q := ?_) ?_ fun _ _ => ?_
       | with_reducible refine HT.forM_list _ fun _ _ => ?_
+      | with_reducible refine HT.forIn_mem _ _ (I := fun _ => True) trivial fun _ _ _ _ => ?_
       | with_reducible refine HT.ite (fun _ => ?_) (fun _ => ?_)
       | with_reducible refine HT.modify ?_
       | with_reducible refine HT.modifyGet ?_
-      | (first $[| with_reducible exact $ts:term]*)
+      | (first $[| with_reducible refine $ts:term]*)
       | split
       | (dsimp only; done)
       | dsimp only))
@@ -456,7 +477,7 @@ syntax "htfin" : tactic
 macro_rules
   | `(tactic| htfin) => `(tactic| first
       | trivial
-      | (intro t ht hP; refine ⟨?_, hP⟩; (try casesm* _ ∧ _); wbx ht; all_goals wbv)
+      | (intro t ht hP; refine ⟨?_, hP⟩; (try casesm* _ ∧ _); wbx ht; all_goals wbv; done)
       | vb)
 
 end OM.Proof.Word

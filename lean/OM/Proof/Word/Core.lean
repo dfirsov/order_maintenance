@@ -437,4 +437,67 @@ theorem jobB_copy {x y z : Nat} (hK : 1 ≤ K) (hx : x < 2 ^ K) (hy : y < 2 ^ K)
     JobB K { x := x, y := y, z := z, pc := .copy 1 } :=
   ⟨hx, hy, hz, Nat.one_lt_two_pow (by omega)⟩
 
+
+/-! ### Context-free triples for the remaining steps (classes R and Lab) -/
+
+theorem ht_key (e : Nat) : HT K P0 (key e) (fun _ => True) := by
+  unfold key; ht
+
+theorem ht_unlinkStep {g : Nat} (hg : g < 2 ^ K) : HT K P0 (unlinkStep g) (fun _ => True) := by
+  unfold unlinkStep
+  ht
+  intro t ht hP; exact ⟨wb_unlinkGroup ht hg, hP⟩
+
+theorem ht_unit (x : Nat) (left : Bool) : HT K P0 (unit x left) (fun u => ∀ a ∈ u, a < 2 ^ K) := by
+  unfold unit
+  refine HT.bind HT.get fun st hst => ?_
+  refine HT.ite (fun _ => HT.pure (unitCand_lt hst x left)) (fun _ => ?_)
+  exact HT.bind HT.require fun _ _ => HT.pure (unitCand_lt hst x left)
+
+theorem ht_markSplit {x y z : Nat} {job : Job} (hx : x < 2 ^ K) (hy : y < 2 ^ K) (hz : z < 2 ^ K)
+    (hj : JobB K job) : HT K P0 (markSplit x y z job) (fun _ => True) := by
+  intro s hs hP
+  rw [markSplit_run]
+  exact ⟨⟨wb_markState hs hx hy hz hj, hP⟩, trivial⟩
+
+theorem ht_newChunk : HT K P0 newChunk (fun _ => True) := by
+  intro s hs hP
+  refine ⟨⟨?_, hP⟩, trivial⟩
+  show WB K { s with C := s.C.push {} }
+  wbx hs; all_goals wbv
+
+/-- A chunk removal: the chunk dies, its siblings become quiet and may enter the queue (R). -/
+theorem ht_removeChunk (x : Nat) : HT K P0 (removeChunk x) (fun _ => True) := by
+  unfold removeChunk modC
+  ht [ht_pqEnterIfAbove ?_]
+  all_goals first
+    | htfin
+    | (simp only [List.mem_cons, List.not_mem_nil, or_false] at *
+       casesm* _ ∨ _ <;> subst_vars <;> vb)
+
+/-- A move of one element of a splitting group to a sibling (R, Lab). -/
+theorem ht_moveElem (g : Nat) (hL : LabRoom K P0) : HT K P0 (moveElem g) (· < 2 ^ K) := by
+  unfold moveElem
+  ht [ht_after hL.Be, ht_before ?_]
+  all_goals first
+    | exact center_lt hL.Be (Or.inl hL.K1)
+    | htfin
+    | (intro t ht hP; refine ⟨?_, hP⟩; first
+        | exact wb_moveFirstLeft ht (by vb) (by vb) (by subst_vars; first | vb | exact center_lt hL.Be (Or.inl hL.K1))
+        | exact wb_moveLastRight ht (by vb) (by vb) (by subst_vars; first | vb | exact center_lt hL.Be (Or.inl hL.K1)))
+
+/-- A chunk-split move of a unit of groups (R, Lab). -/
+theorem ht_moveUnit (x : Nat) (left : Bool) (hL : LabRoom K P0) :
+    HT K P0 (moveUnit x left) (fun r => r.1 < 2 ^ K ∧ ∀ a ∈ r.2, a < 2 ^ K) := by
+  have hc := center_lt hL.Bg (Or.inl hL.K1)
+  unfold moveUnit
+  ht [ht_unit x left, ht_pushBackLabs hc hL.Bg _ _, ht_pushFrontLabs hc _ ?_ _]
+  all_goals first
+    | htfin
+    | (intro t ht hP; refine ⟨?_, hP⟩; first
+        | exact wb_moveGroupsLeft ht (by vb) ‹_› ‹_›
+        | exact wb_moveGroupsRight ht (by vb) ‹_› ‹_›)
+    | exact ⟨by vb, ‹_›⟩
+    | (intro n hn; cases hn <;> vb)
+
 end OM.Proof.Word
