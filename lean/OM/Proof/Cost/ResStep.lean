@@ -39,7 +39,7 @@ theorem TopRel.qsame {s s' : Core} (h : TopRel s s') : QSame s s' := by
   · simp only [cSz]; rw [h.C c]
 
 theorem TopRel.pqsame {s s' : Core} (h : TopRel s s') : PQSame s s' := by
-  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8, -⟩ := h.pq
+  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8⟩ := h.pq
   exact ⟨p4, p2, p3, p1, p5, p6, p8, p7, by rw [h.rest.1]⟩
 
 /-- The fields below the top structure, but for chunk tags and the queue. -/
@@ -54,7 +54,7 @@ structure LowSame (s s' : Core) : Prop where
 
 theorem LowSame.topRel {s s' : Core} (h : LowSame s s') (hpq : s'.pqHead = s.pqHead ∧
     s'.pqNext = s.pqNext ∧ s'.pqPrev = s.pqPrev ∧ s'.pqWhere = s.pqWhere ∧ s'.nbNext = s.nbNext ∧
-    s'.nbPrev = s.nbPrev ∧ s'.pqHi = s.pqHi ∧ s'.pqLo = s.pqLo ∧ s'.pqScan = s.pqScan)
+    s'.nbPrev = s.nbPrev ∧ s'.pqHi = s.pqHi ∧ s'.pqLo = s.pqLo)
     (hr : s'.tail = s.tail ∧ s'.firstGroup = s.firstGroup ∧ s'.firstChunk = s.firstChunk ∧
       s'.freeG = s.freeG ∧ s'.fallbacks = s.fallbacks ∧ s'.ready = s.ready) : TopRel s s' :=
   ⟨h.E, h.Gs, h.Csize, h.C, hpq, ⟨h.P, h.count, h.head, hr.1, hr.2.1, hr.2.2.1, hr.2.2.2.1,
@@ -130,7 +130,7 @@ theorem PQOnly.sameLinks {s s' : Core} (h : PQOnly s s') : SameLinks s s' := by
     simp only [eN, eP, eG, eL, gN, gP, gF, gLs, gC, gL, gA, cN, cP, cF, cLs, hE, hG, hC]
 
 theorem PQOnly.topSame {s s' : Core} (h : PQOnly s s') : TopSame s s' := by
-  obtain ⟨hE, hG, hC, hP, -, -, -, -, -, r6, r7, r8, r9, -, -, n1, n2, n3, n4⟩ := h
+  obtain ⟨hE, hG, hC, hP, -, -, -, -, -, r6, r7, r8, r9, -, n1, n2, n3, n4⟩ := h
   refine ⟨⟨n1, n2, n3, n4, r9, r8, r7, r6⟩, by rw [hC], fun c => ?_, hP⟩
   simp only [cN, cP, cT, hC, and_self]
 

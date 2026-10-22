@@ -22,21 +22,21 @@ structure TopRel (s s' : Core) : Prop where
   C : ∀ c, s'.C.getX c = { s.C.getX c with tag := (s'.C.getX c).tag }
   pq : s'.pqHead = s.pqHead ∧ s'.pqNext = s.pqNext ∧ s'.pqPrev = s.pqPrev ∧
     s'.pqWhere = s.pqWhere ∧ s'.nbNext = s.nbNext ∧ s'.nbPrev = s.nbPrev ∧ s'.pqHi = s.pqHi ∧
-    s'.pqLo = s.pqLo ∧ s'.pqScan = s.pqScan
+    s'.pqLo = s.pqLo
   rest : s'.P = s.P ∧ s'.count = s.count ∧ s'.head = s.head ∧ s'.tail = s.tail ∧
     s'.firstGroup = s.firstGroup ∧ s'.firstChunk = s.firstChunk ∧ s'.freeG = s.freeG ∧
     s'.fallbacks = s.fallbacks ∧ s'.ready = s.ready
 
 theorem TopRel.refl (s : Core) : TopRel s s :=
-  ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+  ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
 
 theorem TopRel.trans {a b c : Core} (h1 : TopRel a b) (h2 : TopRel b c) : TopRel a c := by
-  obtain ⟨e1, g1, s1, c1, ⟨p1, p2, p3, p4, p5, p6, p7, p8, p9⟩, ⟨r1, r2, r3, r4, r5, r6, r7, r8, r9⟩⟩ := h1
-  obtain ⟨e2, g2, s2, c2, ⟨q1, q2, q3, q4, q5, q6, q7, q8, q9⟩, ⟨t1, t2, t3, t4, t5, t6, t7, t8, t9⟩⟩ := h2
+  obtain ⟨e1, g1, s1, c1, ⟨p1, p2, p3, p4, p5, p6, p7, p8⟩, ⟨r1, r2, r3, r4, r5, r6, r7, r8, r9⟩⟩ := h1
+  obtain ⟨e2, g2, s2, c2, ⟨q1, q2, q3, q4, q5, q6, q7, q8⟩, ⟨t1, t2, t3, t4, t5, t6, t7, t8, t9⟩⟩ := h2
   refine ⟨e2.trans e1, g2.trans g1, s2.trans s1, fun x => ?_,
     ⟨q1.trans p1, q2.trans p2, q3.trans p3, q4.trans p4, q5.trans p5, q6.trans p6, q7.trans p7,
-      q8.trans p8, q9.trans p9⟩,
+      q8.trans p8⟩,
     ⟨t1.trans r1, t2.trans r2, t3.trans r3, t4.trans r4, t5.trans r5, t6.trans r6, t7.trans r7,
       t8.trans r8, t9.trans r9⟩⟩
   rw [c2 x, c1 x]
@@ -47,12 +47,12 @@ instance : IsPre TopRel := ⟨TopRel.refl, fun _ _ _ => TopRel.trans⟩
 theorem TopRel.of_top (s : Core) (nodes : Array Node) (path : Array (Array Nat))
     (cin : Array (List Nat)) (lpar : Array Nat) :
     TopRel s { s with nodes := nodes, path := path, cin := cin, lpar := lpar } :=
-  ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+  ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
 
 theorem TopRel.of_tag (s : Core) (c t : Nat) :
     TopRel s { s with C := s.C.modify c fun C => { C with tag := t } } := by
-  refine ⟨rfl, rfl, by simp, fun d => ?_, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+  refine ⟨rfl, rfl, by simp, fun d => ?_, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
   simp only [Array.getX_modify]; split <;> rfl
 

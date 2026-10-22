@@ -60,8 +60,8 @@ def pqDel (c : Nat) : CM Unit := do
     if n != 0 then modify fun st => { st with nbPrev := st.nbPrev.setX n p }
     else modify fun st => { st with pqHi := p }
 
-/-- Insert `c` at bucket `s`, scanning downward for the predecessor bucket (the slow path,
-counted in `pqScan`; it is never taken when `s = theta + 1`). -/
+/-- Insert `c` at bucket `s`, scanning downward for the predecessor bucket (the slow path; it is
+never taken when `s = theta + 1`). -/
 def pqInsertScan (c s : Nat) : CM Unit := do
   let st ← get
   let th := st.P.theta
@@ -69,7 +69,6 @@ def pqInsertScan (c s : Nat) : CM Unit := do
   for _ in List.range (s) do
     if p > th && st.pqHead.getX p == NIL then
       p := p - 1
-      modify fun st => { st with pqScan := st.pqScan + 1 }
     else break
   pqAdd c s (if p > th then p else 0)
 

@@ -27,22 +27,22 @@ theorem TopRelR.lowSame {s s' : Core} (h : TopRelR s s') : LowSame s s' :=
   ⟨h.E, h.Gs, h.Csize, h.C, h.rest.1, h.rest.2.1, h.rest.2.2.1⟩
 
 theorem TopRelR.pqsame {s s' : Core} (h : TopRelR s s') : PQSame s s' := by
-  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8, -⟩ := h.pq
+  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8⟩ := h.pq
   exact ⟨p4, p2, p3, p1, p5, p6, p8, p7, by rw [← h.rest.1]⟩
 
 theorem TopRelR.trans {a b c : Core} (h1 : TopRelR a b) (h2 : TopRelR b c) : TopRelR a c := by
   unfold TopRelR at *
   have h1' : TopRel a { b with ready := a.ready } := h1
   have hr : b.ready = b.ready := rfl
-  obtain ⟨e2, g2, s2, c2, ⟨q1, q2, q3, q4, q5, q6, q7, q8, q9⟩, ⟨r1, r2, r3, r4, r5, r6, r7, r8, -⟩⟩ := h2
-  obtain ⟨e1, g1, s1, c1, ⟨p1, p2, p3, p4, p5, p6, p7, p8, p9⟩, ⟨t1, t2, t3, t4, t5, t6, t7, t8, -⟩⟩ := h1'
+  obtain ⟨e2, g2, s2, c2, ⟨q1, q2, q3, q4, q5, q6, q7, q8⟩, ⟨r1, r2, r3, r4, r5, r6, r7, r8, -⟩⟩ := h2
+  obtain ⟨e1, g1, s1, c1, ⟨p1, p2, p3, p4, p5, p6, p7, p8⟩, ⟨t1, t2, t3, t4, t5, t6, t7, t8, -⟩⟩ := h1'
   have c1' : ∀ x, b.C.getX x = { a.C.getX x with tag := (b.C.getX x).tag } := c1
   have c2' : ∀ x, c.C.getX x = { b.C.getX x with tag := (c.C.getX x).tag } := c2
   exact ⟨e2.trans e1, g2.trans g1, s2.trans s1, fun x => by
     show c.C.getX x = { a.C.getX x with tag := (c.C.getX x).tag }
     rw [c2' x, c1' x],
     ⟨q1.trans p1, q2.trans p2, q3.trans p3, q4.trans p4, q5.trans p5, q6.trans p6, q7.trans p7,
-      q8.trans p8, q9.trans p9⟩, ⟨r1.trans t1, r2.trans t2, r3.trans t3, r4.trans t4, r5.trans t5,
+      q8.trans p8⟩, ⟨r1.trans t1, r2.trans t2, r3.trans t3, r4.trans t4, r5.trans t5,
       r6.trans t6, r7.trans t7, r8.trans t8, rfl⟩⟩
 
 theorem top_resetTop : Pres TopRel resetTop := by
@@ -54,7 +54,7 @@ theorem top_initStep : Pres TopRel initStep := by
     top_setLpar _ _, top_setPath _ _]
   all_goals first
     | (intro s; exact TopRel.of_tag s _ _)
-    | (intro s; exact ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+    | (intro s; exact ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
         ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩)
 
 end OM.Proof

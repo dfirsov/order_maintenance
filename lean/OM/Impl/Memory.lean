@@ -17,7 +17,7 @@ open OM.Machine (Reg Arr State Out exec Stmt Same Expr BinOp UnOp wp)
 def memOf (κ : Caps) : Nat := (Slot.allNP.map (capOf κ)).sum + 16
 
 theorem memOf_eq (P : Params) :
-    memOf (capsOf P) = 5344 + P.N * 37 + cb P * 671 + cb P * P.H + nbMax P * 2596 + P.H * 2 := by
+    memOf (capsOf P) = 5343 + P.N * 37 + cb P * 671 + cb P * P.H + nbMax P * 2596 + P.H * 2 := by
   unfold memOf
   simp only [Slot.allNP, Fld.all, EF.all, GF.all, CF.all, NF.all, AF.all, SF.all, Tbl.all, LK.all, OF.all,
     List.map, List.flatMap_cons, List.flatMap_nil, List.cons_append, List.nil_append,
@@ -81,11 +81,11 @@ theorem core_mem {N : Nat} (hN : 64 ≤ N) : memOf (capsOf (proofParams N)) ≤ 
     have := Nat.mul_le_mul_left q h3H
     nlinarith
   simp only [vnb, vcb, pp_N, pp_H]
-  show 5344 + N * 37 + (2 + 2 * q) * 671 + (2 + 2 * q) * vH L +
+  show 5343 + N * 37 + (2 + 2 * q) * 671 + (2 + 2 * q) * vH L +
     (vH L + 2 + (vH L + 1 + (vH L * 12 + 1)) * (2 + 2 * q)) * 2596 + vH L * 2 ≤ 40000 * N
-  have e : 5344 + N * 37 + (2 + 2 * q) * 671 + (2 + 2 * q) * vH L +
+  have e : 5343 + N * 37 + (2 + 2 * q) * 671 + (2 + 2 * q) * vH L +
       (vH L + 2 + (vH L + 1 + (vH L * 12 + 1)) * (2 + 2 * q)) * 2596 + vH L * 2 =
-      22262 + N * 37 + 11726 * q + 70096 * vH L + 67498 * (q * vH L) := by ring
+      22261 + N * 37 + 11726 * q + 70096 * vH L + 67498 * (q * vH L) := by ring
   rw [e]
   omega
 

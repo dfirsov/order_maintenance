@@ -162,7 +162,6 @@ structure Core where
   /-- Largest and smallest non-empty bucket, 0 if the queue is empty. -/
   pqHi : Nat := 0
   pqLo : Nat := 0
-  pqScan : Nat := 0
   -- top structure (`top_wbbt.py`)
   nodes : Array Node := #[default]
   path : Array (Array Nat) := #[]

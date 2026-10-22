@@ -232,7 +232,7 @@ theorem insert_step {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {ca
   have hP2 : s2.P = s.P := by rw [hO.P]; rfl
   have hE2 : s2.E = (linkElem s x s.E.size lab hh).E := by rw [hO.E]; rfl
   have S : InsSpec s s2 (eG s x) := insSpec_link hgL.2.1 hcL.2 hGs2 hC2 hP2
-  obtain ⟨r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15⟩ := hO.rest
+  obtain ⟨r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r12, r13, r14, r15⟩ := hO.rest
   have hcnt2 : s2.count = s.count + 1 := by rw [r2]; rfl
   have hhead2 : s2.head = (linkElem s x s.E.size lab hh).head := by rw [r3]; rfl
   have hcov : cSt s (gC s (eG s x)) = .overflow →

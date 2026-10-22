@@ -73,8 +73,7 @@ structure WB (K : Nat) (s : Core) : Prop where
   nodes : ∀ i, NodeB K (s.nodes.getX i)
   freeG : ∀ g ∈ s.freeG, g < 2 ^ K
   scalars : s.count < 2 ^ K ∧ s.head < 2 ^ K ∧ s.tail < 2 ^ K ∧ s.firstGroup < 2 ^ K ∧
-    s.firstChunk < 2 ^ K ∧ s.fallbacks < 2 ^ K ∧ s.pqHi < 2 ^ K ∧ s.pqLo < 2 ^ K ∧
-    s.pqScan < 2 ^ K
+    s.firstChunk < 2 ^ K ∧ s.fallbacks < 2 ^ K ∧ s.pqHi < 2 ^ K ∧ s.pqLo < 2 ^ K
   prep : ∀ p, s.prep = some p → PrepB K p
   job : ∀ j, s.resJob = some j → JobB K j
   pq : ArrB K s.pqHead ∧ ArrB K s.pqNext ∧ ArrB K s.pqPrev ∧ ArrB K s.pqWhere ∧

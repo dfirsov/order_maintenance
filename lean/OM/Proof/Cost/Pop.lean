@@ -18,7 +18,7 @@ set_option linter.deprecated false
 theorem pqsame_split {s s2 : Core} {x : Nat} {job : Job}
     (hT : TopRel (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) s2) :
     PQSame s (markState s2 x s.C.size (s.C.size + 1) job) := by
-  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8, -⟩ := hT.pq
+  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8⟩ := hT.pq
   have hP := hT.rest.1
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> simp only [markState]
   · exact p4

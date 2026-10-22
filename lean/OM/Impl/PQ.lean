@@ -55,7 +55,6 @@ theorem sNbP {i v : Nat} (hv : v < Bcap κ) : PQCaps κ { σ with nbPrev := σ.n
   { h with nbP := getX_setX_lt h.nbP hv }
 theorem sLo {v : Nat} (hv : v < Bcap κ) : PQCaps κ { σ with pqLo := v } := { h with lo := hv }
 theorem sHi {v : Nat} (hv : v < Bcap κ) : PQCaps κ { σ with pqHi := v } := { h with hi := hv }
-theorem sScan (v : Nat) : PQCaps κ { σ with pqScan := v } := { h with }
 
 end PQCaps
 
@@ -241,7 +240,7 @@ def pqInsertScanP : Proc where
       ("brk" ::= 0 ;;
        .loop "i" "s"
          (.ite (("brk" =ₑ 0) &&ₑ ("th" <ₑ "p") &&ₑ (.ar .pqHead "p" =ₑ 0))
-           ("p" ::= Exp.monus "p" 1 ;; .wsc .pqScan (.sc .pqScan + 1))
+           ("p" ::= Exp.monus "p" 1)
            ("brk" ::= 1)))
       .skip ;;
     pqAddP.call ["c", "s", Exp.ifz ("th" <ₑ "p") "p"] []

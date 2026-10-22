@@ -584,7 +584,7 @@ instance : IsPre PQOnly := ⟨PQOnly.refl, fun _ _ _ => PQOnly.trans⟩
 
 theorem pqo_pqDel (c : Nat) : Pres PQOnly (pqDel c) := by
   unfold pqDel
-  pres <;> (intro s; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+  pres <;> (intro s; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
 
 theorem pqo_pqPopMax : Pres PQOnly pqPopMax := by
   unfold pqPopMax; pres [pqo_pqDel _]
@@ -604,7 +604,7 @@ theorem split_pq {t t2 : Core} {x : Nat} (h : (splitChunkStart x).run t = .ok ()
       have hR := (top_insertAround _ _ _).ok hj
       simp only [markSplit_run] at h
       obtain ⟨-, e⟩ := EStateM.Result.ok.inj h; subst e
-      obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := hR.pq
+      obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8⟩ := hR.pq
       have hP : (markState s2 x t.C.size (t.C.size + 1) job).P.theta = t.P.theta := by
         show s2.P.theta = _; rw [hR.rest.1]; rfl
       exact ⟨q4, q2, q3, q1, q5, q6, q8, q7, hP⟩
@@ -688,7 +688,7 @@ theorem mc_pop {κ : Caps} {P : Params} {t t1 : Core} {c : Nat} (h : Mc κ P t) 
   obtain ⟨hP, hN, hC, hq, hpr, hz, hcnt, hgs⟩ := h
   have F := pqo_pqPopMax.ok hp
   obtain ⟨-, eG, eC, eP, r⟩ := F
-  obtain ⟨-, ecnt, -, -, -, -, -, epr, ejob, -, -, eN, epa, ecin, elp⟩ := r
+  obtain ⟨-, ecnt, -, -, -, -, -, epr, ejob, -, eN, epa, ecin, elp⟩ := r
   have hts : ts t1 = ts t := ts_eq_of eP eN epa ecin elp eC
   have hmu : topMu t1 = topMu t := by unfold topMu; rw [ejob, hts]
   refine ⟨eP.trans hP, ?_, by rw [eC]; exact hC, (pqPopMax_agree κ t (fun _ => 0) hq hp).2, by rw [epr]; exact hpr,
@@ -704,7 +704,7 @@ theorem mc_job {κ : Caps} {P : Params} {t : Core} {job : Job} (hT : TopInv t) (
   have hn := node_step hT hres hr
   obtain ⟨hCs, hzz⟩ := path_step hT hres hr
   have hpp := (tp_jobStep job).ok hr
-  obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := hR.pq
+  obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8⟩ := hR.pq
   refine ⟨hR.rest.1.trans hP, ?_, by show t1.C.size ≤ _; rw [hCs]; exact hC,
     hq.of_same ⟨q4, q2, q3, q1, q5, q6, q8, q7, by show t1.P.theta = _; rw [hR.rest.1]⟩,
     by show t1.prep = _; rw [hpp]; exact hpr, hzz hz, by show t1.count ≤ _; rw [hR.rest.2.1]; exact hcnt,
@@ -729,7 +729,7 @@ theorem mc_split {κ : Caps} {P : Params} {t t1 t2 : Core} {c : Nat} (h : Mc κ 
     by rw [eg, hce, ← hc1]; exact hgs1⟩
   have hmu0 : topMu t = 0 := by unfold topMu; rw [hnone]
   have F := pqo_pqPopMax.ok hp
-  have eN : t1.nodes = t.nodes := F.rest.2.2.2.2.2.2.2.2.2.2.2.1
+  have eN : t1.nodes = t.nodes := F.rest.2.2.2.2.2.2.2.2.2.2.1
   have eC : t1.C = t.C := F.C
   unfold NodeB at hN ⊢
   rw [hmu0] at hN
@@ -905,7 +905,7 @@ theorem mc_final {κ : Caps} {P : Params} (K : CapsOK κ P) (hN : 1 ≤ P.N) {s 
   have hC : s.C.size = 2 := by rw [F.low.Csize]; rfl
   have hG : s.Gs.size = 2 := by rw [F.low.Gs]; rfl
   have hcnt : s.count = 1 := by rw [F.low.rest.2.1]; rfl
-  obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8, -⟩ := F.low.pq
+  obtain ⟨q1, q2, q3, q4, q5, q6, q7, q8⟩ := F.low.pq
   have q1 : s.pqHead = #[] := q1
   have q2 : s.pqNext = #[] := q2
   have q3 : s.pqPrev = #[] := q3

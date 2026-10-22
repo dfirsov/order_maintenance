@@ -102,7 +102,7 @@ theorem resInv_step {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {ca
       have hSafe : Safe t t1 := by have := pres_jobStep job t; rw [hj1] at this; exact this
       have hI1 := hSafe.2 A hIA
       have hTR' : TopRel t { t1 with resJob := r } :=
-        hTR.trans ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+        hTR.trans ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
           ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
       have hI1' : INV { t1 with resJob := r } A :=
         hI1.of_sameLinks (by constructor <;> intros <;> rfl) (fun _ => rfl)
@@ -1133,7 +1133,7 @@ theorem insertAgree {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap 
   obtain ⟨s2', hrun2', hPQ2, -⟩ := chunkSize_ok (lab := lab) (hh := hh) hC.low.pq hcL
   rw [hrun2] at hrun2'; injection hrun2' with _ e2; subst e2
   obtain ⟨-, -, hC2, -, r2⟩ := hPQ2
-  obtain ⟨-, -, -, -, -, -, -, hpr2, hjb2, -, -, hN2, hPa2, hci2, hlp2⟩ := r2
+  obtain ⟨-, -, -, -, -, -, -, hpr2, hjb2, -, hN2, hPa2, hci2, hlp2⟩ := r2
   have hsC : (sizeState s1 (gC s (eG s x))).C.size = s1.C.size := by simp [sizeState]
   have hsN : (sizeState s1 (gC s (eG s x))).nodes = s1.nodes := rfl
   have hsPa : (sizeState s1 (gC s (eG s x))).path = s1.path := rfl

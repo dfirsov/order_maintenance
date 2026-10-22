@@ -727,36 +727,36 @@ structure PQOnly (st st' : Core) : Prop where
   rest : st'.freeG = st.freeG ∧ st'.count = st.count ∧ st'.head = st.head ∧ st'.tail = st.tail ∧
     st'.firstGroup = st.firstGroup ∧ st'.firstChunk = st.firstChunk ∧ st'.ready = st.ready ∧
     st'.prep = st.prep ∧ st'.resJob = st.resJob ∧ st'.fallbacks = st.fallbacks ∧
-    st'.pqScan = st.pqScan ∧ st'.nodes = st.nodes ∧ st'.path = st.path ∧ st'.cin = st.cin ∧
+    st'.nodes = st.nodes ∧ st'.path = st.path ∧ st'.cin = st.cin ∧
     st'.lpar = st.lpar
 
 theorem PQOnly.refl (st : Core) : PQOnly st st :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem PQOnly.trans {a b c : Core} (h1 : PQOnly a b) (h2 : PQOnly b c) : PQOnly a c := by
   obtain ⟨e1, g1, c1, p1, r1⟩ := h1
   obtain ⟨e2, g2, c2, p2, r2⟩ := h2
   refine ⟨e2.trans e1, g2.trans g1, c2.trans c1, p2.trans p1, ?_⟩
-  obtain ⟨a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15⟩ := r1
-  obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15⟩ := r2
+  obtain ⟨a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14⟩ := r1
+  obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14⟩ := r2
   exact ⟨b1.trans a1, b2.trans a2, b3.trans a3, b4.trans a4, b5.trans a5, b6.trans a6,
     b7.trans a7, b8.trans a8, b9.trans a9, b10.trans a10, b11.trans a11, b12.trans a12,
-    b13.trans a13, b14.trans a14, b15.trans a15⟩
+    b13.trans a13, b14.trans a14⟩
 
 theorem linkSt_only (st : Core) (s p : Nat) : PQOnly st (linkSt st s p) := by
-  unfold linkSt; dsimp only; split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  unfold linkSt; dsimp only; split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem addSt_only (st : Core) (c s p : Nat) : PQOnly st (addSt st c s p) := by
   unfold addSt
   dsimp only
   split_ifs
-  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · let st0 : Core := { st with pqNext := st.pqNext.setX c NIL, pqPrev := st.pqPrev.setX c NIL, pqHead := st.pqHead.setX s c }
     obtain ⟨e, g, c', p', r⟩ := linkSt_only st0 s p
     exact ⟨e, g, c', p', r⟩
 
 theorem delSt_only (st : Core) (c : Nat) : PQOnly st (delSt st c) := by
-  unfold delSt; dsimp only; split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  unfold delSt; dsimp only; split_ifs <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-! ### The operations used by the algorithm -/
 

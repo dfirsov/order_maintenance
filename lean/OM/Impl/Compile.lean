@@ -35,7 +35,7 @@ def AF.idx : AF → Nat
   | .lpar => 6
 def SF.idx : SF → Nat
   | .count => 0 | .head => 1 | .tail => 2 | .firstGroup => 3 | .firstChunk => 4 | .notReady => 5
-  | .fallbacks => 6 | .pqHi => 7 | .pqLo => 8 | .pqScan => 9
+  | .fallbacks => 6 | .pqHi => 7 | .pqLo => 8
 def Tbl.idx : Tbl → Nat
   | .E => 0 | .G => 1 | .C => 2 | .N => 3
 def PF.idx : PF → Nat
@@ -62,7 +62,7 @@ theorem GF.idx_lt (k : GF) : k.idx < 12 := by cases k <;> decide
 theorem CF.idx_lt (k : CF) : k.idx < 11 := by cases k <;> decide
 theorem NF.idx_lt (k : NF) : k.idx < 10 := by cases k <;> decide
 theorem AF.idx_lt (k : AF) : k.idx < 7 := by cases k <;> decide
-theorem SF.idx_lt (k : SF) : k.idx < 10 := by cases k <;> decide
+theorem SF.idx_lt (k : SF) : k.idx < 9 := by cases k <;> decide
 theorem Tbl.idx_lt (k : Tbl) : k.idx < 4 := by cases k <;> decide
 theorem PF.idx_lt (k : PF) : k.idx < 16 := by cases k <;> decide
 

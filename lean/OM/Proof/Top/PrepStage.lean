@@ -83,7 +83,7 @@ theorem chainTag_succ {P : Params} (hb : 1 ≤ P.beta) (m : Nat) :
 theorem TopRelR.top {P : Params} {s : Core} (h : TopRelR (initState P) s) (nodes : Array Node)
     (path : Array (Array Nat)) (cin : Array (List Nat)) (lpar : Array Nat) (pr : Option Prep) :
     TopRelR (initState P) { s with nodes := nodes, path := path, cin := cin, lpar := lpar, prep := pr } :=
-  h.trans (TopRel.topRelR ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+  h.trans (TopRel.topRelR ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩)
 
 /-- The lazy construction starts at stage 1. -/
@@ -101,9 +101,9 @@ theorem stage_one (s : Core) (r : Bool) : Stage s.P 1
       ready := r } := by
   refine ⟨?_, rfl, ⟨_, rfl, by simp, fun j => ?_⟩, fun h => absurd h (by omega),
     fun h => absurd h (by omega), fun h => absurd h (by omega), fun h => absurd h (by omega)⟩
-  · exact TopRel.topRelR ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+  · exact TopRel.topRelR ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
       ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩ |>.trans (by
-        unfold TopRelR; exact ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+        unfold TopRelR; exact ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
           ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩)
   · rw [if_neg (by omega)]
     simp only [Array.getX, Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
@@ -194,7 +194,7 @@ theorem stage_last {P : Params} {s : Core} (S : Stage P (P.H + 1) s) (hH : 1 ≤
   have hCs : s.C.size = 2 := by rw [S.low.Csize]; rfl
   refine ⟨?_, S.res, rfl, S.nsz (by omega), fun k => ?_, S.cin (by omega), S.lpar (by omega), ?_, fun j => ?_, ?_⟩
   · refine S.low.trans (TopRel.topRelR ?_)
-    exact (⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+    exact (⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
       ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩ : TopRel s { s with path := s.path.setX 1 pa, prep := none }).trans
       (TopRel.of_tag _ 1 _)
   · rw [S.nodes (by omega) k, Nat.add_sub_cancel]

@@ -52,7 +52,6 @@ inductive AF | pqHead | pqNext | pqPrev | pqWhere | nbNext | nbPrev | lpar
   deriving DecidableEq, Repr
 /-- Scalars of the core. -/
 inductive SF | count | head | tail | firstGroup | firstChunk | notReady | fallbacks | pqHi | pqLo
-  | pqScan
   deriving DecidableEq, Repr
 /-- Record counts (read only; `push` extends them). -/
 inductive Tbl | E | G | C | N
@@ -132,13 +131,13 @@ def AF.set (s : Core) (a : Array Nat) : AF → Core
 def SF.get (s : Core) : SF → Nat
   | .count => s.count | .head => s.head | .tail => s.tail | .firstGroup => s.firstGroup
   | .firstChunk => s.firstChunk | .notReady => b2n !s.ready | .fallbacks => s.fallbacks
-  | .pqHi => s.pqHi | .pqLo => s.pqLo | .pqScan => s.pqScan
+  | .pqHi => s.pqHi | .pqLo => s.pqLo
 
 def SF.set (s : Core) (v : Nat) : SF → Core
   | .count => { s with count := v } | .head => { s with head := v } | .tail => { s with tail := v }
   | .firstGroup => { s with firstGroup := v } | .firstChunk => { s with firstChunk := v }
   | .notReady => { s with ready := v == 0 } | .fallbacks => { s with fallbacks := v }
-  | .pqHi => { s with pqHi := v } | .pqLo => { s with pqLo := v } | .pqScan => { s with pqScan := v }
+  | .pqHi => { s with pqHi := v } | .pqLo => { s with pqLo := v }
 
 def SF.ok (v : Nat) : SF → Bool
   | .notReady => decide (v ≤ 1) | _ => true

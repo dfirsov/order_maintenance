@@ -144,7 +144,7 @@ theorem reservation_cost {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat
       have hSafe : Safe t t1 := by have := pres_jobStep job t; rw [hj1] at this; exact this
       have hI1 := hSafe.2 A hIA
       have hTR' : TopRel t { t1 with resJob := r } :=
-        hTR.trans ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
+        hTR.trans ⟨rfl, rfl, rfl, fun _ => rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩,
           ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
       have hI1' : INV { t1 with resJob := r } A :=
         hI1.of_sameLinks (by constructor <;> intros <;> rfl) (fun _ => rfl)
