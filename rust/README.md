@@ -52,6 +52,11 @@ cargo run --release --bin xrun -- ops.txt > rust.out && diff lean.out rust.out
 mixed and delete-heavy, through many rebuilds; 4.3 million machine steps in the two longest alone),
 the generated code and Lean's `exec` printed identical lines: the same answers, the same number of steps for every
 operation, the same peak bit length.
+Re-run on 2026-10-22, after the queue's unused counter `pqScan` was removed (one scalar array
+fewer per core): 9 files, 13,920 operations, 7.7 million steps, identical. Compared with the code
+before the removal, answers and peaks are the same, initialization takes 2,099 steps instead of
+2,101, and the operations that allocate a new core take 2 steps fewer; all other step counts are
+unchanged.
 
 **Correctness.** The generated code returned the specification's answers on every operation
 tried:
