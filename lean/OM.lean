@@ -34,3 +34,4 @@ import OM.Impl.InitM
 import OM.Impl.TheoremsM
 import OM.Impl.Memory
 import OM.Proof.Word.Insert
+import OM.Proof.Word.TopWB

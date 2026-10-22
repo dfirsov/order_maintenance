@@ -21,15 +21,52 @@ set_option linter.deprecated false
 
 variable {K : Nat}
 
-/-- **The top structure keeps the stored-value bound** (the contract stage B2 proves): the
-insertion of a split's two new chunks into the tree, and each step of the running job. -/
-structure TopWB (K : Nat) (TI : Core → Prop) : Prop where
+/-- **The top structure keeps the stored-value bound** (the contract stage B2 proves,
+`topWB` in `TopWB.lean`): the insertion of a split's two new chunks into the tree, and each step of
+the running job. The top invariant of the state after the operation is a hypothesis (it bounds the
+tags the operation writes); a job step also needs room for two fresh nodes and the chunk count
+below `2^K` (for the weights), and does not grow `nodes.size + μ` (so the node count stays within a
+budget, as in `NodeB`). -/
+structure TopWB (K : Nat) (TI : Core → Prop) (μ : Core → Nat) : Prop where
   start : ∀ s A x job s2, INV s A → TI s → s.resJob = none → LiveC s x → cSt s x = .quiet →
-    WB K (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) →
+    s.C.size + 2 ≤ 2 ^ K → WB K (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) →
     (insertAround x s.C.size (s.C.size + 1)).run (linkChunkPair (push2 s) x s.C.size (s.C.size + 1)) =
-      .ok job s2 → WB K s2 ∧ JobB K job
+      .ok job s2 → TI (markState s2 x s.C.size (s.C.size + 1) job) →
+    WB K s2 ∧ JobB K job ∧ s2.nodes.size = s.nodes.size
   step : ∀ s A job r s', INV s A → TI s → s.resJob = some job → WB K s →
-    (jobStep job).run s = .ok r s' → WB K { s' with resJob := r }
+    s.nodes.size + 2 ≤ 2 ^ K → s.C.size ≤ 2 ^ K → (jobStep job).run s = .ok r s' →
+    TI { s' with resJob := r } →
+    WB K { s' with resJob := r } ∧ s'.nodes.size + μ { s' with resJob := r } ≤ s.nodes.size + μ s
+
+/-! ### What an insertion leaves of the top structure -/
+
+instance : IsPre TopSame := ⟨TopSame.refl, fun _ _ _ => TopSame.trans⟩
+
+/-- Close `∀ s, TopSame s (f s)` for an update of the queue's fields. -/
+macro "tsame" : tactic => `(tactic| (intro _; exact ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl,
+  fun _ => ⟨rfl, rfl, rfl⟩, rfl⟩))
+
+theorem ts_pqLinkAfter (s p : Nat) : Pres TopSame (pqLinkAfter s p) := by
+  unfold pqLinkAfter; pres; all_goals tsame
+theorem ts_pqAdd (c s p : Nat) : Pres TopSame (pqAdd c s p) := by
+  unfold pqAdd; pres [ts_pqLinkAfter _ _]; all_goals tsame
+theorem ts_pqDel (c : Nat) : Pres TopSame (pqDel c) := by
+  unfold pqDel; pres; all_goals tsame
+theorem ts_pqInsertScan (c s : Nat) : Pres TopSame (pqInsertScan c s) := by
+  unfold pqInsertScan; pres [ts_pqAdd _ _ _]
+theorem ts_pqAdjust (c old new : Nat) : Pres TopSame (pqAdjust c old new) := by
+  unfold pqAdjust; pres [pres_getP, ts_pqInsertScan _ _, ts_pqDel _, ts_pqAdd _ _ _]
+theorem ts_chunkSize (c : Nat) (inc : Bool) : Pres TopSame (chunkSize c inc) := by
+  unfold chunkSize modC
+  pres [pres_getC _, ts_pqAdjust _ _ _]
+  all_goals
+    intro s
+    refine ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, by simp, fun d => ?_, rfl⟩
+    simp only [cN, cP, cT, Array.getX_modify]
+    split <;> simp
+
+theorem ts_linkElem (s : Core) (x y lab hh : Nat) : TopSame s (linkElem s x y lab hh) :=
+  ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl, fun _ => ⟨rfl, rfl, rfl⟩, rfl⟩
 
 /-! ### The split start -/
 
@@ -54,20 +91,31 @@ theorem splitChunkStart_dec {t t2 : Core} {x : Nat} (h : (splitChunkStart x).run
     · rw [hj] at h; simp at h
   · simp at h
 
-/-- **The reservation keeps the stored-value bound**, given the top structure's contract and room
-for the chunks (`2·count + 2 ≤ 2^K`; the chunk count is at most `2 + 2·count`, `CountInv`). -/
-theorem reservation_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat}
-    {L : List Nat} {s : Core} (hTC : TopContract TI μ J cap) (hT : TopWB K TI)
+/-- The chunk count of a state of the low invariant is at most `2 + 2·count` (`CountInv`). -/
+theorem _root_.OM.Proof.LowInv.Csize {t : Core} {L : List Nat} (hL : LowInv t L) : t.C.size ≤ 2 + 2 * t.count := by
+  obtain ⟨e, pops, hN⟩ := hL.cnt
+  have h1 := hN.chunks (by have := hL.cp.I4; omega)
+  have h2 : t.count / (t.P.theta + 1 - cmax t.P) ≤ t.count := Nat.div_le_self _ _
+  omega
+
+/-- **The reservation keeps the stored-value bound**, given the top structure's contract, room
+for the chunks (`2·count + 2 ≤ 2^K`; the chunk count is at most `2 + 2·count`, `CountInv`), and a
+node budget: `nodes.size + μ ≤ NB0 + J·C.size` (a split start adds 2 chunks and a job of measure at
+most `J`; a job step does not grow `nodes.size + μ`), with `NB0 + J·(2 + 2·count) + 2 ≤ 2^K`. -/
+theorem reservation_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R NB0 : Nat} {cap : Params → Nat}
+    {L : List Nat} {s : Core} (hTC : TopContract TI μ J cap) (hT : TopWB K TI μ)
     (h0 : ResInv TI k J n R μ L s 0 s) (hn : 1 ≤ n)
     (hsize : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
     (hcap : 2 + 2 * (s.count / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
     (hI5 : (s.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s.P.T) (hW : WB K s)
-    (hcnt : 2 * s.count + 2 ≤ 2 ^ K) :
+    (hcnt : 2 * s.count + 2 ≤ 2 ^ K) (hNB : s.nodes.size + μ s ≤ NB0 + J * s.C.size)
+    (hNK : NB0 + J * (2 + 2 * s.count) + 2 ≤ 2 ^ K) :
     ∃ t', (reservation k).run s = .ok () t' ∧ WB K t' := by
   have step := resInv_step (L := L) (k := k) hTC hn hsize hcap hI5
-  obtain ⟨t', hrun, hres⟩ := reservation_ok (fun j t => ResInv TI k J n R μ L s j t ∧ WB K t)
-    (fun t => WB K t) ⟨h0, hW⟩ (by
-    intro j t ⟨hI, hWt⟩ hj
+  obtain ⟨t', hrun, hres⟩ := reservation_ok (fun j t => ResInv TI k J n R μ L s j t ∧ WB K t ∧
+      t.nodes.size + μ t ≤ NB0 + J * t.C.size)
+    (fun t => WB K t) ⟨h0, hW, hNB⟩ (by
+    intro j t ⟨hI, hWt, hNBt⟩ hj
     obtain ⟨hn', hs'⟩ := step j t hI hj
     refine ⟨fun hnone => ?_, fun job hjob => ?_⟩
     · rcases hn' hnone with ⟨hq0, -⟩ | ⟨hq0, c, t1, t2, hpop, hsc, hI'⟩
@@ -103,30 +151,49 @@ theorem reservation_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} 
           have := top_insertAround c (delSt t c).C.size ((delSt t c).C.size + 1)
             (linkChunkPair (push2 (delSt t c)) c (delSt t c).C.size ((delSt t c).C.size + 1))
           rw [hj] at this; exact this
+        obtain ⟨hL2, hTI2, hc2, -, y2, i2, a2, ip2, js2, -, hRA⟩ := hI'
+        have h2 : (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).C.size =
+            (delSt t c).C.size + 2 := by
+          simp only [markState, Array.size_modify']
+          rw [hR.Csize]; simp [linkChunkPair, push2]
         -- room for the two new chunks
         have hroom : (delSt t c).C.size + 2 ≤ 2 ^ K := by
-          obtain ⟨hL2, -, hc2, -⟩ := hI'
-          obtain ⟨e2, pops2, hN2⟩ := hL2.cnt
-          have h1 := hN2.chunks (by have := hL2.cp.I4; omega)
-          have h2 : (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).C.size =
-              (delSt t c).C.size + 2 := by
-            simp only [markState, Array.size_modify']
-            rw [hR.Csize]; simp [linkChunkPair, push2]
-          have h3 : (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).count / ((markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).P.theta + 1 - cmax (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).P) ≤ (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).count := Nat.div_le_self _ _
-          rw [h2] at h1
+          have h1 := hL2.Csize
+          rw [h2, hc2] at h1
           omega
-        have hc2 : c < 2 ^ K := hW1.2
-        have hWl := wb_splitLink hW1.1.1 hc2 hroom
-        obtain ⟨hW2, hJ⟩ := hT.start _ A c job s2 hI1 hTI1 hnone1 hcL1 hcq1 hWl hj
-        exact wb_markState hW2 hc2 (by omega) (by omega) hJ
-    · obtain ⟨r, t1, hj1, hI'⟩ := hs' job hjob
+        have hc2' : c < 2 ^ K := hW1.2
+        have hWl := wb_splitLink hW1.1.1 hc2' hroom
+        obtain ⟨hW2, hJ, hN2⟩ := hT.start _ A c job s2 hI1 hTI1 hnone1 hcL1 hcq1 hroom hWl hj hTI2
+        refine ⟨wb_markState hW2 hc2' (by omega) (by omega) hJ, ?_⟩
+        -- the node budget: a job of measure at most `J`, and two more chunks
+        have hmu : μ (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job) ≤ J := by
+          unfold RoundAt at hRA
+          have e : (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).resJob = some job := rfl
+          rw [e] at hRA
+          omega
+        have hn2 : (markState s2 c (delSt t c).C.size ((delSt t c).C.size + 1) job).nodes.size =
+            t.nodes.size := by
+          show s2.nodes.size = _; rw [hN2, hD.rest.2.2.2.2.2.2.2.2.2.2.1]
+        rw [hn2, h2]
+        have e1 : J * ((delSt t c).C.size + 2) = J * t.C.size + 2 * J := by rw [hsz1]; ring
+        rw [e1]
+        omega
+    · have hCt : t.C.size ≤ 2 + 2 * s.count := by rw [← hI.2.2.1]; exact hI.1.Csize
+      have hJC : J * t.C.size ≤ J * (2 + 2 * s.count) := Nat.mul_le_mul_left J hCt
+      obtain ⟨r, t1, hj1, hI'⟩ := hs' job hjob
       refine ⟨r, t1, hj1, hI', ?_⟩
       obtain ⟨hL, hTt, -⟩ := hI
       obtain ⟨A, hIA, -⟩ := hL.inv
-      exact hT.step t A job r t1 hIA hTt hjob hWt hj1)
+      obtain ⟨hW1, hN1⟩ := hT.step t A job r t1 hIA hTt hjob hWt (by omega) (by omega) hj1 hI'.2.1
+      have hCs : ({ t1 with resJob := r } : Core).C.size = t.C.size := by
+        have := top_jobStep job t; rw [hj1] at this; exact this.Csize
+      refine ⟨hW1, ?_⟩
+      rw [hCs]
+      show t1.nodes.size + _ ≤ _
+      omega)
   refine ⟨t', hrun, ?_⟩
   rcases hres with h | h
-  · exact h.2
+  · exact h.2.1
   · exact h
 
 /-! ### The chunk phase -/
@@ -182,8 +249,8 @@ theorem driveChunk_wb {t : Core} {A : Abs} {L : List Nat} {gh : GGh} {s₀ δu :
 
 /-- **The background work of an insertion keeps the stored-value bound** (the context of
 `background_ok`). -/
-theorem background_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {cap : Params → Nat}
-    {L : List Nat} {s0 s1 s2 : Core} {y g c : Nat} (hTC : TopContract TI μ J cap) (hT : TopWB K TI)
+theorem background_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R NB0 : Nat} {cap : Params → Nat}
+    {L : List Nat} {s0 s1 s2 : Core} {y g c : Nat} (hTC : TopContract TI μ J cap) (hT : TopWB K TI μ)
     (hPost : InsPost TI k J n R μ L s0 g c s2) (hy : y ∈ L) (heg1 : eG s1 y = g)
     (hgc1 : gC s1 g = c) (hchunk : (chunkSize c true).run s1 = .ok () s2)
     (hE12 : s2.E = s1.E) (hP1 : s1.P = s0.P) (hkP : s0.P.K_R = k) (hn : 1 ≤ n)
@@ -191,7 +258,8 @@ theorem background_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {
     (hcap : 2 + 2 * (s2.count / (s0.P.theta + 1 - cmax s0.P)) ≤ cap s0.P)
     (hI5 : (s0.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s0.P.T)
     (hW2 : WB K s2) (hL : LabRoom K s0.P) (hlen : 4 * L.length + 4 ≤ 2 ^ K)
-    (hG2 : s2.Gs.size + 2 ≤ 2 ^ K) (hcnt : 2 * s2.count + 2 ≤ 2 ^ K) :
+    (hG2 : s2.Gs.size + 2 ≤ 2 ^ K) (hcnt : 2 * s2.count + 2 ≤ 2 ^ K)
+    (hNB : s2.nodes.size + μ s2 ≤ NB0 + J * s2.C.size) (hNK : NB0 + J * (2 + 2 * s2.count) + 2 ≤ 2 ^ K) :
     ∃ s', (background y).run s1 = .ok () s' ∧ WB K s' := by
   obtain ⟨A, hI, hel⟩ := hPost.inv
   obtain ⟨gh, hG⟩ := hPost.ginv
@@ -263,6 +331,8 @@ theorem background_wb {TI : Core → Prop} {μ : Core → Nat} {J k n R : Nat} {
   obtain ⟨s', hres, hW'⟩ := reservation_wb hTC hT h0 hn
     (by rw [hD.count, hP4]; exact hsize) (by rw [hD.count, hP4]; exact hcap)
     (by rw [hP4]; exact hI5) hW4 (by rw [hD.count]; exact hcnt)
+    (by rw [hD.topSame.top.1, hD.topSame.Csize, hTC.mframe _ _ hD.topSame]; exact hNB)
+    (by rw [hD.count]; exact hNK)
   refine ⟨s', ?_, hW'⟩
   -- the run of `background`
   unfold background
@@ -304,15 +374,17 @@ theorem _root_.OM.Proof.INV.len_lt {s : Core} {A : Abs} (hI : INV s A) : A.elist
 /-- **A core insertion keeps the stored-value bound** (the context of `insertAfter_cost`), given
 the top structure's contract `TopWB`, room for labels, and room for the sizes and record counts:
 `4·E.size + 8`, `Gs.size + 2` and `2·count + 4` at most `2^K`. -/
-theorem insertAfter_wb {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {cap : Params → Nat}
-    {L : List Nat} {s : Core} {x : Nat} (hTC : TopContract TI μ J cap) (hT : TopWB K TI)
+theorem insertAfter_wb {TI : Core → Prop} {μ : Core → Nat} {J n R NB0 : Nat} {cap : Params → Nat}
+    {L : List Nat} {s : Core} {x : Nat} (hTC : TopContract TI μ J cap) (hT : TopWB K TI μ)
     (hC : CostInv TI μ J n R L s)
     (hx : x ∈ L) (hk : 1 ≤ s.P.K_R) (hR : J / s.P.K_R + 1 ≤ R) (hn : 1 ≤ n)
     (hsize : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ n + 1)
     (hcap : 2 + 2 * ((s.count + 1) / (s.P.theta + 1 - cmax s.P)) ≤ cap s.P)
     (hI5 : (s.P.theta : ℝ) + R * (Hn (n - 1) + 1) ≤ s.P.T) (hh : Nat)
     (hW : WB K s) (hL : LabRoom K s.P) (hE : 4 * s.E.size + 8 ≤ 2 ^ K)
-    (hG : s.Gs.size + 2 ≤ 2 ^ K) (hcnt : 2 * s.count + 4 ≤ 2 ^ K) :
+    (hG : s.Gs.size + 2 ≤ 2 ^ K) (hcnt : 2 * s.count + 4 ≤ 2 ^ K)
+    (hNB : s.nodes.size + μ s ≤ NB0 + J * s.C.size)
+    (hNK : NB0 + J * (2 + 2 * (s.count + 1)) + 2 ≤ 2 ^ K) :
     ∃ s', (insertAfter x hh).run s = .ok s.E.size s' ∧ WB K s' := by
   obtain ⟨y, i, a, ip, js, hGm, hRO⟩ := hC.game
   have hdiv : s.count / (s.P.theta + 1 - cmax s.P) ≤ (s.count + 1) / (s.P.theta + 1 - cmax s.P) :=
@@ -351,9 +423,13 @@ theorem insertAfter_wb {TI : Core → Prop} {μ : Core → Nat} {J n R : Nat} {c
   obtain ⟨A2, hI2, hel2⟩ := hPost.inv
   have hlen2 := hI2.len_lt
   rw [hel2] at hlen2
+  have hTS : TopSame s s2 := (ts_linkElem s x s.E.size lab hh).trans (by
+    have := ts_chunkSize (gC s (eG s x)) true (linkElem s x s.E.size lab hh)
+    rw [hrun2'] at this; exact this)
   obtain ⟨s', hbg, hW'⟩ := background_wb hTC hT hPost hyL heG hgC hrun2' hE12 hP1 rfl hn
     (by rw [hPost.count]; exact hsize) (by rw [hPost.count]; exact hcap) hI5 hW2 hL
     (by omega) (by omega) (by rw [hPost.count]; omega)
+    (by rw [hTS.top.1, hTS.Csize, hTC.mframe _ _ hTS]; exact hNB) (by rw [hPost.count]; exact hNK)
   refine ⟨s', ?_, hW'⟩
   unfold insertAfter
   rw [run_bind, run_onGuard_ok hrun1]
