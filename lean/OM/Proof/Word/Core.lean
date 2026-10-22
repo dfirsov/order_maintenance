@@ -287,7 +287,7 @@ is below the next element's (`between`) or below `2^B_e` (`after`). -/
 theorem insertElem_wb {s : Core} (h : WB K s) (hL : LabRoom K s.P) {x hh y : Nat} {s' : Core}
     (hr : (insertElem x hh).run s = .ok y s') (hx : x < 2 ^ K) (hy : s.E.size < 2 ^ K)
     (hg : (s.Gs.getX (s.E.getX x).grp).size + 1 < 2 ^ K) (hc : s.count + 1 < 2 ^ K) :
-    y = s.E.size ∧ WB K s' := by
+    y = s.E.size ∧ WB K s' ∧ ∃ lab, s' = linkElem s x s.E.size lab hh := by
   have key : ∃ lab, lab < 2 ^ K ∧
       (insertElem x hh).run s = .ok s.E.size (linkElem s x s.E.size lab hh) := by
     unfold insertElem at hr ⊢
@@ -311,7 +311,7 @@ theorem insertElem_wb {s : Core} (h : WB K s) (hL : LabRoom K s.P) {x hh y : Nat
   obtain ⟨lab, hl, hrun⟩ := key
   rw [hrun] at hr
   cases hr
-  exact ⟨rfl, wb_linkElem h hx hy hl hg hc⟩
+  exact ⟨rfl, wb_linkElem h hx hy hl hg hc, lab, rfl⟩
 
 /-! ### Group splits -/
 
