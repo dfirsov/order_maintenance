@@ -58,27 +58,36 @@ program, the deep-embedded one of §3.
   every operation at most `opB 4 = 1,133,561,742` steps, for every `N` and every history.
 * **Memory** (`core_mem`, `reach_mem`): the arrays of a core of capacity `N` hold at most
   `40000·N` cells; during a rebuild the next core has capacity `N' ≤ 4N`.
+* **Theorem W for stored values** (`theoremW_stored`, `lean/OM/Proof/Word/Wrap.lean`; option (B) of
+  `docs/WORD.md`): on every wrapper state reached by initialization and `t` valid operations
+  (`ReachW`), every value stored in either core, every field of every record, live or dead, is
+  below `2^K` with `K = 64·L` for the larger `L` of the two cores (`wKom`), handles excepted; the
+  element index arrays and the cursor are below `2^K`; and every handle, the live count, the handle
+  counter and the rebuild counter are at most `t` (`OMB`). This is a statement about Level F, the
+  states that the machine's memory encodes (§5).
 
 **Assumed** (the cost model, §3; these are definitions, not hypotheses of the theorems):
 1. **Unit-cost words of unbounded size.** A machine word is a Lean `Nat`. Every instruction costs
    one step, whatever the size of its operands. This is the main assumption: a unit-cost machine
    with unbounded words can in principle cheat by computing with huge numbers. Theorems A and B are
    true statements about this machine; whether its step count models a real word RAM depends on the
-   values staying small. **Theorem W is not proved** (see below).
+   values staying small. **Theorem W is proved for the stored values** (above), not for every
+   computed value (see below).
 2. **Constant-time allocation.** `alloc A n` gives array `A` capacity `n`, every cell reading 0, in
    one step (constant-time-initializable arrays).
 3. **Unit-cost `*`, `/`, `%`, shifts and `msb`**, as in the standard word RAM.
 
-**Not proved: Theorem W (word size).** The intended statement: every value the program stores or
-computes is below `2^(c·L)`, `L = ⌈log₂ N⌉`, or (for a handle) at most the number of operations so
-far. Handles are the insertion counter, so they need `log(#ops)` bits, as in the usual word-RAM
-convention that a word holds an index into the input. The evidence is informal: every shift in the
-program is `1 <<< e` with `e` a parameter of size `O(L)` or a height times `β` (`O(L)`); labels are
-checked against `2^B` before they are stored; other stored values are indices, counts and sizes,
-bounded by the capacities (`O(N)`). A proof would need a new invariant: every field of every record,
-live or dead, is bounded, kept by every Level F function (about 70 write sites); the intermediate
-values of expressions and loop locals would remain on top of that. The machine already records the
-largest value it computes (`State.peak`), so the bound can be measured on the stress workloads.
+**Not proved: Theorem W for computed values (the machine's peak).** The full statement: every value
+the program stores *or computes* is below `2^(c·L)`, `L = ⌈log₂ N⌉`, or (for a handle) at most the
+number of operations so far. Handles are the insertion counter, so they need `log(#ops)` bits, as in
+the usual word-RAM convention that a word holds an index into the input. The stored values are
+proved (`theoremW_stored`, above): every field of every record, live or dead, is bounded, kept by
+every Level F function (`docs/WORD.md` §6). What remains is the intermediate values of expressions
+and the loop locals of the machine program, a bound on `State.peak` (option (A) of `docs/WORD.md`).
+The evidence for it is informal: every shift in the program is `1 <<< e` with `e` a parameter of size
+`O(L)` or a height times `β` (`O(L)`), and the other operands are stored values or locals derived
+from them. The machine records the largest value it computes (`State.peak`), so the bound can be
+measured on the stress workloads.
 
 **Not covered:** the running time of the Lean code itself, memory reclamation of a retired core
 (its arrays stay allocated until the slot is reused), and calls with invalid handles.
@@ -101,8 +110,9 @@ against the machine semantics, is in `rust/` (§16).
   RAM implements with O(1) overhead per access. It is a stated assumption of the model.
 * **Words.** All values are `Nat`, of unbounded size, and every instruction costs 1 whatever its
   operands. The interpreter does not truncate. It records the largest value seen, so a word-size
-  bound (Theorem W) is a separate statement about the same runs. Theorem W is not proved (§2.1):
-  unit-cost unbounded words are an assumption of the model.
+  bound (Theorem W) is a separate statement about the same runs. Theorem W is proved for the values
+  stored at Level F, not for every computed value (§2.1): unit-cost unbounded words remain an
+  assumption of the model.
 * **Locals.** Each procedure call has its own frame of word-valued local variables.
 * **Word size.** `State.peak` records the largest value ever computed, including every
   intermediate value of every expression. Theorem W is a bound on `peak`.
@@ -286,7 +296,7 @@ OM/
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
 | M4 ✅ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13), against the top structure's contracts | invariant reasoning | medium |
 | M5 ✅ | Top-structure lemmas T0–T5, (Q); the contracts; the parameter rule (§14) | the largest proof | **high** |
-| M6 | Level M programs and simulation; assembly; **Theorems A and B at Level M** ✅, memory ✅ (§15); **Theorem W** not proved (§2.1) | mechanical, but long | medium |
+| M6 | Level M programs and simulation; assembly; **Theorems A and B at Level M** ✅, memory ✅ (§15); **Theorem W**: stored values ✅ (`theoremW_stored`), computed values (the peak) not proved (§2.1) | mechanical, but long | medium |
 
 The order is chosen so that the riskiest mathematics (M5) is attacked on a validated
 model, and the mechanical machine layer (M6) comes last, when Level F is stable.
@@ -323,7 +333,8 @@ bucket, the most recently added chunk is popped first (previously: Python set or
 * The cost model's assumptions (§2.1):
   * unit cost per instruction, including `*`, `/`, shifts and `msb`;
   * words are unbounded naturals at unit cost. The intended justification, words of
-    `O(log N + log #ops)` bits, is Theorem W, which is **not proved**;
+    `O(log N + log #ops)` bits, is Theorem W; its part for stored values is proved
+    (`theoremW_stored`), the bound on every computed value (the machine's peak) is **not proved**;
   * constant-time-initializable arrays.
 * The **user interface**: operations take handles of live elements (`PROOF.md` §1). Invalid
   calls are outside the theorem.
@@ -870,8 +881,8 @@ and `B_g = HC + log₂ PC + 2`, as §14 planned (`B_g ≈ 30L`). Only the parame
 2,429 to 1,290 at `L = 41`; the measured peak at 4 million elements from 1,461 to 780 bits. The step
 bound does not depend on the label widths.
 
-**Not proved: Theorem W** (§2.1). Unit-cost unbounded words remain an assumption of the cost
-model.
+**Theorem W** (§2.1): the stored values are proved (`theoremW_stored`), the machine's peak is not.
+Unit-cost unbounded words remain an assumption of the cost model.
 
 ---
 

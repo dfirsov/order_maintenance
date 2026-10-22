@@ -1,14 +1,11 @@
 # Theorem W (word size): plan
 
-Status (2026-10-23): stages B1 and B2 done. `lean/OM/Proof/Word/` proves that a core insertion
-keeps the stored-value bound `WB K` (`insertAfter_wb`), and so do deletions (`markDead_wb`) and
-order queries, from the cost invariant `CostInv`, relative to one contract for the top structure
-(`TopWB`: its insertion of a split's chunks and its job steps). Stage B2 proves that contract for the
-cost proof's top invariant (`topWB`; `insertAfter_wb_top` then needs only `CostInv`, the node budget
-`NodeB` and numeric room), and that building a fresh core keeps `WB` (`initStep_wb`,
-`prepareStep_wb`, `initCore_wb`, `newCore_wb`). Not yet proved: the wrapper's `OMB` on reachable
-states (stage B3), and the machine's peak (option A). Nothing here is used by Theorems A and B.
-Design and plan: §6.
+Status (2026-10-23): option (B) done (stages B1–B3). `theoremW_stored`
+(`lean/OM/Proof/Word/Wrap.lean`) proves `OMB` on every wrapper state reached by initialization and
+`t` valid operations: every value stored in either core is below `2^K`, `K = 64·L` for the larger `L`
+of the two cores, handles excepted; element indices and the cursor are below `2^K`; handles and
+counters are at most `t`. Not proved: the machine's peak (option A: the intermediate values of
+expressions and the loop locals). Nothing here is used by Theorems A and B. Design: §6.
 
 ## 1. Statement
 
@@ -39,7 +36,9 @@ WB (wK P) s                       -- every field of every record, live or dead, 
 OMB (wK P) n om                   -- both cores WB; element indices < 2^(64L); handles, live, nextHandle,
                                   --   rebuilds ≤ n = number of operations so far
 ```
-The intended theorem: `OMB` holds on every reachable wrapper state. Both definitions are in `Defs.lean`.
+Both definitions are in `Defs.lean`. **Proved** (`theoremW_stored`, `Word/Wrap.lean`): for `4 ≤ K_B < 2^512`
+and every `om` with `ReachW K_B t om Sp` (reached by `OM.init` and `t` valid `OM.apply` steps),
+`OMB (wKom om) t om`, where `wKom om = max (wK cur.P) (wK nxt.P) = 64·max(L_cur, L_nxt)`.
 
 **Machine (the peak)**: for `Reach KB m Sp` reached after `n` operations, running `opS op` gives
 `m'.peak < 2^(2·64·L) + 4·n` (the constant is to be fixed). Here `L` is the larger of the two
@@ -286,6 +285,24 @@ reachable state are discharged where the cost proof already holds that state's i
   core with `topPI`, or ready), `initCore_wb` (eager: the loop of stages, `wb_initLoop`; lazy:
   `wb_prepStart`) and `newCore_wb`. `room_wK` gives `LabRoom`, `TopRoom` and `PrepRoom` at
   `K = wK = 64·L` for the proof parameters.
+* **Stage B3: the wrapper** (`Word/Serve.lean`, `Word/Wrap.lean`). Each core is bounded at its own
+  word size `wK c.P` (fixed for the core's life; `WB.mono` lifts it to the larger one).
+  - `InService.wb`: an insertion into a core in service keeps `WB (wK c.P)`. `InService` (Level M's
+    context of every core insertion of the wrapper: `CoreOK` with `CostInv`, the room
+    `count + 1 ≤ N`, and `Mc`) gives `insertAfter_wb_top` all its hypotheses: `NodeB` and
+    `Gs.size ≤ 2 + 2·count` from `Mc`, `E.size ≤ count + 1` (`E_size_le`), and all numeric conditions
+    are below `2^(2L + 8)` (`room_counts`). `newCore_wK`, `PrepM.wb`, `copy_wb` do the same for a
+    fresh core, a preparation step and a copy step.
+  - `WBW t om nx`: both cores bounded at their `wK`, the index arrays and the cursor at their core's
+    `wK`, every handle stored in a core `≤ nextHandle` (the insertion frame `InsFrame.h`, through
+    `InService.hframe`; preparation steps keep `E`, `pres_prepareStep`), the counters `≤ t`.
+  - `loop_wb` follows the rebuild loop along Level M's loop context `RLSafe` (from `loop_M`):
+    `PrepM` for each preparation step, `CopyOK` (hence `InService` at `nxt`'s tail) for each copy
+    step, and the swap (at `cursor = NIL`; `curIdx := nxtIdx`). `rebuild_wb` adds the rebuild start
+    (`wb_prepStart`). `mirror_wbw` and `mirrorDel_wbw` cover the mirrored operations (`MInv.mirror`).
+  - `insert_step`, `delete_step`, `apply_step`, `init_step` keep `MInv` (as `insertW_ok`,
+    `deleteW_ok` and `initW_ok` do at Level F) together with `WBW`; `reachW_inv` is the induction
+    over `ReachW`, and `theoremW_stored` lifts `WBW` to `OMB (wKom om) t`.
 
 **The statement** (`insertAfter_wb`): `CostInv` and the hypotheses of `insertAfter_cost`, `WB K s`,
 `LabRoom K s.P`, `4·E.size + 8 ≤ 2^K`, `Gs.size + 2 ≤ 2^K`, `2·count + 4 ≤ 2^K`, `TopWB K TI μ`, the
@@ -300,22 +317,8 @@ last two are in `Mc` (`Impl/Caps.lean`), a predicate on Level F cores that the L
 **Lines.** Stage B1: about 1,730 lines (`Pres` 483, `PQ` 58, `Core` 503, `Hooks` 313, `Insert` 371).
 Stage B2: about 1,480 lines (`TopB` 540, `TopStep` 284, `TopStart` 448, `TopWB` 95; `Insert` +113
 net: the new `TopWB`, the node budget in `reservation_wb`, the frame lemmas `ts_*` for `TopSame`).
+Stage B3: about 730 lines (`Serve` 180, `Wrap` 551). **Total for (B): about 3,940 lines.**
 
-**What remains for (B)**, with a revised estimate:
-* **B3, the wrapper: `OMB`** on every reachable wrapper state (`MInv om Sp`, the Level M invariant,
-  `Impl/OpsM.lean`), by induction over the operations. Each core is bounded at its own
-  `K_c = wK c.P` (fixed for the core's life; `WB` is monotone in `K`), and `OMB` takes the larger of
-  the two:
-  - a core insertion from `InService` (`insertAfter_wb_top`, its numeric conditions from `Mc`,
-    `count + 1 ≤ N` and `E.size ≤ count + 1`, as `insertAgreeM` gets them in `InService.insert`);
-    deletions (`markDead_wb`), a fresh `nxt` (`newCore_wb`), its preparation (`prepareStep_wb`, with
-    `topPI` from `PrepM`), the swap;
-  - `OM.apply`'s structure: the insertion into `cur` (`MInv.cur`), the mirrored insertion and
-    deletion in `nxt` (`MInv.mirror`, `MInv.mirrorDel`), the rebuild step and its loop (the loop
-    context `RLSafe`/`CopyOK` of `insert_safe`/`rebuild_MX`, which give `InService` for each copy
-    and `PrepM` for each preparation step);
-  - the element index arrays (`curIdx`, `nxtIdx`: element indices), the cursor, and the counters and
-    handles `≤ n` (each operation adds at most one; `Elem.h` is a handle below `nextHandle`, which
-    needs a frame fact for `h` across an insertion).
-  About 900–1,200 lines; the rebuild loop is the largest part.
-* **Revised total for (B): about 4,100–4,400 lines** (B1 1,730 and B2 1,480 done).
+**What remains**: option (A), the machine's peak (§3, §4): a bound on every intermediate value of an
+expression and on the loop locals of the machine program, given `WB` as the bound of every value read
+from memory (approach (i′) of §4). Estimate as in §5, minus (B): about 4,500–7,000 lines.
