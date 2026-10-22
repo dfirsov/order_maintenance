@@ -1,8 +1,11 @@
 # Theorem W (word size): plan
 
-Status (2026-10-22): groundwork only. `lean/OM/Proof/Word/Defs.lean` defines the stored-value
-predicate and proves that the proof parameters lie below the candidate bound. No preservation
-proofs exist yet. Nothing here is used by Theorems A and B.
+Status (2026-10-23): stage B1 done. `lean/OM/Proof/Word/` proves that a core insertion keeps the
+stored-value bound `WB K` (`insertAfter_wb`), and so do deletions (`markDead_wb`) and order queries,
+from the cost invariant `CostInv`, relative to one contract for the top structure (`TopWB`: its
+insertion of a split's chunks and its job steps). Not yet proved: `TopWB` itself (stage B2), the
+wrapper's `OMB` (stage B3), and the machine's peak (option A). Nothing here is used by Theorems A
+and B. Design and plan: §6.
 
 ## 1. Statement
 
@@ -205,3 +208,65 @@ existing proofs instead of adding new ones.
 **Recommendation.** Do (B) first, with the `Pres` framework at Level F (`pqScan`, the
 one site that blocked it, is removed). Do it so that `WB` is exactly the leaf-bound hypothesis that (i′) needs, then do (A) with
 approach (i′). Avoid (ii): it puts Theorems A and B at risk.
+
+## 6. B: proof design
+
+**Shape.** `WB K` is not added to the cost invariant, and no existing proof changes. Every write
+lemma takes the bound of the value it writes as an explicit hypothesis; the bounds that need a
+reachable state are discharged where the cost proof already holds that state's invariants:
+
+* **The framework** (`Word/Pres.lean`). `HT K P0 m Q` is a Hoare triple at fixed parameters `P0`:
+  from a state with `WB K`, every run of `m` (normal or ended by a guard) ends in such a state, and a
+  normal result satisfies `Q`. Reads return bounded values (the result predicate of `get` is `WB K`
+  itself), so a value read from the state and written back needs no invariant (class R). The tactic
+  `ht` decomposes a computation like `pres`; `wbx`/`wbv` close the update goals component by
+  component (`setX`, `modify`, `push`, `set!`, records updated with bounded values).
+* **Classes R and Lab** (`Word/PQ.lean`, `Word/Core.lean`). Triples with no state hypothesis: every
+  queue operation, `between`/`after`/`before`, `labBefore`/`labAfter`, the push labels, `moveElem`,
+  `moveUnit`, `removeChunk`, `markDead`, `key`/`order`. Labels need only `LabRoom K P`
+  (`B_e, B_g ≤ K`, `K ≥ 1`).
+* **Class Sz** (`Word/Hooks.lean`). A live group's size is its run in the element list `L`
+  (`GInv.sz`), a live chunk's is its element count (`CInv.csz`); both are at most `|L|`. A group move
+  adds one element to a live sibling (`≤ |L| + 1`); a chunk move adds at most three live groups to a
+  live sibling (`≤ 4·|L|`, `unit_live`). These facts are read inside the cost proof's own hooks for
+  extra invariants: `XGroup`/`XSteps` for the group drive (`xgroup_wb`), `CXSteps` for the chunk
+  drive (`cxsteps_wb`; `CXSteps.andRun` gets the move's labels from the run that `cxsteps_linv`
+  provides), and `CostInv` for the insertion and its chunk-size update.
+* **Class F.** The element index is `E.size`. A group phase allocates at most two groups, at its one
+  split start; the hook predicate `XG` records the room (`Gs.size ≤ G0`, or every quiet group is below
+  `G`, so no split can start). A chunk split adds two chunks; the room is read off the state after
+  it, whose `CountInv` gives `C.size ≤ 2 + 2·count` (sizes only grow, `reservation_wb`).
+* **Dead records.** `WB` covers every record by induction; the cost invariants are used only at the
+  moment of a write, and every Sz/F write of a reachable step targets a live record (the hook
+  contexts say so). A record freed and reused through `freeG` is rewritten by `allocGroup` with
+  bounded values.
+* **Composition** (`Word/Insert.lean`). `background_wb` and `insertAfter_wb` follow `background_ok`
+  and `insertAfter_cost` line by line, running the phase lemmas (`groupPhase_ok`, `cinv_drive`,
+  `reservation_ok` with `resInv_step`) with the extra hooks; each phase's end state is identified
+  with the cost proof's by its run equation.
+* **The top structure** enters through `TopWB K TI`: `start` (the run of `insertAround` from the
+  state after `linkChunkPair`, with the context of `TopContract.start`) and `step` (`jobStep`, with
+  `INV`, `TI` and the running job). Both are stage B2; their context includes `TI`, hence `TopInv`,
+  which gives the Tag bounds (`Shape.tags`) and the weights (`Timing.wts`).
+
+**The statement** (`insertAfter_wb`): `CostInv` and the hypotheses of `insertAfter_cost`, `WB K s`,
+`LabRoom K s.P`, `4·E.size + 8 ≤ 2^K`, `Gs.size + 2 ≤ 2^K`, `2·count + 4 ≤ 2^K` and `TopWB K TI` give
+`WB K` after the insertion. At `K = wK P = 64·L` the numeric conditions follow from `count ≤ N`,
+`E.size = count + 1` and `Gs.size ≤ 2 + 2·count` (the last one is in the Level M predicate `Mc`,
+`Impl/Caps.lean`; stage B3 needs it at Level F or reads it from `Reach`).
+
+**Lines.** Stage B1: about 1,730 lines (`Pres` 483, `PQ` 58, `Core` 503, `Hooks` 313, `Insert` 371).
+
+**What remains for (B)**, with a revised estimate:
+* **B2, the top structure: `TopWB` for `TIat TopInv P`**, plus `initStep`/`initTop`/`prepareStep`
+  (the preparation's tag and heights) and `resetTop`. Sites: tags in `insertAround` and `drainStep`
+  (the guard bounds a tag by a neighbour's tag when there is one; the last chunk needs
+  `tag = tagF < 2^(Hβ)` from `Shape` and `(H + 2)·β ≤ K`); table labels (`roomNextTo`, `evenTable`:
+  Lab, `< 2^β`); weights (`walkBody`'s `weight + 2` and `startDrain`'s sums: `Timing.wts`, true weight
+  `≤` chunk count); fresh nodes (`newNode`: `NodeB`, `nodes.size ≤ nbMax`); the rest R. The `HT`
+  framework needs list-valued node fields (`children`, `table`, `inTables`, `side`). About
+  1,000–1,500 lines.
+* **B3, the wrapper: `OMB`** on every reachable wrapper state: both cores (`insertAfter_wb` for `cur`
+  and `nxt`, a fresh core from `params_wB`, `initState_wB` and B2's preparation), the element index
+  arrays, handles and counters `≤ n`, and the numeric conditions above. About 400–700 lines.
+* **Revised total for (B): about 3,100–3,900 lines** (B1 1,730 done), inside the estimate of §5.
