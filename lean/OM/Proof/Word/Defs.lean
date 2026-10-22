@@ -318,7 +318,7 @@ theorem initState_wB {K : Nat} {P : Params} (hP : ParamsB K P) (hBe : P.B_e ≤ 
   · refine getX_of (nodeB_default K) (fun x hx => ?_)
     simp only [initState, List.mem_toArray, List.mem_cons, List.not_mem_nil, or_false] at hx
     subst hx; exact nodeB_default K
-  · simp only [initState]; exact ⟨h1, h1, h1, h1, h1, p0, p0, p0, p0⟩
+  · simp only [initState]; exact ⟨h1, h1, h1, h1, h1, p0, p0, p0⟩
   · simp only [initState]
     exact ⟨arrB_empty K, arrB_empty K, arrB_empty K, arrB_empty K, arrB_empty K, arrB_empty K⟩
 
