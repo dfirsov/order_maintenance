@@ -90,18 +90,16 @@ Classes:
 | `walkBody` (Top) | 1 | `weight + 2` | Sz: `Timing.wts` (stored weight + pending 2 = true weight `tw ≤ #chunks`); for non-roots also `wA`/`wB` (`≤ Wd h + 2 = 2a^h + 2 ≤ 2^(L+5)`) |
 | `fundLoop`, `afterDrain`, `jobStep` (Top) | 8 | job pc (`k + 1 ≤ s`, `l + 1 ≤ H + 1`), path copy, `first/last := y/z` | R |
 | `pqLinkAfter`, `pqAdd`, `pqDel` (PQ) | 24 | bucket links, chunk links, `pqWhere := s`, `pqHi/pqLo` | R / F; bucket `s` = a quiet chunk's size: Sz (`PQC`, Lemma C) |
-| `pqInsertScan` (PQ) | 1 | `pqScan + 1` | **Ctr, flagged** |
+| `pqInsertScan` (PQ) | 0 | none (its counter `pqScan` was removed on 2026-10-22) | |
 | `copyAtCursor`, `mirrorInsert/Delete`, `swap` (Wrapper) | 6 | `nxtIdx`, `cursor`, `cur/curIdx := nxt/nxtIdx` | F (element index), R |
 | `rebuildStep` (Wrapper) | 2 | new core, `rebuilds + 1` | `params_wB`, `initState_wB` + `initTop`; **Ctr** (≤ n) |
 | `insert`, `delete` (Wrapper) | 5 | `Elem.h := hy`, `nextHandle + 1`, `curIdx`, `live ± 1` | handle and counters: **Ctr** (≤ n); F |
 
 **Sites with no existing invariant:**
-1. **`pqScan`** is the queue's slow-path counter (`pqInsertScan`; compiled as `.wsc .pqScan (.sc
-   .pqScan + 1)` in `Impl/PQ.lean`). It is never read. `pqEnterIfAbove` can take the slow path, so
-   the counter grows with history, and no invariant bounds it. There are two ways to deal with it:
-   (a) remove it from Level F and Lang. It is instrumentation, and the change touches
-   `Model/PQ.lean`, `Impl/PQ.lean` and the `SF` enumeration, about 100 lines. Or (b) prove
-   `pqScan ≤ T·n`, a history bound like the handles'. **Recommended: (a).**
+1. **`pqScan`** (done, 2026-10-22). The queue's slow-path counter was incremented by `pqInsertScan`
+   and never read, so it grew with the history and no invariant bounded it. It was removed from
+   Level F (`Model/State.lean`, `Model/PQ.lean`), from `SF`, from the compiled layout and from the
+   machine program (option (a)); the step bounds did not change.
 2. **`fallbacks`**: incremented only by FALLBACK. It stays 0 on reachable states, and it is never
    written by the machine program. This needs a one-line frame fact; it is new but trivial.
 3. **Wrapper counters** (`live`, `nextHandle`, `rebuilds`) ≤ n, and handles `Elem.h < nextHandle`.
@@ -190,7 +188,6 @@ and `OM/Impl` (20.8k lines, 86 agreement theorems).
   about 1,500–2,500 lines;
 * Sz/Tag sites tied to the cost and top invariants, plus the two arithmetic lemmas: about 500–800
   lines;
-* `pqScan` removal (a): about 100 lines;
 * wrapper `OMB` and the counters, connected to `MInv`/`Reach`: about 400–700 lines.
 
 **Total: about 3,000–4,500 lines.**
@@ -205,6 +202,6 @@ and `OM/Impl` (20.8k lines, 86 agreement theorems).
 **Total: about 7,500–11,500 lines.** Approach (ii) would be of similar size, but it rewrites
 existing proofs instead of adding new ones.
 
-**Recommendation.** Do (B) first, with the `Pres` framework at Level F, starting with removing
-`pqScan`. Do it so that `WB` is exactly the leaf-bound hypothesis that (i′) needs, then do (A) with
+**Recommendation.** Do (B) first, with the `Pres` framework at Level F (`pqScan`, the
+one site that blocked it, is removed). Do it so that `WB` is exactly the leaf-bound hypothesis that (i′) needs, then do (A) with
 approach (i′). Avoid (ii): it puts Theorems A and B at risk.

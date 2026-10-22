@@ -649,6 +649,8 @@ reasoning for about 140 procedures, so M6 inserts a small language between the t
   keeps its loop, guarded by the fast-path test. Its agreement lemma covers the case where no
   scan is needed. The algorithm only adjusts a chunk's size by `+1` (the `−1` call is
   unreachable under invariant F), and that adjustment never scans (K2).
+  The scan counts nothing: an earlier slow-path counter (`pqScan`) was never read and grew with
+  the history, so it was removed (2026-10-22; the bounds did not change).
 * Capacities are invariants of each module. For the queue, `PQCaps`: stored chunks are below the
   chunk capacity, and stored buckets are below the bucket capacity. Each agreement lemma assumes
   them and re-establishes them.
@@ -851,7 +853,7 @@ lists of up to 160 entries, and a drain start nests several of them (`sdBound`).
 fixed by the proof parameters, the same for every `N` and every history.
 
 **Memory (`Memory.lean`).** `memOf κ` counts the cells of all the arrays `Enc` asks for. For the
-proof parameters it is `5344 + 37N + 671·cb + cb·H + 2596·nbMax + 2H` (`memOf_eq`), with
+proof parameters it is `5343 + 37N + 671·cb + cb·H + 2596·nbMax + 2H` (`memOf_eq`), with
 `nbMax = H + 2 + (13H + 2)·cb` and `cb ≤ 2 + 16N/L²`, so `nbMax = O(N/L)`. `core_mem`: at most
 `40000·N` cells for `N ≥ 64` (measured: about `13700·N` at `N = 64`, `2000·N` at `N = 10⁹`; the
 per-node lists of 162 or 322 entries dominate). `reach_mem`: in a reachable state, `cur`'s slot holds
