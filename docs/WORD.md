@@ -1,11 +1,14 @@
 # Theorem W (word size): plan
 
-Status (2026-10-23): stage B1 done. `lean/OM/Proof/Word/` proves that a core insertion keeps the
-stored-value bound `WB K` (`insertAfter_wb`), and so do deletions (`markDead_wb`) and order queries,
-from the cost invariant `CostInv`, relative to one contract for the top structure (`TopWB`: its
-insertion of a split's chunks and its job steps). Not yet proved: `TopWB` itself (stage B2), the
-wrapper's `OMB` (stage B3), and the machine's peak (option A). Nothing here is used by Theorems A
-and B. Design and plan: §6.
+Status (2026-10-23): stages B1 and B2 done. `lean/OM/Proof/Word/` proves that a core insertion
+keeps the stored-value bound `WB K` (`insertAfter_wb`), and so do deletions (`markDead_wb`) and
+order queries, from the cost invariant `CostInv`, relative to one contract for the top structure
+(`TopWB`: its insertion of a split's chunks and its job steps). Stage B2 proves that contract for the
+cost proof's top invariant (`topWB`; `insertAfter_wb_top` then needs only `CostInv`, the node budget
+`NodeB` and numeric room), and that building a fresh core keeps `WB` (`initStep_wb`,
+`prepareStep_wb`, `initCore_wb`, `newCore_wb`). Not yet proved: the wrapper's `OMB` on reachable
+states (stage B3), and the machine's peak (option A). Nothing here is used by Theorems A and B.
+Design and plan: §6.
 
 ## 1. Statement
 
@@ -244,29 +247,75 @@ reachable state are discharged where the cost proof already holds that state's i
   and `insertAfter_cost` line by line, running the phase lemmas (`groupPhase_ok`, `cinv_drive`,
   `reservation_ok` with `resInv_step`) with the extra hooks; each phase's end state is identified
   with the cost proof's by its run equation.
-* **The top structure** enters through `TopWB K TI`: `start` (the run of `insertAround` from the
-  state after `linkChunkPair`, with the context of `TopContract.start`) and `step` (`jobStep`, with
-  `INV`, `TI` and the running job). Both are stage B2; their context includes `TI`, hence `TopInv`,
-  which gives the Tag bounds (`Shape.tags`) and the weights (`Timing.wts`).
+* **The top structure** enters through `TopWB K TI μ` (`Word/Insert.lean`): `start` (the run of
+  `insertAround` from the state after `linkChunkPair`) and `step` (`jobStep`). Both take the top
+  invariant of the state *after* the operation as a hypothesis (the reservation's iteration
+  invariant `ResInv` holds there), and it bounds the tags the operation writes. `step` also takes
+  room for two fresh nodes (`nodes.size + 2 ≤ 2^K`) and `C.size ≤ 2^K` (for the weights), and
+  returns that `nodes.size + μ` does not grow; `start` returns `nodes.size` unchanged. With these,
+  `reservation_wb` keeps a node budget `nodes.size + μ ≤ NB0 + J·C.size` (the shape of `NodeB`,
+  `Impl/Caps.lean`): a split start adds two chunks and a job of measure at most `J` (from
+  `RoundAt`), and a job step does not grow the sum.
+* **Stage B2: `topWB`** (`Word/TopWB.lean`) proves `TopWB K (TIat TopInv P) topMu`, given
+  `TopRoom K P` (`β ≤ K`, `H·β ≤ K`) and `K ≥ 1`. It follows the cost proof's own case analysis
+  (`top_step`, `walk_run`, `fund_run`) and proves `WB` of the explicit final states the cost proof
+  computes (`Word/TopB.lean`, `Word/TopStep.lean`): `copyC` (a copy step), `wiC` (the walk's weight
+  update), `sdS` (a drain start, through its stages `sd1 … sd10`), `dsS` (a sweep), `fdS` (the end of
+  a drain). By class:
+  - **Tag**: a tag in the state after the step spells the chunk's path (`Shape.tags`), so it is
+    below `2^(H·β)` (`tag_lt_of_topInv`, from `tagUp_lt` and `ShapeT.digit_lt`). A sweep writes the
+    tag of `dsY ∈ cl`; a split writes those of the two new chunks, and `insertAroundFinish` leaves
+    the chunk records alone (`cs_insertAroundFinish`), so their final tags are the written ones.
+  - **Sz**: the walk's `weight + 2` is the true weight (`Timing.wts`; the walk node is on the
+    pending chain), at most `|cl| < C.size` (`walk_weight`); a drain start's new weights are sums of
+    children's stored weights, at most their true weights, which add up to the drained node's
+    (`Shape.tw_kids`, `Shape.tw_one`; `walk_sum`).
+  - **F**: the two fresh nodes of a drain start (the `step` hypothesis) and the new chunks of a split
+    (the `start` hypothesis); the node budget across a step is `node_step`.
+  - **Lab**: `roomL`/`roomNextTo` (below the upper neighbour: a label or `2^β`), `evenTable` (below
+    `2^β`), the centre `2^(β-1)`.
+  - **R**: node indices, entries, side keys (`drainSide_keys`), sublists (`filter`, `erase`,
+    `assocErase`, `replace1`), `NIL`.
+  The split's insertion (`Word/TopStart.lean`, `insertAround_wb`) uses `HT` triples for its
+  read-only part (`ht_insertAroundPrep`, `ht_roomNextTo`) and its finish (`ht_insertAroundFinish`,
+  `ht_tableInsert`).
+* **The construction** (`Word/TopStart.lean`): `initStep_wb` follows the stages of `Stage`
+  (`Top/PrepStage.lean`): a chain node of index `nodes.size = h`, the prep tag
+  `chainTag P h < 2^(hβ)`, the next height `≤ H + 1`, and at the end the stored path and tag
+  (`PrepRoom K P` adds `1 ≤ H`, `1 ≤ β` and `H + 1 < 2^K` to `TopRoom`). Then `prepareStep_wb` (on a
+  core with `topPI`, or ready), `initCore_wb` (eager: the loop of stages, `wb_initLoop`; lazy:
+  `wb_prepStart`) and `newCore_wb`. `room_wK` gives `LabRoom`, `TopRoom` and `PrepRoom` at
+  `K = wK = 64·L` for the proof parameters.
 
 **The statement** (`insertAfter_wb`): `CostInv` and the hypotheses of `insertAfter_cost`, `WB K s`,
-`LabRoom K s.P`, `4·E.size + 8 ≤ 2^K`, `Gs.size + 2 ≤ 2^K`, `2·count + 4 ≤ 2^K` and `TopWB K TI` give
-`WB K` after the insertion. At `K = wK P = 64·L` the numeric conditions follow from `count ≤ N`,
-`E.size = count + 1` and `Gs.size ≤ 2 + 2·count` (the last one is in the Level M predicate `Mc`,
-`Impl/Caps.lean`; stage B3 needs it at Level F or reads it from `Reach`).
+`LabRoom K s.P`, `4·E.size + 8 ≤ 2^K`, `Gs.size + 2 ≤ 2^K`, `2·count + 4 ≤ 2^K`, `TopWB K TI μ`, the
+node budget `nodes.size + μ ≤ NB0 + J·C.size` and `NB0 + J·(2 + 2·(count + 1)) + 2 ≤ 2^K` give `WB K`
+after the insertion. `insertAfter_wb_top` is the instance at `TIat TopInv P`, `topMu`, `topJ P`, with
+the budget `NodeB s` (`NB0 = nb0 P = H + 2`) and `TopRoom K P`. At `K = wK P = 64·L` the numeric
+conditions follow from `count ≤ N`, `E.size = count + 1`, `Gs.size ≤ 2 + 2·count` and `NodeB`; the
+last two are in `Mc` (`Impl/Caps.lean`), a predicate on Level F cores that the Level M invariant
+`MX` carries for `cur` and, once copying has started, for `nxt` (`InService` bundles it with
+`CoreOK` for every core insertion of the wrapper).
 
 **Lines.** Stage B1: about 1,730 lines (`Pres` 483, `PQ` 58, `Core` 503, `Hooks` 313, `Insert` 371).
+Stage B2: about 1,480 lines (`TopB` 540, `TopStep` 284, `TopStart` 448, `TopWB` 95; `Insert` +113
+net: the new `TopWB`, the node budget in `reservation_wb`, the frame lemmas `ts_*` for `TopSame`).
 
 **What remains for (B)**, with a revised estimate:
-* **B2, the top structure: `TopWB` for `TIat TopInv P`**, plus `initStep`/`initTop`/`prepareStep`
-  (the preparation's tag and heights) and `resetTop`. Sites: tags in `insertAround` and `drainStep`
-  (the guard bounds a tag by a neighbour's tag when there is one; the last chunk needs
-  `tag = tagF < 2^(Hβ)` from `Shape` and `(H + 2)·β ≤ K`); table labels (`roomNextTo`, `evenTable`:
-  Lab, `< 2^β`); weights (`walkBody`'s `weight + 2` and `startDrain`'s sums: `Timing.wts`, true weight
-  `≤` chunk count); fresh nodes (`newNode`: `NodeB`, `nodes.size ≤ nbMax`); the rest R. The `HT`
-  framework needs list-valued node fields (`children`, `table`, `inTables`, `side`). About
-  1,000–1,500 lines.
-* **B3, the wrapper: `OMB`** on every reachable wrapper state: both cores (`insertAfter_wb` for `cur`
-  and `nxt`, a fresh core from `params_wB`, `initState_wB` and B2's preparation), the element index
-  arrays, handles and counters `≤ n`, and the numeric conditions above. About 400–700 lines.
-* **Revised total for (B): about 3,100–3,900 lines** (B1 1,730 done), inside the estimate of §5.
+* **B3, the wrapper: `OMB`** on every reachable wrapper state (`MInv om Sp`, the Level M invariant,
+  `Impl/OpsM.lean`), by induction over the operations. Each core is bounded at its own
+  `K_c = wK c.P` (fixed for the core's life; `WB` is monotone in `K`), and `OMB` takes the larger of
+  the two:
+  - a core insertion from `InService` (`insertAfter_wb_top`, its numeric conditions from `Mc`,
+    `count + 1 ≤ N` and `E.size ≤ count + 1`, as `insertAgreeM` gets them in `InService.insert`);
+    deletions (`markDead_wb`), a fresh `nxt` (`newCore_wb`), its preparation (`prepareStep_wb`, with
+    `topPI` from `PrepM`), the swap;
+  - `OM.apply`'s structure: the insertion into `cur` (`MInv.cur`), the mirrored insertion and
+    deletion in `nxt` (`MInv.mirror`, `MInv.mirrorDel`), the rebuild step and its loop (the loop
+    context `RLSafe`/`CopyOK` of `insert_safe`/`rebuild_MX`, which give `InService` for each copy
+    and `PrepM` for each preparation step);
+  - the element index arrays (`curIdx`, `nxtIdx`: element indices), the cursor, and the counters and
+    handles `≤ n` (each operation adds at most one; `Elem.h` is a handle below `nextHandle`, which
+    needs a frame fact for `h` across an insertion).
+  About 900–1,200 lines; the rebuild loop is the largest part.
+* **Revised total for (B): about 4,100–4,400 lines** (B1 1,730 and B2 1,480 done).
