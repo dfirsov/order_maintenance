@@ -1,0 +1,793 @@
+<title>Order Maintenance Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+<style>
+/* Layout: a lab bench. Controls and status on top, the four-level structure drawn as one
+   aligned diagram (top tree as stacked range bars over chunks, groups, elements), and the
+   readouts for the last operation underneath. State colours are shared by every level:
+   amber = fresh sibling being filled, violet = being drained, hatched = dead. */
+:root {
+  --paper: #f3f5f6;
+  --surface: #ffffff;
+  --ink: #17202a;
+  --muted: #5a6672;
+  --rule: #d3dae0;
+  --accent: #1d5bb8;
+  --amber: #b9740f;
+  --violet: #8b3ea3;
+  --danger: #c0392b;
+  --ok: #2e7a4e;
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f151b; --surface: #161f28; --ink: #e2e8ee; --muted: #93a0ad; --rule: #2a3643;
+    --accent: #6fa3f2; --amber: #e2a43e; --violet: #c67fdb; --danger: #ef6b5e; --ok: #5dbf84;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f151b; --surface: #161f28; --ink: #e2e8ee; --muted: #93a0ad; --rule: #2a3643;
+  --accent: #6fa3f2; --amber: #e2a43e; --violet: #c67fdb; --danger: #ef6b5e; --ok: #5dbf84;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  background: var(--paper); color: var(--ink); font: 14px/1.45 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 32px;
+}
+.wrap { max-width: 1400px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+h1 { font: 600 28px/1.1 var(--font-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 4px 0 0; max-width: 70ch; }
+h2 { font: 600 17px/1.2 var(--font-display); margin: 0 0 8px; }
+.eyebrow { font: 500 11px/1 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono, code { font-family: var(--font-data); font-size: 12.5px; }
+
+.bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.cluster { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cluster + .cluster { padding-left: 14px; border-left: 1px solid var(--rule); }
+button, select, input[type=number] {
+  font: 500 13px/1 var(--font-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px;
+}
+input[type=number] { width: 4.6em; padding: 6px; font-family: var(--font-data); }
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+kbd { font: 500 11px var(--font-data); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--muted); }
+label.f { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+
+details.params { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px; }
+details.params summary { cursor: pointer; font-weight: 500; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 10px; align-items: center; }
+.derived { color: var(--muted); margin-top: 8px; }
+
+.status { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; gap: 6px; align-items: baseline; padding: 5px 10px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--rule); font-size: 13px; }
+.pill b { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; }
+.pill.warn { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, var(--surface)); }
+.pill.bad { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--surface)); }
+.pill.good { border-color: color-mix(in srgb, var(--ok) 60%, var(--rule)); }
+
+.stage { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 0 6px; }
+.stage-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; padding: 0 14px 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12.5px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--muted); }
+.scroller { overflow-x: auto; overflow-y: hidden; }
+svg#viz { display: block; }
+svg text { font-family: var(--font-data); font-size: 10.5px; fill: var(--ink); pointer-events: none; }
+svg .lvl { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+svg .q { fill: color-mix(in srgb, var(--ink) 6%, var(--surface)); stroke: color-mix(in srgb, var(--ink) 35%, var(--surface)); }
+svg .o { fill: color-mix(in srgb, var(--amber) 26%, var(--surface)); stroke: var(--amber); }
+svg .s { fill: color-mix(in srgb, var(--violet) 22%, var(--surface)); stroke: var(--violet); }
+svg .ghost { fill: color-mix(in srgb, var(--violet) 10%, var(--surface)); stroke: var(--violet); stroke-dasharray: 4 3; }
+svg .dead { fill: url(#hatch); stroke: color-mix(in srgb, var(--ink) 30%, var(--surface)); }
+svg .el { fill: var(--ink); cursor: pointer; }
+svg .el.tomb { fill: var(--surface); stroke: var(--muted); }
+svg .el.head { fill: var(--muted); }
+svg .el.sel { fill: var(--accent); stroke: var(--accent); }
+svg .el.sel2 { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+svg .chg { stroke: var(--accent) !important; stroke-width: 2 !important; }
+svg .fill { fill: color-mix(in srgb, var(--ink) 45%, var(--surface)); }
+svg .fill.over { fill: var(--amber); }
+svg .tick { stroke: var(--danger); stroke-width: 1.2; }
+svg .guide { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; }
+svg .hit { fill: transparent; cursor: pointer; }
+svg .hatchline { stroke: color-mix(in srgb, var(--ink) 25%, var(--surface)); stroke-width: 1; }
+
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.log { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 340px; overflow-y: auto; }
+.log li { padding-left: 10px; border-left: 3px solid var(--rule); }
+.log li.k-insert { border-color: var(--accent); }
+.log li.k-group { border-color: var(--amber); }
+.log li.k-chunk { border-color: var(--violet); }
+.log li.k-top { border-color: color-mix(in srgb, var(--violet) 50%, var(--accent)); }
+.log li.k-fallback { border-color: var(--danger); color: var(--danger); }
+.log li.k-note { border-color: transparent; color: var(--muted); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--font-data); font-size: 12.5px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.answer { font: 500 15px var(--font-data); }
+.pq { display: grid; gap: 4px; }
+.pqrow { display: grid; grid-template-columns: 3.2em 1fr; gap: 8px; align-items: center; font-family: var(--font-data); font-size: 12.5px; }
+.pqbar { position: relative; height: 14px; background: color-mix(in srgb, var(--ink) 6%, var(--surface)); border-radius: 3px; overflow: hidden; }
+.pqbar > span { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--amber) 55%, var(--surface)); }
+.pqbar > i { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); }
+.chart { width: 100%; height: 110px; display: block; }
+.note { color: var(--muted); font-size: 13px; max-width: 75ch; }
+.banner { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--amber); background: color-mix(in srgb, var(--amber) 12%, var(--surface)); }
+.banner b { font-weight: 600; }
+@media (max-width: 640px) {
+  .cluster + .cluster { padding-left: 0; border-left: 0; }
+  h1 { font-size: 23px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pill, .banner { transition: background-color .2s, border-color .2s; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Insert-only core · one epoch · fixed capacity N</div>
+      <h1>Order Maintenance Explorer</h1>
+      <p class="sub">Click an element to select it, then insert after it. Every operation does a constant
+        amount of work: one insertion, a few split moves, and a few steps of the top-level job. Watch where that work goes.</p>
+    </div>
+    <div class="cluster">
+      <label class="f" for="preset">Preset
+        <select id="preset">
+          <option value="small">Small tree (a = 2, N = 256)</option>
+          <option value="proto">Prototype defaults (a = 8, N = 1024)</option>
+          <option value="tiny">Tight labels (β = 8: guards fail)</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <details class="params" id="params">
+    <summary>Parameters <span class="muted" id="psum"></span></summary>
+    <div class="pgrid">
+      <label class="f" for="pN">capacity N <select id="pN"></select></label>
+      <label class="f" for="pa">branching a <select id="pa"><option>2</option><option>3</option><option>4</option><option>8</option></select></label>
+      <label class="f" for="ps">sweep steps s <input type="number" id="ps" min="1" max="32"></label>
+      <label class="f" for="pbeta">β bits <input type="number" id="pbeta" min="3" max="96"></label>
+      <label class="f" for="pKG">K<sub>G</sub> <input type="number" id="pKG" min="1" max="16"></label>
+      <label class="f" for="pKC">K<sub>C</sub> <input type="number" id="pKC" min="1" max="16"></label>
+      <label class="f" for="pKR">K<sub>R</sub> <input type="number" id="pKR" min="1" max="16"></label>
+      <button id="papply">Apply and replay</button>
+    </div>
+    <div class="derived mono" id="derived"></div>
+    <p class="note">Apply and replay reruns the same operations under the new parameters. Values below the thresholds of
+      <code>docs/SPEC.md</code> §7.1 (for example K<sub>G</sub> = 1, s ≤ 4, small β) can make guards fail. The structure then
+      falls back to a synchronous rebuild, and answers stay correct.</p>
+  </details>
+
+  <div class="bar">
+    <div class="cluster">
+      <button class="primary" id="bIns" title="Insert after the selected element (i)">Insert after selected <kbd>i</kbd></button>
+      <button id="bFirst" title="Insert at the front (f)">Insert first <kbd>f</kbd></button>
+      <button id="bDel" title="Delete the selected element (d)">Delete <kbd>d</kbd></button>
+      <button id="bUndo" title="Undo the last operation (u)">Undo <kbd>u</kbd></button>
+    </div>
+    <div class="cluster">
+      <label class="f" for="wl">Workload
+        <select id="wl">
+          <option value="random">random position</option>
+          <option value="front">always at the front</option>
+          <option value="hammer">always after the selected element</option>
+          <option value="newest">after the newest element</option>
+          <option value="append">at the end</option>
+          <option value="churn">random, 30% deletes</option>
+        </select>
+      </label>
+      <button id="r1">Run 1</button>
+      <button id="r10">Run 10</button>
+      <button id="r100">Run 100</button>
+      <button id="bPlay" title="Play / pause (space)">Play <kbd>space</kbd></button>
+      <label class="f" for="speed">speed
+        <select id="speed"><option value="3">3 / s</option><option value="12" selected>12 / s</option><option value="60">60 / s</option></select>
+      </label>
+    </div>
+    <div class="cluster">
+      <button id="bClear">Clear</button>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="banner" id="rebuild" hidden></div>
+
+  <section class="stage">
+    <div class="stage-head">
+      <div class="legend">
+        <span><span class="sw" style="background:color-mix(in srgb,var(--ink) 6%,var(--surface))"></span>quiet</span>
+        <span><span class="sw" style="background:color-mix(in srgb,var(--amber) 26%,var(--surface));border-color:var(--amber)"></span>fresh sibling, being filled</span>
+        <span><span class="sw" style="background:color-mix(in srgb,var(--violet) 22%,var(--surface));border-color:var(--violet)"></span>splitting, being drained</span>
+        <span><span class="sw" style="border-style:dashed;border-color:var(--violet)"></span>ghost node (top tree)</span>
+        <span><span class="sw" style="border-color:var(--accent);border-width:2px"></span>changed by the last operation</span>
+        <span><span class="sw" style="background:var(--surface)"></span>tombstone</span>
+      </div>
+      <label class="f" for="zoom">zoom <input type="range" id="zoom" min="3" max="26" step="1"></label>
+    </div>
+    <div class="scroller" id="scroller"><svg id="viz" role="img" aria-label="The order-maintenance structure"></svg></div>
+  </section>
+
+  <div class="panels">
+    <section class="panel">
+      <h2>Last operation</h2>
+      <ul class="log" id="log"></ul>
+    </section>
+    <section class="panel">
+      <h2>Selected element</h2>
+      <div id="inspect"></div>
+    </section>
+    <section class="panel">
+      <h2>Reservation</h2>
+      <div id="res"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="stage-head" style="padding:0 0 6px">
+      <h2 style="margin:0">Steps per operation</h2>
+      <span class="muted" id="chartnote"></span>
+    </div>
+    <canvas class="chart" id="chart"></canvas>
+  </section>
+
+  <section class="panel">
+    <h2>How to read the picture</h2>
+    <p class="note">Bottom row: the elements in list order (H is the head sentinel). Above it, the groups, which split once
+      they reach G elements, and the chunks, whose thin bar shows the fill against capacity T, with the red tick at θ = ⌊2T/3⌋.
+      A quiet chunk above θ waits in the priority queue. The reservation process takes the fullest one, places two fresh
+      chunks around it, and starts a top-tree job. The rows above the chunks are the top tree, one row per height. Each bar
+      covers the chunks whose stored path passes through that node, so a ghost (dashed) keeps its bar until the sweep has
+      re-routed all of them. An element's key is (chunk tag, group label, element label), and <code>order(x, y)</code>
+      compares keys. Shift-click a second element to try it.</p>
+  </section>
+</div>
+
+<script src="om.js"></script>
+<script>
+"use strict";
+const { NIL, QUIET, OVERFLOW, SPLITTING, DEAD, Core, paramsFor } = OM;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const PRESETS = {
+  small: { N: 256, a: 2, s: 8, beta: null, K_G: 4, K_C: 4, K_R: 2, sample: 110 },
+  proto: { N: 1024, a: 8, s: 8, beta: null, K_G: 4, K_C: 4, K_R: 2, sample: 300 },
+  tiny:  { N: 256, a: 2, s: 8, beta: 8, K_G: 4, K_C: 4, K_R: 2, sample: 110 },
+};
+const N_MIN = 64;              // the wrapper's smallest capacity (prototype/wrapper.py)
+
+let cfg, P, core, hist, series, live, rebuildAt, armed, sel, sel2, lastLog, lastSteps, zoom = null;
+let playing = null;
+
+/* ------------------------------------------------------------ simulation */
+function opts() { return { a: cfg.a, s: cfg.s, beta: cfg.beta ?? undefined, K_G: cfg.K_G, K_C: cfg.K_C, K_R: cfg.K_R }; }
+
+function fresh() {
+  P = paramsFor(cfg.N, opts());
+  core = new Core(P);
+  hist = []; series = []; live = 0; rebuildAt = null; armed = false; lastLog = []; lastSteps = 0;
+}
+
+function apply(op) {
+  const before = core.totalSteps(), fb0 = core.stats.fallbacks;
+  core.log = [];
+  let y = null;
+  if (op[0] === "i") { y = core.insert_after(op[1], core.E.length); live++; }
+  else { core.mark_dead(op[1]); live--; }
+  hist.push(op);
+  lastSteps = core.totalSteps() - before;
+  series.push({ steps: lastSteps, fb: core.stats.fallbacks > fb0 });
+  lastLog = core.log;
+  // the wrapper's trigger (SPEC §5.7): count >= N/2, or few live elements left. The
+  // second rule only arms once live has reached N/8, since this core starts empty.
+  if (rebuildAt === null) {
+    if (core.count >= Math.floor(P.N / 2)) rebuildAt = { op: hist.length, why: "count" };
+    else if (armed && P.N > N_MIN && live < Math.floor(P.N / 8)) rebuildAt = { op: hist.length, why: "live" };
+  }
+  if (live >= Math.floor(P.N / 8)) armed = true;
+  return y;
+}
+
+function replay(ops) {
+  fresh();
+  for (const op of ops) apply(op);
+}
+
+const isLive = e => e > 0 && e < core.E.length && core.E[e].live;
+const liveElems = () => core.elements().filter(e => core.E[e].live);
+
+function workloadOp(kind, rnd) {
+  const els = liveElems();
+  switch (kind) {
+    case "front": return ["i", 0];
+    case "hammer": return ["i", isLive(sel) ? sel : 0];
+    case "newest": { const n = core.E.length - 1; return ["i", isLive(n) ? n : (els.length ? els[els.length - 1] : 0)]; }
+    case "append": return ["i", els.length ? els[els.length - 1] : 0];
+    case "churn":
+      if (els.length && rnd() < 0.3) return ["d", els[Math.floor(rnd() * els.length)]];
+      // falls through
+    default: { const i = Math.floor(rnd() * (els.length + 1)); return ["i", i === 0 ? 0 : els[i - 1]]; }
+  }
+}
+
+function mulberry(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+let rnd = mulberry(7);
+
+function run(k) {
+  const kind = $("#wl").value;
+  for (let i = 0; i < k; i++) {
+    const op = workloadOp(kind, rnd);
+    const y = apply(op);
+    if (y !== null && kind !== "hammer") sel = y;
+  }
+  if (!isLive(sel)) sel = null;
+  render();
+}
+
+/* ------------------------------------------------------------ formatting */
+const pow2 = b => 1n << BigInt(b);
+function frac(lab, bits) {                    // label as a position in [0, 1)
+  const x = Number((lab * 1000000n) / pow2(bits)) / 1000000;
+  return x.toFixed(x < 0.001 && x > 0 ? 6 : 4);
+}
+function tagFields(tag) {
+  const out = [], b = BigInt(P.top_beta), m = pow2(P.top_beta) - 1n;
+  for (let j = core.top.H; j >= 1; j--) out.push((tag >> (BigInt(j - 1) * b)) & m);
+  return out;
+}
+const eName = e => e === 0 ? "H" : "e" + e;
+const listNames = (xs, f, max = 6) => xs.length <= max ? xs.map(f).join(", ") : xs.slice(0, max).map(f).join(", ") + ` and ${xs.length - max} more`;
+
+function describe(log) {
+  const out = [];
+  const W = h => 2 * P.top_a ** h;
+  for (let i = 0; i < log.length; i++) {
+    const ev = log[i];
+    switch (ev.k) {
+      case "insert":
+        out.push(["insert", `Inserted ${eName(ev.y)} after ${ev.x === 0 ? "the head H" : eName(ev.x)} in group g${ev.g}, with element label ${frac(ev.lab, P.B_e)}.`]);
+        break;
+      case "gsplit":
+        out.push(["group", `Group g${ev.g} reached G = ${P.G} elements and starts splitting into fresh siblings g${ev.gl} (left) and g${ev.gr} (right).`]);
+        break;
+      case "gmove": {
+        const run = [ev];
+        while (i + 1 < log.length && log[i + 1].k === "gmove" && log[i + 1].from === ev.from && log[i + 1].to === ev.to) run.push(log[++i]);
+        out.push(["group", `Moved ${listNames(run, r => eName(r.e))} from g${ev.from} to g${ev.to}, with fresh labels. The element list does not change.`]);
+        break;
+      }
+      case "gdone":
+        out.push(["group", `Group g${ev.g} is empty and is removed. g${ev.l} and g${ev.r} are now quiet.`]);
+        break;
+      case "cmove": {
+        const run = [ev];
+        while (i + 1 < log.length && log[i + 1].k === "cmove" && log[i + 1].from === ev.from && log[i + 1].to === ev.to) run.push(log[++i]);
+        const gs = run.flatMap(r => r.groups);
+        out.push(["chunk", `Chunk c${ev.from} hands ${listNames(gs, g => "g" + g)} to c${ev.to}${run.some(r => r.family) ? " (a splitting group moves with its two siblings)" : ""}.`]);
+        break;
+      }
+      case "cdone":
+        out.push(["chunk", `Chunk c${ev.c} is empty. It stays in the chunk list as a dead tombstone, and c${ev.l}, c${ev.r} are now quiet.`]);
+        break;
+      case "reserve":
+        out.push(["chunk", `Reservation: chunk c${ev.x} holds ${ev.size} elements, above θ = ${P.theta}, the most of any waiting chunk. Fresh chunks c${ev.y} and c${ev.z} get tags next to it, and c${ev.x} starts splitting into them.`]);
+        break;
+      case "drain":
+        out.push(["top", `Top tree: node n${ev.v} at height ${ev.h} passed weight 2a^h = ${W(ev.h)}. It becomes a ghost and drains into fresh nodes n${ev.v1} and n${ev.v2}.`]);
+        break;
+      case "sweep": {
+        const run = [ev];
+        while (i + 1 < log.length && log[i + 1].k === "sweep" && log[i + 1].v === ev.v) run.push(log[++i]);
+        out.push(["top", `Sweep of ghost n${ev.v}: ${listNames(run, r => "c" + r.c)} re-routed to ${[...new Set(run.map(r => "n" + r.t))].join(" / ")}. Each re-route rewrites two fields of one tag.`]);
+        break;
+      }
+      case "drained":
+        out.push(["top", `Ghost n${ev.v} has no chunks left and is removed from every table.`]);
+        break;
+      case "jobdone":
+        out.push(["top", `The top-tree job for chunk c${ev.x} finished after ${ev.steps} steps.`]);
+        break;
+      case "fallback":
+        out.push(["fallback", `Guard failed (${ev.reason}). Synchronous rebuild: all groups, chunks and tags laid out evenly.`]);
+        break;
+    }
+  }
+  if (core.res_job && !log.some(e => e.k === "reserve" || e.k === "jobdone")) {
+    const j = core.res_job.info;
+    out.push(["top", `Top-tree job for c${j.x}: ${j.phase === "copy path" ? `copying the stored path into c${j.y}, c${j.z} (level ${j.at} of ${core.top.H})` : `walking up the live tree at n${j.at}`}.`]);
+  }
+  out.push(["note", `${lastSteps} steps in total (core plus top tree), with K_G = ${P.K_G}, K_C = ${P.K_C}, K_R = ${P.K_R}.`]);
+  return out;
+}
+
+/* ------------------------------------------------------------ drawing */
+function changedSets(log) {
+  const ch = { e: new Set(), g: new Set(), c: new Set(), n: new Set() };
+  for (const ev of log) {
+    if (ev.k === "insert") ch.e.add(ev.y);
+    if (ev.k === "gmove") ch.e.add(ev.e);
+    if (ev.k === "gsplit") { ch.g.add(ev.gl); ch.g.add(ev.gr); }
+    if (ev.k === "cmove") ev.groups.forEach(g => ch.g.add(g));
+    if (ev.k === "reserve") { ch.c.add(ev.y); ch.c.add(ev.z); }
+    if (ev.k === "sweep") ch.c.add(ev.c);
+    if (ev.k === "drain") { ch.n.add(ev.v1); ch.n.add(ev.v2); }
+  }
+  if (log.some(e => e.k === "fallback")) ch.e.clear();
+  return ch;
+}
+
+function render() {
+  const H = core.top.H, chunks = core.chunks();
+  const avail = $("#scroller").clientWidth - 70;
+  const nslots = core.count + chunks.length * 1.5;
+  const w = zoom ?? Math.max(4, Math.min(18, Math.floor(avail / Math.max(nslots, 1))));
+  if (zoom === null) $("#zoom").value = w;
+  const gapG = Math.max(1, Math.round(w / 5)), gapC = Math.max(4, Math.round(w / 2));
+  const X0 = 64;
+
+  // horizontal layout: chunks tile groups, groups tile elements
+  const ex = new Map(), gx = new Map(), cx = new Map();
+  let x = X0;
+  for (const c of chunks) {
+    const c0 = x, gs = core.groupsOf(c);
+    if (!gs.length) x += Math.max(6, w);
+    for (const g of gs) {
+      const g0 = x, es = core.elemsOf(g);
+      if (!es.length) x += Math.max(4, w * 0.6);
+      for (const e of es) { ex.set(e, x); x += w; }
+      gx.set(g, [g0, x]);
+      x += gapG;
+    }
+    if (gs.length) x -= gapG;
+    cx.set(c, [c0, x]);
+    x += gapC;
+  }
+  const width = Math.max(x + 16, avail + 70);
+
+  // vertical layout
+  const TOPROW = 24, yTop = h => 8 + (H - h) * TOPROW;
+  const yC = 8 + H * TOPROW + 6, hC = 30;
+  const yG = yC + hC + 6, hG = 20;
+  const yE = yG + hG + 6, hE = 18;
+  const height = yE + hE + 8;
+  const ch = changedSets(lastLog);
+  const parts = [];
+  parts.push(`<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="6" class="hatchline"/></pattern></defs>`);
+
+  // level labels
+  for (let h = H; h >= 1; h--) parts.push(`<text class="lvl" x="6" y="${yTop(h) + 14}">${h === H ? "root" : "top h" + h}</text>`);
+  parts.push(`<text class="lvl" x="6" y="${yC + 19}">chunks</text>`, `<text class="lvl" x="6" y="${yG + 14}">groups</text>`, `<text class="lvl" x="6" y="${yE + 13}">elements</text>`);
+
+  // selection guide
+  if (sel !== null && ex.has(sel)) {
+    const gxp = ex.get(sel) + w / 2;
+    parts.push(`<line class="guide" x1="${gxp}" x2="${gxp}" y1="4" y2="${yE}"/>`);
+  }
+
+  // top tree: one bar per node, spanning the chunks whose stored path passes through it
+  const T = core.top;
+  T.nodes.forEach((V, v) => {
+    if (!V.alive || V.first === NIL || !cx.has(V.first) || !cx.has(V.last)) return;
+    const h = V.height, x0 = cx.get(V.first)[0], x1 = cx.get(V.last)[1], y = yTop(h);
+    const cls = V.draining ? "ghost" : V.overflow_of !== NIL ? "o" : "q";
+    const thr = 2 * T.a ** h;
+    const tip = V.draining ? `ghost n${v} (height ${h}), draining into n${V.t1} and n${V.t2}`
+      : `n${v} (height ${h}): weight ${V.weight}${h < H ? ` / ${thr} before it drains` : ""}, ${V.children.length} live children, table of ${V.order.length} entries`;
+    parts.push(`<rect class="${cls}${ch.n.has(v) ? " chg" : ""}" x="${x0}" y="${y}" width="${Math.max(2, x1 - x0)}" height="${TOPROW - 6}" rx="3"><title>${esc(tip)}</title></rect>`);
+    const label = V.draining ? `n${v} ghost` : h === H ? `n${v}` : `n${v} ${V.weight}/${thr}`;
+    if (x1 - x0 > label.length * 6.6 + 6) parts.push(`<text x="${x0 + 4}" y="${y + 13}">${label}</text>`);
+    else if (x1 - x0 > 26) parts.push(`<text x="${x0 + 4}" y="${y + 13}">n${v}</text>`);
+  });
+  // fresh drain targets that no chunk is routed to yet: a stub at their side of the ghost's bar
+  T.nodes.forEach((V, v) => {
+    if (!V.alive || V.draining || V.first !== NIL || V.overflow_of === NIL) return;
+    const S = T.nodes[V.overflow_of];
+    if (S.first === NIL || !cx.has(S.first) || !cx.has(S.last)) return;
+    const sx0 = cx.get(S.first)[0], sx1 = cx.get(S.last)[1], sw = Math.min(16, (sx1 - sx0) / 3);
+    const xs = v === S.t1 ? sx0 + 2 : sx1 - 2 - sw;
+    parts.push(`<rect class="o${ch.n.has(v) ? " chg" : ""}" x="${xs}" y="${yTop(V.height) + 3}" width="${sw}" height="${TOPROW - 12}" rx="2"><title>${esc(`n${v}: fresh ${v === S.t1 ? "left" : "right"} target of ghost n${V.overflow_of}; no chunk is routed through it yet`)}</title></rect>`);
+  });
+
+  // chunks
+  for (const c of chunks) {
+    const C = core.C[c], [x0, x1] = cx.get(c), wd = Math.max(2, x1 - x0);
+    const cls = C.st === DEAD ? "dead" : C.st === OVERFLOW ? "o" : C.st === SPLITTING ? "s" : "q";
+    const st = ["quiet", "fresh sibling of c" + C.src, "splitting into c" + C.l + " and c" + C.r, "dead tombstone"][C.st];
+    const waiting = core.pq.where.has(c);
+    const tip = `chunk c${c}: ${C.size} elements (T = ${P.T}, θ = ${P.theta}), ${st}${waiting ? ", waiting in the priority queue" : ""}\ntag fields (high to low): ${tagFields(C.tag).map(f => frac(f, P.top_beta)).join(" · ")}`;
+    parts.push(`<rect class="${cls}${ch.c.has(c) ? " chg" : ""}" x="${x0}" y="${yC}" width="${wd}" height="${hC}" rx="4"><title>${esc(tip)}</title></rect>`);
+    if (C.st !== DEAD) {
+      const fw = Math.min(1, C.size / P.T) * (wd - 4);
+      parts.push(`<rect class="fill${waiting ? " over" : ""}" x="${x0 + 2}" y="${yC + hC - 6}" width="${fw}" height="4" rx="1"/>`);
+      const tx = x0 + 2 + (P.theta / P.T) * (wd - 4);
+      if (wd > 10) parts.push(`<line class="tick" x1="${tx}" x2="${tx}" y1="${yC + hC - 8}" y2="${yC + hC - 1}"/>`);
+    }
+    const label = `c${c} ${C.size}/${P.T}`;
+    if (wd > label.length * 6.6 + 6) parts.push(`<text x="${x0 + 4}" y="${yC + 14}">${label}</text>`);
+    else if (wd > 22) parts.push(`<text x="${x0 + 3}" y="${yC + 14}">c${c}</text>`);
+  }
+
+  // groups
+  for (const c of chunks) for (const g of core.groupsOf(c)) {
+    const G = core.Gs[g], [x0, x1] = gx.get(g), wd = Math.max(2, x1 - x0);
+    const cls = G.st === OVERFLOW ? "o" : G.st === SPLITTING ? "s" : "q";
+    const st = ["quiet", "fresh sibling of g" + G.src, "splitting into g" + G.l + " and g" + G.r][G.st];
+    const tip = `group g${g} in c${G.chk}: ${G.size} elements (splits at G = ${P.G}), ${st}\nlabel ${frac(G.lab, P.B_g)} of ${P.B_g} bits`;
+    parts.push(`<rect class="${cls}${ch.g.has(g) ? " chg" : ""}" x="${x0}" y="${yG}" width="${wd}" height="${hG}" rx="3"><title>${esc(tip)}</title></rect>`);
+    const label = `g${g}`;
+    if (wd > label.length * 6.6 + 6) parts.push(`<text x="${x0 + 3}" y="${yG + 14}">${label}</text>`);
+  }
+
+  // elements
+  for (const [e, x0] of ex) {
+    const E = core.E[e];
+    let cls = e === 0 ? "el head" : E.live ? "el" : "el tomb";
+    if (e === sel) cls += " sel"; else if (e === sel2) cls += " sel2";
+    if (ch.e.has(e)) cls += " chg";
+    const k = core.key(e);
+    const tip = `${eName(e)}${e === 0 ? " (head sentinel)" : E.live ? "" : " (deleted)"} in g${E.grp}\nkey: tag ${tagFields(k[0]).map(f => frac(f, P.top_beta)).join("·")} | group ${frac(k[1], P.B_g)} | element ${frac(k[2], P.B_e)}`;
+    parts.push(`<rect class="${cls}" data-e="${e}" x="${x0 + 0.5}" y="${yE}" width="${Math.max(1, w - 1.5)}" height="${hE}" rx="${Math.min(3, w / 3)}"><title>${esc(tip)}</title></rect>`);
+    if (e === 0 && w >= 9) parts.push(`<text x="${x0 + w / 2 - 3.5}" y="${yE + 13}" style="fill:var(--surface)">H</text>`);
+  }
+
+  const svg = $("#viz");
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.innerHTML = parts.join("");
+
+  renderStatus(); renderLog(); renderInspect(); renderRes(); renderChart(); renderButtons();
+}
+
+function renderStatus() {
+  const n = live, count = core.count, half = Math.floor(P.N / 2);
+  const groups = core.chunks().reduce((s, c) => s + core.groupsOf(c).length, 0);
+  const ok = core.keysSorted();
+  const maxS = series.reduce((m, s) => s.fb ? m : Math.max(m, s.steps), 0);
+  const pills = [
+    ["", "live elements", n],
+    [count >= half ? "warn" : "", "slots used", `${count} / ${P.N}`],
+    ["", "chunks · groups", `${core.chunks().length} · ${groups}`],
+    ["", "top height", core.top.H],
+    ["", "operations", hist.length],
+    ["", "max steps / op", maxS],
+    [core.stats.fallbacks ? "bad" : "good", "fallbacks", core.stats.fallbacks],
+    [ok ? "good" : "bad", "keys increasing", ok ? "yes" : "NO"],
+  ];
+  $("#status").innerHTML = pills.map(([c, k, v]) => `<span class="pill ${c}">${k} <b>${esc(v)}</b></span>`).join("");
+  const b = $("#rebuild");
+  if (rebuildAt) {
+    b.hidden = false;
+    b.innerHTML = rebuildAt.why === "count"
+      ? `<b>A global rebuild would have started at operation ${rebuildAt.op}</b>, when the core had used N/2 = ${half} of its ${P.N} slots (tombstones included). The full structure would copy the live elements into a fresh core of capacity about 4n, K<sub>B</sub> per operation. This page keeps working on the one core. Its constant-time bound is proved for up to N insertions.`
+      : `<b>A global rebuild would have started at operation ${rebuildAt.op}</b>, when fewer than N/8 = ${Math.floor(P.N / 8)} elements were live. The full structure would copy the live elements into a smaller core. This page keeps working on the one core.`;
+  } else b.hidden = true;
+}
+
+function renderLog() {
+  const items = hist.length ? describe(lastLog) : [["note", "No operations yet. Select an element and insert after it, or run a workload."]];
+  $("#log").innerHTML = items.map(([k, t]) => `<li class="k-${k}">${esc(t)}</li>`).join("");
+}
+
+function keyRows(e) {
+  const E = core.E[e], g = core.Gs[E.grp], c = g.chk, k = core.key(e);
+  const p = core.top.path[c];
+  return `<dl class="kv">
+    <dt>element</dt><dd>${eName(e)}${E.live ? "" : e === 0 ? " (head)" : " (deleted)"}</dd>
+    <dt>group · chunk</dt><dd>g${E.grp} · c${c}</dd>
+    <dt>element label</dt><dd>${frac(k[2], P.B_e)} <span class="muted">(${P.B_e} bits)</span></dd>
+    <dt>group label</dt><dd>${frac(k[1], P.B_g)} <span class="muted">(${P.B_g} bits)</span></dd>
+    <dt>chunk tag</dt><dd>${tagFields(k[0]).map(f => frac(f, P.top_beta)).join(" · ")} <span class="muted">(${core.top.H} fields of β = ${P.top_beta} bits, root first)</span></dd>
+    <dt>stored path</dt><dd>${p ? p.slice(1).reverse().map(v => v === NIL ? "…" : "n" + v + (core.top.nodes[v].draining ? "ʹ" : "")).join(" → ") + " → c" + c : "none"}</dd>
+  </dl>`;
+}
+
+function renderInspect() {
+  const box = $("#inspect");
+  if (sel === null) { box.innerHTML = `<p class="muted">Click an element in the bottom row. Shift-click a second one to compare them with <code>order(x, y)</code>.</p>`; return; }
+  let html = keyRows(sel);
+  if (sel2 !== null && sel2 !== sel) {
+    const a = core.key(sel), b = core.key(sel2);
+    let i = 0; while (i < 3 && a[i] === b[i]) i++;
+    const ans = core.order(sel, sel2);
+    const pos = core.elements(), truth = pos.indexOf(sel) < pos.indexOf(sel2);
+    html += `<p style="margin:12px 0 4px"><span class="answer">order(${eName(sel)}, ${eName(sel2)}) = ${ans}</span></p>
+      <p class="muted" style="margin:0">${i === 3 ? "Equal keys." : `Decided by the ${["chunk tags", "group labels", "element labels"][i]}${i ? `; the ${i === 1 ? "tags are" : "tags and group labels are"} equal` : ""}. Two dereferences and at most three comparisons. ${ans === truth ? "Matches the list order." : "DOES NOT match the list order."}`}</p>`;
+  }
+  box.innerHTML = html;
+}
+
+function renderRes() {
+  const box = $("#res");
+  let html = "";
+  if (core.res_job) {
+    const j = core.res_job.info;
+    html += `<p style="margin:0 0 8px"><b>Busy:</b> placing c${j.y} and c${j.z} around c${j.x}. ${j.phase === "copy path" ? `Copying the stored path, level ${j.at} of ${core.top.H}.` : `Walking up the live tree, now at n${j.at}.`} Step ${j.steps}, ${P.K_R} steps per operation.</p>`;
+  } else html += `<p style="margin:0 0 8px"><b>Idle.</b> The next operation pops the fullest waiting chunk, if any.</p>`;
+  const b = core.pq.buckets();
+  html += `<div class="eyebrow" style="margin:10px 0 6px">Priority queue: quiet chunks above θ = ${P.theta}</div>`;
+  if (!b.length) html += `<p class="muted" style="margin:0">Empty.</p>`;
+  else {
+    html += `<div class="pq">` + b.slice(0, 8).map(([s, cs]) => `<div class="pqrow"><span>${s}</span><div class="pqbar" title="${s} of T = ${P.T}"><span style="width:${100 * s / P.T}%"></span><i style="left:${100 * P.theta / P.T}%"></i></div></div><div class="pqrow"><span></span><span class="muted">${cs.map(c => "c" + c).join(", ")}</span></div>`).join("") + `</div>`;
+  }
+  box.innerHTML = html;
+}
+
+function renderChart() {
+  const cv = $("#chart"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, Ht = cv.clientHeight;
+  cv.width = W * dpr; cv.height = Ht * dpr;
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, Ht);
+  const css = getComputedStyle(document.documentElement);
+  const col = n => css.getPropertyValue(n).trim();
+  const padL = 36, padB = 16, padT = 8, cw = W - padL - 8, chh = Ht - padB - padT;
+  const n = series.length;
+  const ymax = Math.max(10, ...series.map(s => s.steps));
+  const xs = i => padL + (n <= 1 ? 0 : (i / (n - 1)) * cw), ys = v => padT + chh - (v / ymax) * chh;
+  g.font = `11px ${col("--font-data")}`; g.fillStyle = col("--muted"); g.strokeStyle = col("--rule"); g.lineWidth = 1;
+  for (const v of [0, Math.round(ymax / 2), ymax]) {
+    g.beginPath(); g.moveTo(padL, ys(v) + 0.5); g.lineTo(padL + cw, ys(v) + 0.5); g.stroke();
+    g.fillText(String(v), 4, ys(v) + 4);
+  }
+  $("#chartnote").textContent = n ? `${n} operations${series.some(s => s.fb) ? " · red dots: fallbacks, whose O(n) rebuild is not counted here" : ""}` : "";
+  if (!n) return;
+  if (rebuildAt) {
+    const rx = xs(rebuildAt.op - 1);
+    g.strokeStyle = col("--amber"); g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(rx, padT); g.lineTo(rx, padT + chh); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col("--amber"); g.fillText("rebuild would start", Math.min(rx + 4, padL + cw - 120), padT + 10);
+  }
+  g.beginPath(); g.moveTo(xs(0), ys(0));
+  series.forEach((s, i) => g.lineTo(xs(i), ys(s.steps)));
+  g.lineTo(xs(n - 1), ys(0)); g.closePath();
+  g.fillStyle = col("--accent") ; g.globalAlpha = 0.15; g.fill(); g.globalAlpha = 1;
+  g.beginPath(); series.forEach((s, i) => i ? g.lineTo(xs(i), ys(s.steps)) : g.moveTo(xs(i), ys(s.steps)));
+  g.strokeStyle = col("--accent"); g.lineWidth = 1.2; g.stroke();
+  g.fillStyle = col("--danger");
+  series.forEach((s, i) => { if (s.fb) { g.beginPath(); g.arc(xs(i), ys(s.steps), 3, 0, 7); g.fill(); } });
+  g.fillStyle = col("--accent"); g.beginPath(); g.arc(xs(n - 1), ys(series[n - 1].steps), 3, 0, 7); g.fill();
+  g.fillStyle = col("--muted"); g.fillText(`${n}`, padL + cw - 24, Ht - 3); g.fillText("1", padL, Ht - 3);
+}
+
+function renderButtons() {
+  $("#bIns").disabled = !(sel === 0 || isLive(sel));
+  $("#bDel").disabled = !isLive(sel);
+  $("#bUndo").disabled = !hist.length;
+  $("#bPlay").innerHTML = playing ? "Pause <kbd>space</kbd>" : "Play <kbd>space</kbd>";
+}
+
+/* ------------------------------------------------------------ parameters UI */
+function loadCfgIntoForm() {
+  const sN = $("#pN");
+  sN.innerHTML = [64, 128, 256, 512, 1024, 2048, 4096].map(n => `<option${n === cfg.N ? " selected" : ""}>${n}</option>`).join("");
+  $("#pa").value = String(cfg.a); $("#ps").value = cfg.s;
+  $("#pbeta").value = cfg.beta ?? 4 * cfg.a + 8;
+  $("#pKG").value = cfg.K_G; $("#pKC").value = cfg.K_C; $("#pKR").value = cfg.K_R;
+}
+function describeParams() {
+  $("#psum").textContent = `· N = ${P.N}, a = ${P.top_a}, s = ${P.top_s}, β = ${P.top_beta}, K_G = ${P.K_G}, K_C = ${P.K_C}, K_R = ${P.K_R}`;
+  $("#derived").textContent = `L = ${P.L} · G = ${P.G} · T = ${P.T} · θ = ${P.theta} · element labels ${P.B_e} bits · group labels ${P.B_g} bits · top height H = ${core.top.H} · tags ${core.top.H * P.top_beta} bits`;
+}
+function readForm() {
+  const num = (id, lo, hi) => Math.max(lo, Math.min(hi, parseInt($(id).value, 10) || lo));
+  const a = parseInt($("#pa").value, 10);
+  const beta = num("#pbeta", 3, 96);
+  return { N: parseInt($("#pN").value, 10), a, s: num("#ps", 1, 32), beta: beta === 4 * a + 8 ? null : beta,
+           K_G: num("#pKG", 1, 16), K_C: num("#pKC", 1, 16), K_R: num("#pKR", 1, 16) };
+}
+
+function usePreset(name, withSample) {
+  stop();
+  cfg = { ...PRESETS[name] };
+  loadCfgIntoForm();
+  fresh();
+  if (withSample) {
+    rnd = mulberry(11);
+    const save = $("#wl").value; $("#wl").value = "random";
+    for (let i = 0; i < cfg.sample; i++) { const y = apply(workloadOp("random", rnd)); sel = y; }
+    $("#wl").value = save;
+  }
+  sel2 = null;
+  describeParams();
+  render();
+}
+
+/* ------------------------------------------------------------ events */
+function doInsert(x) { if (x === 0 || isLive(x)) { sel = apply(["i", x]); sel2 = null; render(); } }
+function doDelete() {
+  if (!isLive(sel)) return;
+  const els = core.elements(), i = els.indexOf(sel);
+  apply(["d", sel]);
+  const next = els.slice(i + 1).find(e => core.E[e].live) ?? els.slice(0, i).reverse().find(e => e === 0 || core.E[e].live);
+  sel = next ?? 0; sel2 = null; render();
+}
+function doUndo() {
+  if (!hist.length) return;
+  stop();
+  const ops = hist.slice(0, -1);
+  replay(ops);
+  if (sel !== null && sel >= core.E.length) sel = core.E.length - 1;
+  if (sel2 !== null && sel2 >= core.E.length) sel2 = null;
+  render();
+}
+function stop() { if (playing) { clearInterval(playing); playing = null; } }
+function togglePlay() {
+  if (playing) { stop(); renderButtons(); return; }
+  const rate = parseInt($("#speed").value, 10);
+  const per = rate > 30 ? 3 : 1, every = 1000 / (rate / per);
+  playing = setInterval(() => run(per), every);
+  renderButtons();
+}
+
+$("#viz").addEventListener("click", ev => {
+  const t = ev.target.closest("[data-e]");
+  if (!t) return;
+  const e = parseInt(t.dataset.e, 10);
+  if (ev.shiftKey && sel !== null) sel2 = e; else { sel = e; sel2 = null; }
+  render();
+});
+$("#viz").addEventListener("dblclick", ev => {
+  const t = ev.target.closest("[data-e]");
+  if (t) doInsert(parseInt(t.dataset.e, 10));
+});
+$("#bIns").onclick = () => doInsert(sel);
+$("#bFirst").onclick = () => doInsert(0);
+$("#bDel").onclick = doDelete;
+$("#bUndo").onclick = doUndo;
+$("#r1").onclick = () => run(1);
+$("#r10").onclick = () => run(10);
+$("#r100").onclick = () => run(100);
+$("#bPlay").onclick = togglePlay;
+$("#speed").onchange = () => { if (playing) { stop(); togglePlay(); } };
+$("#bClear").onclick = () => { stop(); fresh(); sel = 0; sel2 = null; describeParams(); render(); };
+$("#preset").onchange = () => usePreset($("#preset").value, true);
+$("#papply").onclick = () => {
+  stop();
+  cfg = { ...cfg, ...readForm() };
+  const ops = hist.slice();
+  replay(ops);
+  if (sel !== null && sel >= core.E.length) sel = null;
+  loadCfgIntoForm(); describeParams(); render();
+};
+$("#zoom").oninput = () => { zoom = parseInt($("#zoom").value, 10); render(); };
+document.addEventListener("keydown", ev => {
+  if (ev.target.closest("input, select, textarea") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (ev.key === "i") doInsert(sel);
+  else if (ev.key === "f") doInsert(0);
+  else if (ev.key === "d") doDelete();
+  else if (ev.key === "u") doUndo();
+  else if (ev.key === " ") { ev.preventDefault(); togglePlay(); }
+  else if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+    if (sel === null) return;
+    const els = core.elements(), i = els.indexOf(sel);
+    const j = ev.key === "ArrowRight" ? Math.min(els.length - 1, i + 1) : Math.max(0, i - 1);
+    sel = els[j]; sel2 = null; render();
+  } else return;
+});
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 100); });
+
+usePreset("small", true);
+</script>
