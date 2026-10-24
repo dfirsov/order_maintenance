@@ -424,7 +424,7 @@ class WBBTTop {
     else V.last = C[y].prev;
     if (left) { if (T.first === NIL) T.first = y; T.last = y; }
     else { if (T.last === NIL) T.last = y; T.first = y; }
-    this.core.emit({ k: "sweep", v, c: y, t });
+    this.core.emit({ k: "sweep", v, c: y, t, h });
     return true;
   }
 

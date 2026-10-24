@@ -4,6 +4,12 @@ An interactive page for one insert-only core (`docs/SPEC.md` §4–5): insert el
 time and watch the work of each operation (group splits, chunk splits, the reservation process,
 and the top tree's jobs, drains and sweeps).
 
+The top-tree view draws the weight-balanced tree twice over: solid edges are the live tree
+(weights, and where new nodes go), dashed edges are stored paths that still run through a
+ghost (they decide the tags). A drain shows as a node splitting into two fresh siblings, and
+the sweep as its dashed edges disappearing one chunk at a time. Clicking a node shows its
+weight against 2aʰ and its label table.
+
 Open `index.html` in a browser. It needs no build or server (`file://` works).
 
 | File | Contents |
