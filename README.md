@@ -1,5 +1,7 @@
 # Order maintenance in O(1) worst case
 
+**[Interactive visualizer](https://dfirsov.github.io/order_maintenance/viz/)**: insert elements and watch groups, chunks and the top tree at work.
+
 Goal: implement an O(1) worst-case order-maintenance algorithm (insert, delete,
 order query on a list) and prove it correct in Lean 4.
 
