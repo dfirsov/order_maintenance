@@ -12,6 +12,7 @@ order query on a list) and prove it correct in Lean 4.
 | `lean/` | Lean 4 development (`lake build` in `lean/`): list specification, machine model with cost semantics, program logic, executable functional model (`OM/Model`), trace replay (`lake exe replay`) |
 | `rust/` | Rust code printed from the verified machine program (`lake exe extract`), with a random checker against the specification |
 | `prototype/` | executable Python prototype with differential tests and adversarial stress (see its README) |
+| `viz/` | interactive visualizer of one core, ported from the prototype: **[open it in the browser](https://dfirsov.github.io/order_maintenance/viz/)** (see its README) |
 | `papers/` | citations of the source papers: Dietz–Sleator 1987, Bender et al. 2002, Kopelowitz 2012, Brodal's slides |
 
 Status: the Python prototype implements the full algorithm. An extensive testing campaign

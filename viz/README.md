@@ -10,7 +10,8 @@ ghost (they decide the tags). A drain shows as a node splitting into two fresh s
 the sweep as its dashed edges disappearing one chunk at a time. Clicking a node shows its
 weight against 2aʰ and its label table.
 
-Open `index.html` in a browser. It needs no build or server (`file://` works).
+Online: <https://dfirsov.github.io/order_maintenance/viz/> (GitHub Pages, deployed from `main`).
+Locally: open `index.html` in a browser. It needs no build or server (`file://` works).
 
 | File | Contents |
 |---|---|
