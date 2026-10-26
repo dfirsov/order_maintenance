@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn against_a_list() {
         for (seed, hot) in [(1u64, false), (2, true), (3, false), (4, true)] {
-            let mut s = seed * 0x9E3779B97F4A7C15 | 1;
+            let mut s = seed.wrapping_mul(0x9E3779B97F4A7C15) | 1;
             let mut rnd = move || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
             let mut b = Bender::new(1.4, 200_000);
             let mut list: Vec<u32> = Vec::new();

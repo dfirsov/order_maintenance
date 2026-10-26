@@ -19,6 +19,7 @@ use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::LinkedList;
 use std::rc::Rc;
 
 use crate::gen::{ARRS, NARR};
@@ -130,8 +131,8 @@ struct Pool {
     free: *mut Block,
     slab: *mut Block,
     left: usize,
-    /// Every slab mapped, for `Drop`.
-    slabs: Vec<*mut Block>,
+    /// Every slab mapped, for `Drop`. Adding a slab must not copy older entries.
+    slabs: LinkedList<*mut Block>,
 }
 
 fn slab_layout() -> std::alloc::Layout {
@@ -151,7 +152,7 @@ impl Pool {
         if self.left == 0 {
             self.slab = unsafe { std::alloc::alloc_zeroed(slab_layout()) } as *mut Block;
             assert!(!self.slab.is_null(), "out of memory");
-            self.slabs.push(self.slab);
+            self.slabs.push_back(self.slab);
             self.left = SLAB;
         }
         self.left -= 1;
@@ -163,17 +164,27 @@ impl Pool {
     }
 }
 
+enum BigSlot {
+    Value(Rc<BigUint>),
+    /// Index of the next vacant slot, or `NO_BIG`.
+    Free(usize),
+}
+
+const NO_BIG: usize = usize::MAX;
+
 /// An array. Its block table is mapped directly from zeroed memory, which the system maps
 /// lazily, so creating an array of any capacity takes constant time; a block is taken from the
 /// pool when first written. Values of 2^63 and more are kept, shared, in the array's segmented
 /// list of large values (`SEG` per segment, so adding one never copies the others): a cell then
-/// holds `TAG | index`, and loading it copies a reference, not the number.
+/// holds `TAG | index`, and loading it copies a reference, not the number. Vacant large-value
+/// slots form an intrusive free list, so clearing a cell releases its reference immediately.
 struct Arr {
     cap: usize,
     table: *mut *mut Block,
     nblocks: usize,
     touched: Vec<*mut Block>,
-    bigs: Vec<Vec<Rc<BigUint>>>,
+    bigs: Vec<Vec<BigSlot>>,
+    free_big: usize,
 }
 
 /// Tables of at least this many bytes (one page) are mapped directly from the system
@@ -224,17 +235,17 @@ impl Arr {
     fn new(cap: usize) -> Arr {
         let nblocks = cap.div_ceil(BLOCK);
         let table = map_table(nblocks);
-        Arr { cap, table, nblocks, touched: Vec::new(), bigs: Vec::new() }
+        Arr { cap, table, nblocks, touched: Vec::new(), bigs: Vec::new(), free_big: NO_BIG }
     }
     #[inline]
     fn get(&self, i: usize) -> u64 {
-        debug_assert!(i / BLOCK < self.nblocks);
+        assert!(i < self.cap, "machine error: access at {i} beyond the capacity {}", self.cap);
         let b = unsafe { *self.table.add(i / BLOCK) };
         if b.is_null() { 0 } else { unsafe { (*b)[i % BLOCK] } }
     }
     #[inline]
     fn set(&mut self, i: usize, c: u64, pool: &mut Pool) {
-        debug_assert!(i / BLOCK < self.nblocks);
+        assert!(i < self.cap, "machine error: access at {i} beyond the capacity {}", self.cap);
         let slot = unsafe { self.table.add(i / BLOCK) };
         let mut b = unsafe { *slot };
         if b.is_null() {
@@ -253,18 +264,36 @@ impl Arr {
     /// a word holds them as `W::S` (`W::B` only above `u64::MAX`).
     fn big_get(&self, k: u64) -> W {
         let k = k as usize;
-        let b = &self.bigs[k / SEG][k % SEG];
+        let BigSlot::Value(b) = &self.bigs[k / SEG][k % SEG] else {
+            panic!("machine: access to a vacant large-value slot");
+        };
         match b.to_u64() {
             Some(v) => W::S(v),
             None => W::B(b.clone()),
         }
     }
-    /// Store a large value: in place at index `old` if the cell held one, else appended.
+    /// Release a large value and link its vacant slot into the free list, without allocation.
+    fn big_free(&mut self, k: u64) {
+        let k = k as usize;
+        self.bigs[k / SEG][k % SEG] = BigSlot::Free(self.free_big);
+        self.free_big = k;
+    }
+    /// Store a large value: replace `old`, reuse a vacant slot, or append a new slot.
+    /// Reusing vacancies bounds the number of slots by the array's capacity.
     /// Returns its index.
     fn big_put(&mut self, old: Option<u64>, v: Rc<BigUint>) -> u64 {
         if let Some(k) = old {
             let k = k as usize;
-            self.bigs[k / SEG][k % SEG] = v;
+            self.bigs[k / SEG][k % SEG] = BigSlot::Value(v);
+            return k as u64;
+        }
+        if self.free_big != NO_BIG {
+            let k = self.free_big;
+            let BigSlot::Free(next) = self.bigs[k / SEG][k % SEG] else {
+                panic!("machine: occupied large-value slot on the free list");
+            };
+            self.free_big = next;
+            self.bigs[k / SEG][k % SEG] = BigSlot::Value(v);
             return k as u64;
         }
         if self.bigs.last().map_or(true, |seg| seg.len() == SEG) {
@@ -275,19 +304,19 @@ impl Arr {
             self.bigs.push(Vec::with_capacity(SEG));
         }
         let k = (self.bigs.len() - 1) * SEG + self.bigs.last().unwrap().len();
-        self.bigs.last_mut().unwrap().push(v);
+        self.bigs.last_mut().unwrap().push(BigSlot::Value(v));
         k as u64
     }
 }
 
 /// Memory of replaced arrays, returned to the pool a little at a time (`M::collect`), so that no
-/// operation pays for a whole core.
+/// operation pays for a whole core. Linked lists avoid copying pending entries during retirement.
 #[derive(Default)]
 struct Garbage {
-    blocks: Vec<Vec<*mut Block>>,
-    tables: Vec<(*mut *mut Block, usize)>,
+    blocks: LinkedList<Vec<*mut Block>>,
+    tables: LinkedList<(*mut *mut Block, usize)>,
     /// Retired arrays' lists of large values, each handed over whole (constant time).
-    bigs: Vec<Vec<Vec<Rc<BigUint>>>>,
+    bigs: LinkedList<Vec<Vec<BigSlot>>>,
 }
 
 /// glibc's `free` and `malloc` occasionally do work proportional to the heap (trimming it,
@@ -321,7 +350,7 @@ impl M {
         tune_malloc();
         M {
             arrs: (0..NARR).map(|_| Arr::new(0)).collect(),
-            pool: Pool { free: std::ptr::null_mut(), slab: std::ptr::null_mut(), left: 0, slabs: Vec::new() },
+            pool: Pool { free: std::ptr::null_mut(), slab: std::ptr::null_mut(), left: 0, slabs: LinkedList::new() },
             garbage: Garbage::default(),
             cost: 0,
             peak: 0,
@@ -330,27 +359,28 @@ impl M {
     /// Retire array `a`'s memory and give it a new, empty one of capacity `n` (constant time).
     fn replace(&mut self, a: usize, n: usize) {
         let old = std::mem::replace(&mut self.arrs[a], Arr::new(n));
-        if !old.touched.is_empty() { self.garbage.blocks.push(old.touched); }
-        if !old.bigs.is_empty() { self.garbage.bigs.push(old.bigs); }
-        self.garbage.tables.push((old.table, old.nblocks));
+        if !old.touched.is_empty() { self.garbage.blocks.push_back(old.touched); }
+        if !old.bigs.is_empty() { self.garbage.bigs.push_back(old.bigs); }
+        self.garbage.tables.push_back((old.table, old.nblocks));
     }
-    /// Return at most `k` retired blocks to the pool (and unmap the tables they leave). Called
-    /// once per update by `Om`; it is outside the machine and does not count as steps.
+    /// Perform at most `k` cleanup actions: return a block, drop a fixed-size large-value
+    /// segment, remove an empty list, or unmap a table. Called once per update by `Om`;
+    /// it is outside the machine and does not count as steps.
     pub fn collect(&mut self, mut k: usize) {
         while k > 0 {
-            if let Some(v) = self.garbage.blocks.last_mut() {
+            k -= 1;
+            if let Some(v) = self.garbage.blocks.back_mut() {
                 match v.pop() {
-                    Some(b) => { self.pool.give(b); k -= 1; }
-                    None => { self.garbage.blocks.pop(); }
+                    Some(b) => { self.pool.give(b); }
+                    None => { self.garbage.blocks.pop_back(); }
                 }
-            } else if let Some(v) = self.garbage.bigs.last_mut() {
+            } else if let Some(v) = self.garbage.bigs.back_mut() {
                 match v.pop() {
-                    Some(seg) => { drop(seg); k -= 1; }
-                    None => { self.garbage.bigs.pop(); }
+                    Some(seg) => { drop(seg); }
+                    None => { self.garbage.bigs.pop_back(); }
                 }
-            } else if let Some((t, n)) = self.garbage.tables.pop() {
+            } else if let Some((t, n)) = self.garbage.tables.pop_back() {
                 unmap_table(t, n);
-                k -= 1;
             } else {
                 break;
             }
@@ -427,7 +457,10 @@ pub fn store(a: usize, i: W, v: W, m: &mut M) {
     let arr = &mut m.arrs[a];
     let old = arr.get(ix);
     let c = match v {
-        W::S(x) if x < TAG => x,
+        W::S(x) if x < TAG => {
+            if old & TAG != 0 { arr.big_free(old & !TAG); }
+            x
+        }
         v => {
             let prev = if old & TAG != 0 { Some(old & !TAG) } else { None };
             let rc = match v { W::B(b) => b, W::S(x) => Rc::new(BigUint::from(x)) };
@@ -532,4 +565,138 @@ pub fn un(op: Uop, a: W, m: &mut M) -> W {
 #[allow(dead_code)]
 fn _unused() -> BigUint {
     BigUint::zero()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[test]
+    fn peek_checks_capacity_even_in_release() {
+        let mut m = M::new();
+        for cap in [0, 1, BLOCK + 1] {
+            alloc(0, W::S(cap as u64), &mut m);
+            for i in [cap, usize::MAX] {
+                assert!(catch_unwind(AssertUnwindSafe(|| m.peek(ARRS[0], i))).is_err());
+            }
+            if cap > 0 {
+                assert_eq!(m.peek(ARRS[0], cap - 1), W::S(0));
+                store(0, W::S((cap - 1) as u64), W::S(42), &mut m);
+                let counters = (m.cost, m.peak);
+                assert_eq!(m.peek(ARRS[0], cap - 1), W::S(42));
+                assert_eq!((m.cost, m.peak), counters);
+            }
+        }
+    }
+
+    #[test]
+    fn clearing_large_values_releases_and_reuses_slots() {
+        let mut m = M::new();
+        alloc(0, W::S(1), &mut m);
+        let W::B(b) = W::big("18446744073709551616") else { panic!() };
+        for _ in 0..1024 {
+            store(0, W::S(0), W::B(b.clone()), &mut m);
+            assert_eq!(load(0, W::S(0), &mut m), W::B(b.clone()));
+            assert_eq!(Rc::strong_count(&b), 2);
+            store(0, W::S(0), W::S(0), &mut m);
+            assert_eq!(load(0, W::S(0), &mut m), W::S(0));
+            assert_eq!(Rc::strong_count(&b), 1);
+        }
+        assert_eq!(m.arrs[0].bigs.len(), 1);
+        assert_eq!(m.arrs[0].bigs[0].len(), 1);
+    }
+
+    #[test]
+    fn large_slots_recycle_across_segments_without_aliasing() {
+        let mut m = M::new();
+        let n = 2 * SEG + 3;
+        alloc(0, W::S(n as u64), &mut m);
+        let W::B(b) = W::big("18446744073709551616") else { panic!() };
+        for i in 0..n {
+            store(0, W::S(i as u64), W::B(b.clone()), &mut m);
+        }
+        assert_eq!(Rc::strong_count(&b), n + 1);
+        for i in (0..n).step_by(2) {
+            store(0, W::S(i as u64), W::S(7), &mut m);
+        }
+        assert_eq!(Rc::strong_count(&b), n / 2 + 1);
+        // Replace occupied slots and reuse vacant ones with distinct values, including
+        // values stored in the arena that still fit in W::S.
+        for i in (0..n).rev() {
+            store(0, W::S(i as u64), W::S(TAG + i as u64), &mut m);
+        }
+        assert_eq!(Rc::strong_count(&b), 1);
+        assert_eq!(m.arrs[0].bigs.iter().map(Vec::len).sum::<usize>(), n);
+        for i in 0..n {
+            assert_eq!(load(0, W::S(i as u64), &mut m), W::S(TAG + i as u64));
+        }
+    }
+
+    #[test]
+    fn retired_large_values_are_collected_and_new_array_is_zeroed() {
+        let mut m = M::new();
+        let n = SEG + 1;
+        alloc(0, W::S(n as u64), &mut m);
+        let W::B(b) = W::big("18446744073709551616") else { panic!() };
+        for i in 0..n {
+            store(0, W::S(i as u64), W::B(b.clone()), &mut m);
+        }
+        store(0, W::S(0), W::S(0), &mut m);
+        alloc(0, W::S(n as u64), &mut m);
+        assert_eq!(Rc::strong_count(&b), n);
+        m.collect(usize::MAX);
+        assert_eq!(Rc::strong_count(&b), 1);
+        assert!(m.garbage.blocks.is_empty());
+        assert!(m.garbage.bigs.is_empty());
+        assert!(m.garbage.tables.is_empty());
+        for i in 0..n {
+            assert_eq!(load(0, W::S(i as u64), &mut m), W::S(0));
+        }
+        store(0, W::S(0), W::B(b.clone()), &mut m);
+        assert_eq!(load(0, W::S(0), &mut m), W::B(b.clone()));
+        drop(m);
+        assert_eq!(Rc::strong_count(&b), 1);
+    }
+
+    #[test]
+    fn pool_grows_and_reuses_zeroed_blocks_across_slabs() {
+        let mut m = M::new();
+        let mut blocks = Vec::new();
+        for i in 0..(2 * SLAB + 1) {
+            let b = m.pool.take();
+            unsafe {
+                assert!((*b).iter().all(|&x| x == 0));
+                (*b)[BLOCK - 1] = i as u64 + 1;
+            }
+            blocks.push(b);
+        }
+        assert_eq!(m.pool.slabs.len(), 3);
+        for (i, &b) in blocks.iter().enumerate() {
+            assert_eq!(unsafe { (*b)[BLOCK - 1] }, i as u64 + 1);
+            m.pool.give(b);
+        }
+        for &b in blocks.iter().rev() {
+            assert_eq!(m.pool.take(), b);
+            assert!(unsafe { (*b).iter().all(|&x| x == 0) });
+        }
+        assert_eq!(m.pool.slabs.len(), 3);
+    }
+
+    #[test]
+    fn collection_charges_empty_lists_to_its_budget() {
+        let mut m = M::new();
+        for _ in 0..3 {
+            m.garbage.blocks.push_back(Vec::new());
+            m.garbage.bigs.push_back(Vec::new());
+        }
+        m.collect(0);
+        assert_eq!(m.garbage.blocks.len(), 3);
+        m.collect(1);
+        assert_eq!(m.garbage.blocks.len(), 2);
+        assert_eq!(m.garbage.bigs.len(), 3);
+        m.collect(3);
+        assert!(m.garbage.blocks.is_empty());
+        assert_eq!(m.garbage.bigs.len(), 2);
+    }
 }

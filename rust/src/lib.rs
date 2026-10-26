@@ -18,7 +18,7 @@ use gen::Top;
 static GLOBAL: alloc::Alloc = alloc::Alloc::new();
 use rt::{pk, W, M};
 
-/// Retired blocks freed per update (`M::collect`). A rebuild retires a core of capacity `N`,
+/// Cleanup actions per update (`M::collect`). A rebuild retires a core of capacity `N`,
 /// whose blocks number far fewer than the `Ω(N)` operations before the next rebuild.
 const COLLECT: usize = 4;
 

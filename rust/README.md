@@ -124,8 +124,8 @@ took more than 251,000 steps. The runtime did not provide what the model assumes
 
 `rt.rs` now gives every operation a constant amount of memory management: large block tables are
 mapped from lazily zeroed memory (`mmap`), blocks come from the runtime's own pool (carved from
-lazily mapped 2 MB slabs, recycled through an intrusive free list), retired blocks return to the
-pool four per update (`M::collect`), and glibc's heap trimming is off. Words above 2⁶⁴ are shared
+lazily mapped 2 MB slabs, recycled through an intrusive free list), retired memory is collected
+with four cleanup actions per update (`M::collect`), and glibc's heap trimming is off. Words above 2⁶⁴ are shared
 (reference-counted `BigUint`), and arrays store the shared value, so loading or copying a word
 never allocates: an order query allocates nothing (it made 38 allocations before), an insertion
 23 on average (74 before); queries became about 3 times faster while the structure fits in the
@@ -141,6 +141,14 @@ its step counts are unchanged: the generated code still prints exactly what Lean
 and peaks. The slowest operation at 10⁷ elements went from 0.47 s to about 0.5 ms; what remains is
 the operations with the most steps, page faults when a rebuild starts (bounded by the number of
 arrays), and the noise of the operating system (about 0.3 ms).
+
+Runtime fixes (2026-10-26): monitoring reads now check the logical array capacity in release
+builds too. Replacing a large value with a small one releases its reference and recycles its
+arena slot, so repeated overwrites cannot grow the arena beyond one slot per array cell.
+Slab records and retirement queues use linked lists to avoid copying existing entries when
+they grow. Cleanup charges empty-list removal against its budget as well as blocks, value
+segments and tables. Six runtime regression tests run with `cargo test` and `cargo test --release`.
+These changes do not establish a wall-clock bound for allocation or operating-system calls.
 
 ## Comparison with two unverified implementations (2026-10-19)
 
