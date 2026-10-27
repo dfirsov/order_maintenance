@@ -18,6 +18,9 @@
 //! run. CSV rows, one per phase and operation:
 //!
 //!   impl,workload,phase,n,ops,mean_ns,p99_ns,p9999_ns,max_ns,mean_work,max_work,work_of_slowest
+//!
+//! With the environment variable `TAILS=PATH`, the statistics of each run on its own are also
+//! appended to `PATH` (`lean_design::tails`); stdout is unchanged.
 
 use lean_design::avl::Avl;
 use lean_design::lean::{Native, Wide};
@@ -137,8 +140,15 @@ fn main() {
     let reps: usize = a.get(4).map(|s| s.parse().unwrap()).unwrap_or(3);
     let mut best: Option<[Phase; 3]> = None;
     let mut means: Vec<[f64; 3]> = Vec::new();
-    for _ in 0..reps {
+    const PHASES: [&str; 3] = ["churn-delete", "churn-insert", "drain-delete"];
+    let mut tails = lean_design::tails::sink(&lean_design::tails::header("impl,workload,phase,n"));
+    for r in 0..reps {
         let ph = run(&imp, &wl, n);
+        if let Some(f) = tails.as_mut() {
+            for (i, name) in PHASES.iter().enumerate() {
+                lean_design::tails::row(f, &format!("{imp},{wl},{name},{n}"), &r.to_string(), &ph[i].t);
+            }
+        }
         let mean = |p: &Phase| p.t.iter().map(|&t| t as f64).sum::<f64>() / p.t.len().max(1) as f64;
         means.push([mean(&ph[0]), mean(&ph[1]), mean(&ph[2])]);
         match best.as_mut() {
@@ -152,6 +162,11 @@ fn main() {
         }
     }
     let best = best.unwrap();
+    if let Some(f) = tails.as_mut() {
+        for (i, name) in PHASES.iter().enumerate() {
+            lean_design::tails::row(f, &format!("{imp},{wl},{name},{n}"), "min", &best[i].t);
+        }
+    }
     for (i, name) in ["churn-delete", "churn-insert", "drain-delete"].iter().enumerate() {
         let (ts, ws) = (&best[i].t, &best[i].w);
         let k = ts.len();

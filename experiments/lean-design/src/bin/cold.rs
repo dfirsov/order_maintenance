@@ -21,6 +21,10 @@
 //! `mean_ns`, `max_ns` and `work_of_slowest` are over the operations without page faults, the
 //! `_all` columns over all of them.
 //!
+//! With the environment variable `TAILS=PATH`, the same statistics of each cold run on its own are
+//! appended to `PATH` (rows `impl,workload,kind,from,to,ops,run,faulted,mean_ns,max_ns,max_ns_all`,
+//! `run` = 0, 1 or `min`); stdout is unchanged.
+//!
 //! with `kind` one of `insert-top` (the `C` with the most work), `insert-sample`, `query-cold`,
 //! `query-warm`, and a first row `noop-cold` (from = to = 0): 1000 empty operations measured cold,
 //! the floor that eviction adds to any operation (the timer's page, the stack and the TLB).
@@ -176,9 +180,11 @@ fn main() {
 
     // two cold runs: per measured operation the minimum, preferring runs without a page fault
     let (mut bi, mut bc, mut bw) = (Vec::new(), Vec::new(), Vec::new());
+    let mut per_run: Vec<(Vec<u64>, Vec<u64>, Vec<u64>)> = Vec::new();
     for r in 0..2 {
         let w = run(&imp, &wl, n, &sel, &buf, &mut ins, &mut qc, &mut qw, &mut qwork);
         assert_eq!(w, work, "the work differs between runs");
+        per_run.push((ins.clone(), qc.clone(), qw.clone()));
         if r == 0 { bi = ins.clone(); bc = qc.clone(); bw = qw.clone(); } else {
             for (b, &t) in bi.iter_mut().zip(&ins) { *b = (*b).min(t); }
             for (b, &t) in bc.iter_mut().zip(&qc) { *b = (*b).min(t); }
@@ -217,6 +223,46 @@ fn main() {
             };
             println!("{imp},{wl},{kind},{},{},{},{faulted},{mean},{max},{wslow},{max_work},{},{}",
                 w[0], w[1], ops.len(), all.0 & (FAULT - 1), all.1);
+        }
+    }
+
+    // with TAILS=PATH: the same statistics for each cold run on its own (run 0, 1) and for the
+    // minima (run `min`), without the work columns
+    if let Ok(path) = std::env::var("TAILS") {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path).expect("TAILS file");
+        if f.metadata().map(|m| m.len() == 0).unwrap_or(true) {
+            writeln!(f, "impl,workload,kind,from,to,ops,run,faulted,mean_ns,max_ns,max_ns_all").unwrap();
+        }
+        let mut sets: Vec<(String, &Vec<u64>, &Vec<u64>, &Vec<u64>)> =
+            per_run.iter().enumerate().map(|(r, x)| (r.to_string(), &x.0, &x.1, &x.2)).collect();
+        sets.push(("min".into(), &bi, &bc, &bw));
+        for (run, ri, rc, rw) in sets {
+            for w in bounds.windows(2) {
+                let (lo, hi) = (w[0] - 1, w[1] - 1);
+                let inside = |k: usize| k >= lo && k < hi;
+                let mut groups: Vec<(&str, Vec<u64>)> = vec![("insert-top", vec![]), ("insert-sample", vec![]),
+                    ("query-cold", vec![]), ("query-warm", vec![])];
+                for (i, &k) in measured.iter().enumerate() {
+                    if !inside(k) { continue; }
+                    if top[k] { groups[0].1.push(ri[i]); }
+                    if sel[k] == 2 { groups[1].1.push(ri[i]); }
+                }
+                for (i, &k) in queried.iter().enumerate() {
+                    if inside(k) { groups[2].1.push(rc[i]); groups[3].1.push(rw[i]); }
+                }
+                for (kind, ops) in groups {
+                    if ops.is_empty() { continue; }
+                    let ok: Vec<u64> = ops.iter().copied().filter(|&t| t < FAULT).collect();
+                    let all = ops.iter().map(|&t| t & (FAULT - 1)).max().unwrap();
+                    let (mean, max) = if ok.is_empty() { (String::new(), String::new()) } else {
+                        (format!("{:.0}", ok.iter().map(|&t| t as f64).sum::<f64>() / ok.len() as f64),
+                         ok.iter().max().unwrap().to_string())
+                    };
+                    writeln!(f, "{imp},{wl},{kind},{},{},{},{run},{},{mean},{max},{all}",
+                        w[0], w[1], ops.len(), ops.len() - ok.len()).unwrap();
+                }
+            }
         }
     }
 }

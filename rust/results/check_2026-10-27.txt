@@ -1,0 +1,97 @@
+# check against the specification, 2026-10-27
+mode grow, 200000 operations, seed 7: all answers agree with the specification
+  live elements at the end 120205, at most 120205
+  initialization steps 2099
+  steps per operation: max 128029 (insertAfter at op 87484, n = 52611), mean 818
+  bound opB 4 = 1133561742; max / bound = 1.13e-4
+  peak value: 660 bits
+  allocated cells 2860788053 (capacities), 2748416 in blocks in use
+  time 572.05ms (2.86 us per operation)
+mode mix, 200000 operations, seed 7: all answers agree with the specification
+  live elements at the end 39623, at most 39625
+  initialization steps 2099
+  steps per operation: max 122924 (insertAfter at op 191474, n = 37908), mean 579
+  bound opB 4 = 1133561742; max / bound = 1.08e-4
+  peak value: 600 bits
+  allocated cells 1210701248 (capacities), 2088960 in blocks in use
+  time 237.42ms (1.19 us per operation)
+mode churn, 200000 operations, seed 7: all answers agree with the specification
+  live elements at the end 117, at most 334
+  initialization steps 2099
+  steps per operation: max 7403 (insertAfter at op 30505, n = 246), mean 526
+  bound opB 4 = 1133561742; max / bound = 6.53e-6
+  peak value: 419 bits
+  allocated cells 18339097 (capacities), 630784 in blocks in use
+  time 244.12ms (1.22 us per operation)
+mode grow, 300000 operations, seed 1: all answers agree with the specification
+  live elements at the end 179884, at most 179884
+  initialization steps 2099
+  steps per operation: max 127818 (insertFirst at op 204141, n = 122426), mean 860
+  bound opB 4 = 1133561742; max / bound = 1.13e-4
+  peak value: 660 bits
+  allocated cells 2581474567 (capacities), 4558848 in blocks in use
+  time 1.22s (4.07 us per operation)
+mode mix, 300000 operations, seed 1: all answers agree with the specification
+  live elements at the end 59897, at most 59897
+  initialization steps 2099
+  steps per operation: max 126095 (insertAfter at op 172851, n = 34595), mean 468
+  bound opB 4 = 1133561742; max / bound = 1.11e-4
+  peak value: 600 bits
+  allocated cells 1088719612 (capacities), 2543616 in blocks in use
+  time 398.33ms (1.33 us per operation)
+mode churn, 300000 operations, seed 1: all answers agree with the specification
+  live elements at the end 242, at most 343
+  initialization steps 2099
+  steps per operation: max 8279 (insertAfter at op 214955, n = 231), mean 523
+  bound opB 4 = 1133561742; max / bound = 7.30e-6
+  peak value: 419 bits
+  allocated cells 19570325 (capacities), 720896 in blocks in use
+  time 271.18ms (0.90 us per operation)
+mode grow, 300000 operations, seed 2: all answers agree with the specification
+  live elements at the end 179535, at most 179535
+  initialization steps 2099
+  steps per operation: max 127272 (insertFirst at op 217414, n = 129868), mean 916
+  bound opB 4 = 1133561742; max / bound = 1.12e-4
+  peak value: 660 bits
+  allocated cells 2902435213 (capacities), 4739072 in blocks in use
+  time 1.18s (3.93 us per operation)
+mode mix, 300000 operations, seed 2: all answers agree with the specification
+  live elements at the end 59992, at most 59995
+  initialization steps 2099
+  steps per operation: max 122362 (delete at op 204436, n = 41073), mean 503
+  bound opB 4 = 1133561742; max / bound = 1.08e-4
+  peak value: 600 bits
+  allocated cells 1309719448 (capacities), 2637824 in blocks in use
+  time 407.01ms (1.36 us per operation)
+mode churn, 300000 operations, seed 2: all answers agree with the specification
+  live elements at the end 263, at most 454
+  initialization steps 2099
+  steps per operation: max 68237 (insertAfter at op 86316, n = 411), mean 521
+  bound opB 4 = 1133561742; max / bound = 6.02e-5
+  peak value: 419 bits
+  allocated cells 27160161 (capacities), 626688 in blocks in use
+  time 243.71ms (0.81 us per operation)
+mode grow, 300000 operations, seed 3: all answers agree with the specification
+  live elements at the end 180155, at most 180155
+  initialization steps 2099
+  steps per operation: max 128373 (insertAfter at op 254955, n = 153038), mean 988
+  bound opB 4 = 1133561742; max / bound = 1.13e-4
+  peak value: 660 bits
+  allocated cells 3141631373 (capacities), 5005312 in blocks in use
+  time 1.21s (4.03 us per operation)
+mode mix, 300000 operations, seed 3: all answers agree with the specification
+  live elements at the end 60710, at most 60710
+  initialization steps 2099
+  steps per operation: max 127121 (insertAfter at op 224836, n = 45437), mean 517
+  bound opB 4 = 1133561742; max / bound = 1.12e-4
+  peak value: 600 bits
+  allocated cells 1476810119 (capacities), 2621440 in blocks in use
+  time 424.61ms (1.42 us per operation)
+mode churn, 300000 operations, seed 3: all answers agree with the specification
+  live elements at the end 497, at most 741
+  initialization steps 2099
+  steps per operation: max 66061 (insertAfter at op 215364, n = 560), mean 527
+  bound opB 4 = 1133561742; max / bound = 5.83e-5
+  peak value: 449 bits
+  allocated cells 47047292 (capacities), 733184 in blocks in use
+  time 226.10ms (0.75 us per operation)

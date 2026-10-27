@@ -1,0 +1,13 @@
+impl,workload,phase,n,ops,run,mean_ns,p99_ns,p999_ns,p9999_ns,max_ns
+bender,fifo,churn-delete,10000000,10000000,0,12,19,22,151,20720
+bender,fifo,churn-insert,10000000,10000000,0,24,161,2319,3788,559174
+bender,fifo,drain-delete,10000000,10000000,0,11,18,20,29,40197
+bender,fifo,churn-delete,10000000,10000000,1,11,19,21,154,28672
+bender,fifo,churn-insert,10000000,10000000,1,22,156,2281,3639,557169
+bender,fifo,drain-delete,10000000,10000000,1,11,17,20,27,17383
+bender,fifo,churn-delete,10000000,10000000,2,11,19,21,151,47519
+bender,fifo,churn-insert,10000000,10000000,2,22,163,2271,3641,565349
+bender,fifo,drain-delete,10000000,10000000,2,11,17,20,23,12507
+bender,fifo,churn-delete,10000000,10000000,min,10,18,19,20,300
+bender,fifo,churn-insert,10000000,10000000,min,20,146,2183,2617,557169
+bender,fifo,drain-delete,10000000,10000000,min,10,17,18,19,30

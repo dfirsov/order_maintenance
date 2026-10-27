@@ -1,0 +1,19 @@
+               total        used        free      shared  buff/cache   available
+Mem:           31470        4125       12157         149       15782       27345
+Swap:           8191        2775        5416
+# pagetouch 1 GiB, core 2
+run,pages,mean_ns,p99_ns,p9999_ns,max_ns,n_over_10us,n_over_100us,n_over_1ms,empty_max_ns,empty_n_over_100us,minflt,majflt
+0,262144,993,2014,288100,298531,137,129,0,2553,0,262658,0
+1,262144,974,2011,272223,284064,118,113,0,1997,0,262143,0
+2,262144,976,2013,261520,276253,123,114,0,1240,0,262143,0
+# pagetouch 12 GiB, core 2
+run,pages,mean_ns,p99_ns,p9999_ns,max_ns,n_over_10us,n_over_100us,n_over_1ms,empty_max_ns,empty_n_over_100us,minflt,majflt
+0,3145728,881,1985,113148,3661927,1674,339,3,9689,0,3151874,0
+1,3145728,886,2027,134708,606171,1625,365,0,9622,0,3145727,0
+2,3145728,877,1969,132170,552158,1602,375,0,2190,0,3145727,0
+# /proc/vmstat before -> after
+allocstall_normal 1678 -> 1679
+allocstall_movable 27061 -> 27077
+pgmajfault 1065390 -> 1069272
+pgsteal_direct 10339842 -> 10341063
+pgscan_direct 13787828 -> 13789060

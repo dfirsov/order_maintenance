@@ -17,6 +17,9 @@
 //!
 //!   impl,workload,from,to,ops,mean_ns,p99_ns,p9999_ns,max_ns,mean_work,max_work,work_of_slowest
 //!
+//! With the environment variable `TAILS=PATH`, the statistics of each run on its own (maximum,
+//! p99.9, p99.99, ...) are also appended to `PATH` (`lean_design::tails`); stdout is unchanged.
+//!
 //! `max_ns` and the percentiles are over the per-operation minima; `mean_ns` is the median over
 //! the runs of each run's mean. `work` is machine steps for `om`, tags and labels written plus
 //! groups scanned for `bender`, and nodes visited for `avl` (`om::avl`, the textbook O(log n)
@@ -136,6 +139,15 @@ fn report(imp: &str, wl: &str, bounds: &[usize], per: usize, best: &[u32], work:
     }
 }
 
+/// With `TAILS=PATH`: per decade, the statistics of one run's times (or of the per-operation
+/// minima, `run` = `min`) as rows of `PATH` (`lean_design::tails`).
+fn tail_rows(f: &mut std::fs::File, imp: &str, wl: &str, bounds: &[usize], per: usize, ts: &[u32], run: &str) {
+    for w in bounds.windows(2) {
+        let (from, to) = (w[0], w[1]);
+        lean_design::tails::row(f, &format!("{imp},{wl},{from},{to}"), run, &ts[(from - 1) * per..(to - 1) * per]);
+    }
+}
+
 fn decade_means(bounds: &[usize], per: usize, times: &[u32]) -> Vec<f64> {
     bounds.windows(2).map(|w| {
         let ts = &times[(w[0] - 1) * per..(w[1] - 1) * per];
@@ -157,6 +169,7 @@ fn main() {
     // decades of elements: operation k (0-based) makes k + 2 elements
     let mut bounds = vec![1usize];
     while *bounds.last().unwrap() < n { bounds.push((bounds.last().unwrap() * 10).min(n)); }
+    let mut tails = lean_design::tails::sink(&lean_design::tails::header("impl,workload,from,to"));
     for r in 0..reps {
         run(&imp, &wl, n, qpi, &mut times, &mut works, &mut qtimes, &mut qworks);
         if r == 0 {
@@ -172,6 +185,15 @@ fn main() {
         }
         means.push(decade_means(&bounds, 1, &times));
         qmeans.push(decade_means(&bounds, qpi, &qtimes));
+        if let Some(f) = tails.as_mut() {
+            let r = r.to_string();
+            tail_rows(f, &imp, &wl, &bounds, 1, &times, &r);
+            if qpi > 0 { tail_rows(f, &imp, &format!("query-{wl}"), &bounds, qpi, &qtimes, &r); }
+        }
+    }
+    if let Some(f) = tails.as_mut() {
+        tail_rows(f, &imp, &wl, &bounds, 1, &best, "min");
+        if qpi > 0 { tail_rows(f, &imp, &format!("query-{wl}"), &bounds, qpi, &qbest, "min"); }
     }
     report(&imp, &wl, &bounds, 1, &best, &work, &means);
     if qpi > 0 {

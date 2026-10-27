@@ -1,0 +1,11 @@
+# xrun cross-check, 2026-10-27: lake exe xrun (../lean/.lake/build/bin/xrun) against target/release/xrun
+file 1 (gen_ops.py 20 1 mix): 20 operations, 21 output lines, 6267 steps (incl. init), peak 300 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 2 (gen_ops.py 100 2 mix): 100 operations, 101 output lines, 44569 steps (incl. init), peak 301 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 3 (gen_ops.py 300 3 churn): 300 operations, 301 output lines, 137725 steps (incl. init), peak 301 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 4 (gen_ops.py 500 4 mix): 500 operations, 501 output lines, 316254 steps (incl. init), peak 361 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 5 (gen_ops.py 1000 5 churn): 1000 operations, 1001 output lines, 444455 steps (incl. init), peak 301 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 6 (gen_ops.py 2000 6 mix): 2000 operations, 2001 output lines, 1562300 steps (incl. init), peak 419 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 7 (gen_ops.py 2000 7 churn): 2000 operations, 2001 output lines, 843290 steps (incl. init), peak 301 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 8 (gen_ops.py 4000 7 mix): 4000 operations, 4001 output lines, 2573632 steps (incl. init), peak 449 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+file 9 (gen_ops.py 4000 8 churn): 4000 operations, 4001 output lines, 1780362 steps (incl. init), peak 301 bits, non-ok lines 0, exit lean 0 rust 0: IDENTICAL
+total: 13920 operations, 7708854 steps
