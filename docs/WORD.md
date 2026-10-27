@@ -675,3 +675,56 @@ local `kb`, and `dpk` ignores `m₀.peak`.
 
 **Option (A), total**: A1 about 1,870 lines, A2 about 7,200 (first part 4,900, spike 400, completion
 1,900), A3 about 2,050, A4 about 620: **about 11,800 lines in 38 new files**.
+
+## 8. One runner, the clean bound, and `w`-bit words
+
+Added 2026-10-27, about 570 lines in 3 new files (`Machine/ExecW` 77, `Impl/PeakRun` 168,
+`Impl/PeakWord` 329); no existing file changed except `OM.lean`; every existing statement unchanged;
+no `sorry`; `#print axioms` of the theorems below: `propext`, `Classical.choice`, `Quot.sound`.
+
+* **One runner** (`PeakRun`). `runM` (Theorems A and B) and `runSt` (Theorem W) were separate
+  runners with no lemma between them. `runMW` is `runM` with a third output, each operation's
+  peak `dpk`; `runMW_eq` (it is `runM` plus the peaks `pks`), `pks_get` (entry `i` is the peak of
+  operation `i` from `runSt m (ops.take i)`). The unified theorem trusts `runMW` alone:
+
+```
+theorem theoremABW_MW {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 4 ≤ KB) (h512 : KB < 2 ^ 512)
+    (ops : List OM.Spec.Op) (hv : OM.Spec.Valid OM.Spec.State.empty ops) :
+    (exec initWS m₀).status = .ok ∧ (exec initWS m₀).cost ≤ initB ∧ dpk initWS m₀ < 2 ^ 1029 ∧
+    ∃ cs ps, runMW (exec initWS m₀).st ops = some (OM.Spec.run OM.Spec.State.empty ops, cs, ps) ∧
+      cs.length = ops.length ∧ ps.length = ops.length ∧
+      (∀ c ∈ cs, c ≤ opB KB) ∧
+      ∀ i (hi : i < ps.length), ps[i] < 2 ^ (128 * Nat.log2 (i + 1) + 1286)
+```
+
+* **The clean bound** (`PeakRun`). The term `2·(i + 1)` of `theoremW_M` is below
+  `2^(128·⌊log₂(i + 1)⌋ + 1285)` (`clean_le`), so `theoremW_M_clean` bounds operation `i` by
+  `2^(128·⌊log₂(i + 1)⌋ + 1286)`. For a run of `t = ops.length` operations, `theoremW_M_run`:
+  initialization, every operation, and the whole run from a reset peak compute no value at or
+  above `2^(128·⌊log₂(t + 1)⌋ + 1286)`; `theoremW_M_peak_clean`: the recorded peak after the run is
+  at most `max m₀.peak (2^(128·⌊log₂(t + 1)⌋ + 1286) − 1)`.
+* **The `w`-bit machine** (`Machine/ExecW`). `execW w` is `exec` with `e.evalW w s` for `e.eval s`
+  and `evalListW w s args` for `evalList s args`, where `evalW` returns `none` when the expression's
+  `maxv` (the largest value of it and its subexpressions) is `≥ 2^w`. Every `bump` site of `exec`
+  thus gets one check, and an overflow ends the statement with `.err` at `exec`'s cost, as an
+  out-of-bounds access does. Compare the two definitions line by line: they differ only in these
+  evaluation calls.
+* **Agreement** (`PeakWord`). `execW_eq_of`: if `exec c s` ends with peak `< 2^w`, then
+  `execW w c s = exec c s` (every recorded value is at most the final peak; induction over `c`,
+  `runFor_agree` for loops). `execW_raise`: the peak is ghost for `execW` too. Together:
+
+```
+theorem execW_agree {w : Nat} {c : Stmt} {s : State} (h : dpk c s < 2 ^ w) : execW w c s = exec c s
+
+theorem theoremAB_word {m₀ : State} {KB w : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 4 ≤ KB) (h512 : KB < 2 ^ 512)
+    (ops : List OM.Spec.Op) (hv : OM.Spec.Valid OM.Spec.State.empty ops)
+    (hw : 128 * Nat.log2 (ops.length + 1) + 1286 ≤ w) :
+    (execW w initWS m₀ = exec initWS m₀ ∧ runMw w (exec initWS m₀).st ops = runM (exec initWS m₀).st ops) ∧
+    (execW w initWS m₀).status = .ok ∧ (execW w initWS m₀).cost ≤ initB ∧
+      ∃ cs, runMw w (execW w initWS m₀).st ops = some (OM.Spec.run OM.Spec.State.empty ops, cs) ∧
+        ∀ c ∈ cs, c ≤ opB KB
+```
+
+  `runMw w` is `runM` with `execW w` for `exec`. The part after the agreement is the conclusion of
+  `theoremAB_M` with `execW w` and `runMw w`: Theorems A and B hold verbatim on `w`-bit words for
+  `w ≥ 128·⌊log₂(t + 1)⌋ + 1286`.

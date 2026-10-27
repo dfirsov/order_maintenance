@@ -1,6 +1,7 @@
 import OM.Spec
 import OM.Machine.Syntax
 import OM.Machine.Exec
+import OM.Machine.ExecW
 import OM.Machine.Logic
 import OM.Machine.Examples
 import OM.Model
@@ -75,3 +76,5 @@ import OM.Impl.PeakTheoremW
 import OM.Impl.PeakABW
 import OM.Impl.PeakCap
 import OM.Impl.PeakFinal
+import OM.Impl.PeakRun
+import OM.Impl.PeakWord

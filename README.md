@@ -34,10 +34,15 @@ The Lean port (`docs/LEAN.md` §7):
   it returns the specification's answers, and every operation takes at most a fixed number of machine
   steps (`opB 4 = 1,133,561,742`, the same for every `N` and history). A core of capacity `N` uses at
   most `40000·N` memory cells.
+* **Theorem W** (word size) is proved for the machine program (`lean/OM/Impl/PeakRun.lean`): operation
+  `i` computes no value at or above `2^(128·⌊log₂(i + 1)⌋ + 1286)`, so words of `O(log #ops)` bits
+  suffice. On a machine with `w`-bit words that stops with an error on any larger value (`execW`),
+  Theorems A and B hold verbatim for `t` operations and every `w ≥ 128·⌊log₂(t + 1)⌋ + 1286`
+  (`lean/OM/Impl/PeakWord.lean`).
 
-**Assumptions** (`docs/LEAN.md` §2.1): one step per instruction on words of unbounded size, and
-constant-time array allocation. The word-size theorem (values stay below `2^(c·log N)`, or the number
-of operations for handles) is **not proved**, so the unit-cost model is not yet justified formally.
+**Assumptions** (`docs/LEAN.md` §2.1): one step per instruction, and constant-time array allocation.
+Words are unbounded naturals in `exec`; Theorem W bounds them, and the `w`-bit machine `execW` bounds
+them by definition.
 
 ## License
 

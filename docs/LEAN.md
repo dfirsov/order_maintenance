@@ -65,29 +65,44 @@ program, the deep-embedded one of §3.
   element index arrays and the cursor are below `2^K`; and every handle, the live count, the handle
   counter and the rebuild counter are at most `t` (`OMB`). This is a statement about Level F, the
   states that the machine's memory encodes (§5).
+* **Theorem W for computed values** (`theoremW_M`, `lean/OM/Impl/PeakFinal.lean`; clean form
+  `theoremW_M_clean`, `lean/OM/Impl/PeakRun.lean`; option (A) of `docs/WORD.md`): for
+  `4 ≤ K_B < 2^512` and every valid operation sequence, initialization computes no value at or above
+  `2^1029`, and operation `i` computes no value at or above `2^(128·⌊log₂(i + 1)⌋ + 1286)`. "Computes"
+  is the machine's peak (`dpk`): every value of every evaluated expression and subexpression, every
+  value read from memory, every argument, loop bound and local. So operation `i` runs on words of
+  `O(log(i + 1))` bits. `theoremABW_M` (`PeakABW.lean`) gives the finer bound
+  `2^(2·(wKom om + 128) + 5) + 2·(i + 1)` in the larger `L` of the current cores and the handles;
+  `theoremW_M_run`: a run of `t` operations computes nothing at or above `2^(128·⌊log₂(t + 1)⌋ + 1286)`.
+* **One runner for A, B and W** (`theoremABW_MW`, `PeakRun.lean`): `runMW` is `runM` that also
+  returns each operation's peak; for every valid sequence it returns the specification's answers,
+  costs at most `opB K_B` and peaks below `2^(128·⌊log₂(i + 1)⌋ + 1286)`.
+* **Theorems A and B on `w`-bit words** (`theoremAB_word`, `lean/OM/Impl/PeakWord.lean`): `execW w`
+  (`lean/OM/Machine/ExecW.lean`) is `exec` on `w`-bit words, ending with `.err` as soon as a computed
+  value is at or above `2^w`. `execW_agree`: a run of `exec` with peak below `2^w` is also a run of
+  `execW w` (same state, cost and status). For `t` valid operations and
+  `w ≥ 128·⌊log₂(t + 1)⌋ + 1286`, initialization and every operation run on the `w`-bit machine exactly
+  as on `exec`, so the conclusion of `theoremAB_M` holds verbatim for the `w`-bit machine.
 
 **Assumed** (the cost model, §3; these are definitions, not hypotheses of the theorems):
 1. **Unit-cost words of unbounded size.** A machine word is a Lean `Nat`. Every instruction costs
    one step, whatever the size of its operands. This is the main assumption: a unit-cost machine
    with unbounded words can in principle cheat by computing with huge numbers. Theorems A and B are
    true statements about this machine; whether its step count models a real word RAM depends on the
-   values staying small. **Theorem W is proved for the stored values** (above), not for every
-   computed value (see below).
+   values staying small. **Theorem W is proved** (above), for the stored values and for every
+   computed value: words of `128·⌊log₂(t + 1)⌋ + 1286` bits suffice for `t` operations, and the
+   `w`-bit machine `execW` runs the program exactly as `exec` does (`theoremAB_word`).
 2. **Constant-time allocation.** `alloc A n` gives array `A` capacity `n`, every cell reading 0, in
    one step (constant-time-initializable arrays).
 3. **Unit-cost `*`, `/`, `%`, shifts and `msb`**, as in the standard word RAM.
 
-**Not proved: Theorem W for computed values (the machine's peak).** The full statement: every value
-the program stores *or computes* is below `2^(c·L)`, `L = ⌈log₂ N⌉`, or (for a handle) at most the
-number of operations so far. Handles are the insertion counter, so they need `log(#ops)` bits, as in
-the usual word-RAM convention that a word holds an index into the input. The stored values are
-proved (`theoremW_stored`, above): every field of every record, live or dead, is bounded, kept by
-every Level F function (`docs/WORD.md` §6). What remains is the intermediate values of expressions
-and the loop locals of the machine program, a bound on `State.peak` (option (A) of `docs/WORD.md`).
-The evidence for it is informal: every shift in the program is `1 <<< e` with `e` a parameter of size
-`O(L)` or a height times `β` (`O(L)`), and the other operands are stored values or locals derived
-from them. The machine records the largest value it computes (`State.peak`), so the bound can be
-measured on the stress workloads.
+**The form of Theorem W.** The bound is in the number of operations, not in the current `N`:
+handles are the insertion counter, so they need `log(#ops)` bits, as in the usual word-RAM convention
+that a word holds an index into the input, and the capacity after `t` operations is at most
+`24·t + 64` (`reachW_cap`). The finer per-operation bound of `theoremABW_M` is in the larger `L` of
+the current cores, plus `2·(i + 1)` for handles. The constants are large (`128·log₂ + 1286` bits)
+because the proof bounds every expression by widths computed from its syntax; the measured peak is
+far smaller (§15, *Label widths*).
 
 **Not covered:** the running time of the Lean code itself, memory reclamation of a retired core
 (its arrays stay allocated until the slot is reused), and calls with invalid handles.
@@ -110,9 +125,9 @@ against the machine semantics, is in `rust/` (§16).
   RAM implements with O(1) overhead per access. It is a stated assumption of the model.
 * **Words.** All values are `Nat`, of unbounded size, and every instruction costs 1 whatever its
   operands. The interpreter does not truncate. It records the largest value seen, so a word-size
-  bound (Theorem W) is a separate statement about the same runs. Theorem W is proved for the values
-  stored at Level F, not for every computed value (§2.1): unit-cost unbounded words remain an
-  assumption of the model.
+  bound (Theorem W) is a separate statement about the same runs. Theorem W is proved (§2.1): every
+  computed value of `t` operations is below `2^(128·⌊log₂(t + 1)⌋ + 1286)`, and the machine with
+  `w`-bit words (`execW`, `Machine/ExecW.lean`) runs the program exactly as `exec` for such `w`.
 * **Locals.** Each procedure call has its own frame of word-valued local variables.
 * **Word size.** `State.peak` records the largest value ever computed, including every
   intermediate value of every expression. Theorem W is a bound on `peak`.
@@ -296,7 +311,7 @@ OM/
 | M3 ✅ | Theorem Z (warm-up, can start in parallel with M1): `OM/Proof/Cost/Zeroing.lean` | standalone combinatorics | low |
 | M4 ✅ | Lower-level cost lemmas G1–G4, C1–C3, R, the chunk count, W (§13), against the top structure's contracts | invariant reasoning | medium |
 | M5 ✅ | Top-structure lemmas T0–T5, (Q); the contracts; the parameter rule (§14) | the largest proof | **high** |
-| M6 | Level M programs and simulation; assembly; **Theorems A and B at Level M** ✅, memory ✅ (§15); **Theorem W**: stored values ✅ (`theoremW_stored`), computed values (the peak) not proved (§2.1) | mechanical, but long | medium |
+| M6 | Level M programs and simulation; assembly; **Theorems A and B at Level M** ✅, memory ✅ (§15); **Theorem W**: stored values ✅ (`theoremW_stored`), computed values ✅ (`theoremW_M`, `theoremW_M_clean`), `w`-bit machine ✅ (`theoremAB_word`) (§2.1) | mechanical, but long | medium |
 
 The order is chosen so that the riskiest mathematics (M5) is attacked on a validated
 model, and the mechanical machine layer (M6) comes last, when Level F is stable.
@@ -332,9 +347,13 @@ bucket, the most recently added chunk is popped first (previously: Python set or
   the cost model.
 * The cost model's assumptions (§2.1):
   * unit cost per instruction, including `*`, `/`, shifts and `msb`;
-  * words are unbounded naturals at unit cost. The intended justification, words of
-    `O(log N + log #ops)` bits, is Theorem W; its part for stored values is proved
-    (`theoremW_stored`), the bound on every computed value (the machine's peak) is **not proved**;
+  * words are unbounded naturals at unit cost. The justification, words of `O(log #ops)` bits, is
+    Theorem W, proved for every computed value (`theoremW_M`, `theoremW_M_clean`). The trusted
+    definitions it adds are `dpk` (`Impl/PeakM.lean`: the peak of a run) and the runner `runMW`
+    (`Impl/PeakRun.lean`, `runM` with each operation's peak). Alternatively, `theoremAB_word` states
+    Theorems A and B for the machine with `w`-bit words, `execW` (`Machine/ExecW.lean`, `exec` with
+    one width check per evaluated expression), and its runner `runMw`; then the words are bounded by
+    definition;
   * constant-time-initializable arrays.
 * The **user interface**: operations take handles of live elements (`PROOF.md` §1). Invalid
   calls are outside the theorem.
@@ -881,8 +900,9 @@ and `B_g = HC + log₂ PC + 2`, as §14 planned (`B_g ≈ 30L`). Only the parame
 2,429 to 1,290 at `L = 41`; the measured peak at 4 million elements from 1,461 to 780 bits. The step
 bound does not depend on the label widths.
 
-**Theorem W** (§2.1): the stored values are proved (`theoremW_stored`), the machine's peak is not.
-Unit-cost unbounded words remain an assumption of the cost model.
+**Theorem W** (§2.1): the stored values are proved (`theoremW_stored`), and so is the machine's
+peak (`theoremW_M`, `theoremW_M_clean`, `docs/WORD.md` §7–§8); Theorems A and B hold on `w`-bit
+words for `w = 128·⌊log₂(t + 1)⌋ + 1286` (`theoremAB_word`).
 
 ---
 
