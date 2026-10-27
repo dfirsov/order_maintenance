@@ -1,0 +1,24 @@
+== om_random: taskset -c 2 ./target/release/compare om random 10000000 3 (2026-10-27T20:19:51+02:00)
+wall 128.91 s, user 127.11 s, sys 1.73 s, maxrss 2730536 KB
+== om_hammer: taskset -c 2 ./target/release/compare om hammer 10000000 3 (2026-10-27T20:22:00+02:00)
+wall 53.27 s, user 51.37 s, sys 1.88 s, maxrss 2872036 KB
+== om_append: taskset -c 2 ./target/release/compare om append 10000000 3 (2026-10-27T20:22:53+02:00)
+wall 55.20 s, user 53.37 s, sys 1.80 s, maxrss 2975844 KB
+== om_front: taskset -c 2 ./target/release/compare om front 10000000 3 (2026-10-27T20:23:48+02:00)
+wall 52.93 s, user 51.13 s, sys 1.79 s, maxrss 2871860 KB
+== om_random_queries: taskset -c 2 ./target/release/compare om random 10000000 3 1 (2026-10-27T20:24:41+02:00)
+wall 174.28 s, user 172.35 s, sys 1.84 s, maxrss 2886892 KB
+done1 2026-10-27T20:27:35+02:00
+== om_hammer_5e7: taskset -c 2 ./target/release/compare om hammer 50000000 3 (2026-10-27T20:27:41+02:00)
+wall 322.92 s, user 313.33 s, sys 9.46 s, maxrss 15811040 KB
+== om_random_5e7: taskset -c 2 ./target/release/compare om random 50000000 3 (2026-10-27T20:33:04+02:00)
+wall 881.62 s, user 871.79 s, sys 9.42 s, maxrss 15187184 KB
+== bender_check_random: taskset -c 2 ./target/release/compare bender random 10000000 1 (2026-10-27T20:47:45+02:00)
+wall 5.10 s, user 4.98 s, sys 0.12 s, maxrss 360020 KB
+== bender_check_hammer: taskset -c 2 ./target/release/compare bender hammer 10000000 1 (2026-10-27T20:47:51+02:00)
+wall 0.49 s, user 0.35 s, sys 0.14 s, maxrss 362520 KB
+== bender_check_append: taskset -c 2 ./target/release/compare bender append 10000000 1 (2026-10-27T20:47:51+02:00)
+wall 0.50 s, user 0.39 s, sys 0.11 s, maxrss 362564 KB
+== bender_check_front: taskset -c 2 ./target/release/compare bender front 10000000 1 (2026-10-27T20:47:52+02:00)
+wall 0.49 s, user 0.35 s, sys 0.13 s, maxrss 362548 KB
+done2 2026-10-27T20:47:52+02:00
