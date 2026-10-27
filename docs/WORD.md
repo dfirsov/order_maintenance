@@ -404,15 +404,52 @@ theorem theoremABW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 
 * The constants `c₀`, `c₁`, `W₀` are fixed by stages A2–A3 (the widest expressions seen so far:
   digit × `2^(hβ)` and `ctr · 2^((h−1)β) + tg`, width `2K + 2` with `K = 64·L`, `S ≤ K`).
 
-**What remains**, with revised estimates:
-* **A2, the core procedures** (about 2,500–4,000 lines): for each Lang procedure that the machine
-  calls (and its sub-procedures), `pkF ≤ 2^W` under `MemW` at entry and width bounds of its
-  parameters, following the agreement proofs (`pkF_*` rules; most expressions are reads or
-  comparisons, closed by `Exp.pk_lt` with `simp`/`omega`); the arithmetic assignments (labels, sizes,
-  tags: the Lab/Sz/Tag classes of §2) need the semantic bounds that the agreement lemmas' value
-  identities and option (B) give. Also needed: `MemW` preserved by each write primitive (`Fld.set`,
-  `LK.set`, `push`, path and prep writes) with a bounded value (about 300 lines), and `MemW` at the
-  procedures' entries from `WB` (`memW_of_enc`, or a Level F form of it).
+**Stage A2 is partly done** (2026-10-27, about 4,900 lines in 15 new files, `Impl/PeakW`,
+`PeakSafe`, `PeakHP`, `PeakFrame`, `PeakCore1`, `PeakCore2`, `PeakChunk`, `PeakDrive`, `PeakTop1`,
+`PeakTop2`, `PeakDrain`, `PeakInit`, `Proof/Word/PeakPhase`, `PeakInitTop`, `PeakTop`; A1's
+`PeakBound` (`MemW.fld` only below the capacity, `CapsW` gains `tbl`, `pw`, `arr`, `lcap2`) and
+`PeakLeaf` (`vb_of_WB`, `gd_of_WB`) adapted; no other existing file changed except `OM.lean`; no
+`sorry`; nothing is used by Theorems A and B).
+
+* **The invariant** `Gd K KH κ Γ s L`: `s` is encodable (`EncOK`), its stored values are bounded
+  (`VB`: fields `< 2^K`, handles `< 2^KH`, lists, path rows, options, and `PRoom K s.P`: `β + 9 ≤ K`,
+  `(H+1)·β ≤ K`, …), and `L x < 2^(Γ x)`. `VB` is preserved by every write primitive with a bounded
+  value (`VB.set/push/lset/pwr/rowReset/prep*/job*`). `gd_of_WB` gives `Gd` at entry from `Enc`,
+  `WB K s` (option B), handles `< 2^KH` and `PRoom`.
+* **Syntactic safety** `Stm.Safe K KH Γ W` with sharper widths (`Exp.vw`: `max`-shapes, 0/1
+  factors, division by a literal; `Exp.wq`: peak) and `Stm.safe_run`: a safe statement keeps `Gd`
+  and its peak is `< 2^W`. Closed by `safe_tac` for most procedures (the PQ, list helpers, `order`,
+  `markDead`, label helpers, `newGroup`, group links, `drainSide`, …).
+* **The other sites**, by a forward rule set `PK`/`PKok` (`PeakHP`) with frames (`evalF_frame_fld`,
+  `evalF_frame_loc`, the index-aware `evalF_frame_fldAt`) and, for values whose bound is only known at
+  the end of the operation, the last-write rule `PK.wr_fin`/`PKok.wr_fin_seq` with `Fin (FB f)`
+  (the end state's field `f` is small, from option B): group and chunk splits (`groupPhasePeak`,
+  `chunkPhasePeak`), `insertElem_pkok` (sizes and the count via `Fin`), `csP_pk`, the table
+  procedures (`roomP_pk`, `tableInsert_pk`), the construction (`initCore_pkok`, `prepP_pkok`), the
+  cut of a drain (`drainCut_pk`: weight sums at width `K + 9`), `finishDrain_pk`, the new tables of a
+  drain start (`tab_pk`).
+* **The wrappers** (`Proof/Word/PeakTop.lean`), in the form `wpB_coreCall` needs: `order_peak`,
+  `markDead_peak`, `prepareStep_peak` (`PrepM s`), `initCore_peak` (`freshC P`):
+  `pkF κ body s (setLocs 0 ps vs) < 2 ^ wPk K KH` with `wPk K KH = max (2K + 4) KH`, i.e. bound
+  `2^(2K+4) + 2^KH` (**c = 2, d = 4**, handle term `2^KH`), given `Enc`, `WB K s`, handles `< 2^KH`,
+  `PRoom K s.P`, `CapsW K κ`, `8 ≤ K`, arguments `< 2^K` and a normal run.
+
+**What remains of A2** (about 3,000–4,000 lines; A2 total about 8,000–9,000, above the 2× bound, so
+stopped here): `insertAfter`, i.e.
+* the drain start `startDrainS` (stages `insS` with `roomCall_pk`/`tableInsertCall_pk`, `stage3`
+  with `tab_pk`, the weights of `chS` (sums at width `K + 9`, written through `Fin (FB (.n .weight))`
+  with `evalF_frame_fldAt` for the two new nodes), a switch of `Γ` after `drainCut`);
+* the job step `jobStepS`: `jcopyS` (`ja + 1`), `dsLabS` (`e1 = 2^(hβ)`, `old`/`new` at width
+  `2K + 1`), `dsTagS`/`gstP` (tags through `Fin (FB (.c .tag))`), `walkS` (`wt + 2` through `Fin`
+  or option B's `walk_weight`; `powS` needs `log₂ a · H ≤ K`, a new `PRoom` field);
+* the reservation (`cinsBody`, `childS` with `r + 2`, `iaPrepS` tags, `insertAroundS`,
+  `splitChunkStartS`, the loop) and `background`, `insertAfterP` (`catch … bug`);
+* discharging the `Fin` hypotheses from option B's end-state bounds (`TopWB`, `reservation_wb`,
+  the `linkElem` step) — the largest unknown.
+For the corollary without Level F notions, `PRoom` and `CapsW` must come from the parameters
+(`wK P`, `capsOf P`, stage A3), and `WB` from `theoremW_stored`'s reachability.
+
+**What remains after A2**, with revised estimates:
 * **A3, the machine-only code** (about 1,500–2,500 lines): re-run the `wp` proofs of `WrapM`,
   `RebuildM`, `OpsM`, `InitM`, `NewCore`, `Params`, `Fresh` with `wpB` (new theorems beside the
   existing ones; their statements stay), `wpB_coreCall` at each core call, `Expr.wdM_sound` for the
@@ -422,5 +459,5 @@ theorem theoremABW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 
 * **A4, the final theorem** (about 300–500 lines): the statement above, the Level F trace beside the
   machine run, the handle bound on the operation arguments, and the cumulative corollary.
 
-**Total remaining: about 4,300–7,000 lines**, in line with §5.
+**Total remaining: about 4,800–7,000 lines** (A2's rest, A3, A4).
 

@@ -1,5 +1,6 @@
 import OM.Proof.Word.Defs
 import OM.Impl.PeakBound
+import OM.Impl.PeakSafe
 
 /-!
 # Theorem W, option (A), stage A1: the leaves of the generic lemma from option (B)
@@ -137,7 +138,7 @@ theorem opt_of_WB (hW : WB K s) (hK : 3 ≤ K) (o : OF) : o.get s < 2 ^ K := by
 theorem memW_of_enc {p : Nat} {m : OM.Machine.State} (h : Enc p κ s m) (hW : WB K s) (hK : 3 ≤ K)
     (hh : ∀ i, (s.E.getX i).h < 2 ^ KH) (hT : ∀ t, κ.tbl t < 2 ^ K) (hpw : κ.pw < 2 ^ K) :
     MemW K KH κ s where
-  fld := fld_of_WB hW hK hh
+  fld f j _ := fld_of_WB hW hK hh f j
   size t := lt_of_le_of_lt (h.sle t) (hT t)
   prm k := by
     obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16⟩ := hW.P
@@ -147,5 +148,23 @@ theorem memW_of_enc {p : Nat} {m : OM.Machine.State} (h : Enc p κ s m) (hW : WB
   lst k i j _ hj := lst_of_WB hW hK k i j hj
   row c j _ _ := row_of_WB hW c j
   opt o := opt_of_WB hW hK o
+
+/-- **The stored values of a core with `WB`**, as the invariant of stage A2 needs them. -/
+theorem vb_of_WB (hW : WB K s) (hK : 3 ≤ K) (hh : ∀ i, (s.E.getX i).h < 2 ^ KH) (hR : PRoom K s.P) :
+    VB K KH κ s where
+  fld f j _ := fld_of_WB hW hK hh f j
+  prm k := by
+    obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16⟩ := hW.P
+    cases k <;> simp only [PF.get] <;> assumption
+  lst k i j _ hj := lst_of_WB hW hK k i j hj
+  row c j _ _ := row_of_WB hW c j
+  opt o := opt_of_WB hW hK o
+  room := hR
+
+/-- **The invariant at the entry of a core procedure**, from option (B)'s `WB`. -/
+theorem gd_of_WB {p : Nat} {m : OM.Machine.State} {Γ : OM.Machine.Reg → Nat} {L : Loc} (h : Enc p κ s m)
+    (hW : WB K s) (hK : 3 ≤ K) (hh : ∀ i, (s.E.getX i).h < 2 ^ KH) (hR : PRoom K s.P)
+    (hL : ∀ x, L x < 2 ^ Γ x) : Gd K KH κ Γ s L :=
+  ⟨⟨p, m, h⟩, vb_of_WB hW hK hh hR, hL⟩
 
 end OM.Proof.Word

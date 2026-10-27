@@ -119,7 +119,7 @@ theorem Exp.shOK_of_noShl (κ : Caps) (s : Core) (L : Loc) (S : Nat) :
 within their capacity, and the row width `H + 1` below `2^K`. `PeakLeaf.lean` derives it from
 option (B)'s `WB`. -/
 structure MemW (K KH : Nat) (κ : Caps) (s : Core) : Prop where
-  fld : ∀ (f : Fld) j, f.get s j < 2 ^ f.wd K KH
+  fld : ∀ (f : Fld) j, j < f.cap κ → f.get s j < 2 ^ f.wd K KH
   size : ∀ t : Tbl, t.size s < 2 ^ K
   prm : ∀ k : PF, k.get s.P < 2 ^ K
   H1 : s.P.H + 1 < 2 ^ K
@@ -135,6 +135,10 @@ structure CapsW (K : Nat) (κ : Caps) : Prop where
   lcap : ∀ k : LK, κ.lcap k < 2 ^ K
   path : κ.tbl .C * κ.pw < 2 ^ K
   sixteen : 16 ≤ 2 ^ K
+  tbl : ∀ t : Tbl, κ.tbl t < 2 ^ K
+  pw : κ.pw < 2 ^ K
+  arr : ∀ k : AF, κ.arr k < 2 ^ K
+  lcap2 : ∀ k : LK, κ.lcap k + 2 < 2 ^ K
 
 /-! ### Soundness -/
 
@@ -191,8 +195,9 @@ theorem Exp.wd_sound (hM : MemW K KH κ s) (hC : CapsW K κ) (hΓ : ∀ x, L x <
     simp only [Exp.ev, Option.bind_eq_some_iff] at hv
     obtain ⟨j, hj, hv⟩ := hv
     split at hv
-    · cases hv
-      have hf := hM.fld f j
+    · next hjc =>
+      cases hv
+      have hf := hM.fld f j hjc
       obtain ⟨-, hip⟩ := Exp.wd_sound hM hC hΓ i hs hj
       refine ⟨hf, ?_⟩
       simp only [Exp.pk, Exp.wp, Exp.val_of hv']
