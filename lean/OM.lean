@@ -72,3 +72,6 @@ import OM.Impl.PeakWrapM
 import OM.Impl.PeakRebuildM
 import OM.Impl.PeakOpsM
 import OM.Impl.PeakTheoremW
+import OM.Impl.PeakABW
+import OM.Impl.PeakCap
+import OM.Impl.PeakFinal

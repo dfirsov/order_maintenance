@@ -1,12 +1,13 @@
 # Theorem W (word size): plan
 
-Status (2026-10-23): option (B) done (stages B1–B3). `theoremW_stored`
+Status (2026-10-27): **options (B) and (A) are done.** Option (B) (stages B1–B3): `theoremW_stored`
 (`lean/OM/Proof/Word/Wrap.lean`) proves `OMB` on every wrapper state reached by initialization and
 `t` valid operations: every value stored in either core is below `2^K`, `K = 64·L` for the larger `L`
 of the two cores, handles excepted; element indices and the cursor are below `2^K`; handles and
-counters are at most `t`. Not proved: the machine's peak (option A: the intermediate values of
-expressions and the loop locals); its infrastructure (stage A1) is done, §7. Nothing here is used by
-Theorems A and B. Design: §6.
+counters are at most `t`. Option (A) (stages A1–A4, §7): the machine's peak, i.e. every value the
+machine program computes, intermediate values included: `theoremABW_M` and `theoremW_M`
+(`lean/OM/Impl/PeakABW.lean`, `PeakFinal.lean`), operation `i` computes only values below
+`2^(128·⌊log₂(i + 1)⌋ + 1285) + 2·(i + 1)`. Nothing here is used by Theorems A and B. Design: §6.
 
 ## 1. Statement
 
@@ -327,7 +328,9 @@ from memory (approach (i′) of §4). Estimate as in §5, minus (B): about 4,500
 ## 7. Option (A): status
 
 Approach (i′) of §4, in four stages: A1 infrastructure, A2 the core-language procedures, A3 the
-machine-only code, A4 the final theorem. **Stage A1 is done** (2026-10-27, about 1,870 lines, no
+machine-only code, A4 the final theorem. **Option (A) is done** (2026-10-27): all four stages, about
+11,800 lines in 38 new files (`Impl/Peak*.lean`, `Proof/Word/Peak*.lean`); the final statements are
+at the end of this section (*Stage A4 is done*). **Stage A1 is done** (2026-10-27, about 1,870 lines, no
 existing file changed except `OM.lean`; nothing is used by Theorems A and B):
 
 * **The peak on Level F** (`Impl/Peak.lean`). `Exp.pk κ s L e` is `Expr.maxv` of the compiled
@@ -611,14 +614,64 @@ theorem theoremW_init {m : State} {KB : Nat} (hkb : m.loc "kb" = KB) (hKB : KB <
 `2^(2K+5) + 2(t+1)`. The initialization's first core has `L = 8`, `wK = 512`, and its budget
 `BW 512 1 = 2^1028 + 2` is below `2^1029`; `K_B < 2^512` (stored in `wa 7`) is below it.
 
-**What remains: A4** (about 250–400 lines). The statement of the proposal above, with `theoremW_op`
-and `theoremW_init` as its two bounds. What A4 must supply: along the machine run of `theoremAB_M`,
-each state before operation `i` holds (`WEnc om m p`) the wrapper state `om` with
-`ReachW K_B i om Sp_i`. `step_reach` gives `Reach` (some `om` with `MInv`), and the `om'` of
-`insertW_ok`, `deleteW_ok`, `orderW_okM` is Level F's `OM.apply` result (`om.insert … = .ok (_, om')`),
-so `Reach` can be strengthened to `ReachW` by threading the run (a `run_reach` with `ReachW`); the
-initial state comes from `initW_ok`'s `OM.init … = .ok om` (`ReachW.init`). The hypotheses of
-`theoremW_op` are then `4 ≤ K_B`, `K_B < 2^512` (both in the statement), `ReachW`, `WEnc` and the
-validity of the operation (from `Spec.Valid`). The cumulative corollary follows by `peak_exec`.
+**Stage A4 is done** (2026-10-27, about 620 lines in 3 new files, `Impl/PeakABW` (155),
+`PeakCap` (376), `PeakFinal` (89); no existing file changed except `OM.lean`; `run_reach`,
+`theoremAB_M` and every other existing statement unchanged; no `sorry`; `#print axioms` of
+`theoremABW_M`, `theoremW_M`, `theoremW_M_peak`: `propext`, `Classical.choice`, `Quot.sound`;
+nothing is used by Theorems A and B).
 
-**Total remaining: about 250–400 lines** (A4).
+* **The run states** (`PeakABW`): `runSt m ops`, the machine state after the machine code of `ops`
+  run in order from `m` (the recursion of `runM`). The state before operation `i` is
+  `runSt m₁ (ops.take i)`, `m₁ = (exec initWS m₀).st`; the specification state before it is
+  `Spec.final ∅ (ops.take i)`.
+* **The threading** (`PeakABW`): `step_reachW` (`step_reach`'s case analysis; the `om'` of
+  `insertW_ok`, `deleteW_ok`, `orderW_okM` is `OM.apply`'s result, so `ReachW.step` applies),
+  `run_reachW`, `init_reachW` (`ReachW.init` from `initW_ok`), `valid_take`, `valid_get`,
+  `before_reachW`.
+* **The capacities along the history** (`PeakCap`): `reachW_cap`, both cores have capacity
+  `N ≤ capB t = 24·t + 64` after `t` operations. A new core is created only by a rebuild start,
+  with `nextCapacity = 4·max(live + (count + L + 2)/(K_B − 1) + 1, 16)`, `live ≤ t + 1`,
+  `2·count ≤ N` (the start follows an operation on an idle `cur`, `WC.idle`, and mirroring keeps an
+  absent `nxt` absent: `mirrorInsert_none`, `mirrorDelete_none`), `8·L ≤ N` (`pL_small`), `K_B ≥ 4`
+  (`nextCap_le`). Preparation, copies (`copy_P`), the loop (`loop_cap`), mirrored operations and the
+  swap keep both cores' parameters (`rebuild_cap`, `insert_cap`, `delete_cap`, along the proofs of
+  `insert_step`, `delete_step`). Hence `wKom_le`: `wKom om ≤ 64·(⌊log₂(t + 1)⌋ + 8)`.
+
+**The final theorems**:
+
+```
+def runSt : State → List OM.Spec.Op → State
+  | m, [] => m
+  | m, op :: ops => runSt (exec (opS op) m).st ops
+
+theorem theoremABW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 4 ≤ KB) (h512 : KB < 2 ^ 512)
+    (ops : List OM.Spec.Op) (hv : OM.Spec.Valid OM.Spec.State.empty ops) :
+    ((exec initWS m₀).status = .ok ∧ (exec initWS m₀).cost ≤ initB ∧
+      ∃ cs, runM (exec initWS m₀).st ops = some (OM.Spec.run OM.Spec.State.empty ops, cs) ∧
+        ∀ c ∈ cs, c ≤ opB KB) ∧
+    dpk initWS m₀ < 2 ^ 1029 ∧
+    ∀ i (hi : i < ops.length), ∃ om p,
+      ReachW KB i om (OM.Spec.final OM.Spec.State.empty (ops.take i)) ∧
+      WEnc om (runSt (exec initWS m₀).st (ops.take i)) p ∧
+      dpk (opS ops[i]) (runSt (exec initWS m₀).st (ops.take i)) < 2 ^ (2 * (wKom om + 128) + 5) + 2 * (i + 1)
+
+-- without Level F notions
+theorem theoremW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 4 ≤ KB) (h512 : KB < 2 ^ 512)
+    (ops : List OM.Spec.Op) (hv : OM.Spec.Valid OM.Spec.State.empty ops) :
+    dpk initWS m₀ < 2 ^ 1029 ∧
+    ∀ i (hi : i < ops.length),
+      dpk (opS ops[i]) (runSt (exec initWS m₀).st (ops.take i)) < 2 ^ (128 * Nat.log2 (i + 1) + 1285) + 2 * (i + 1)
+
+-- cumulative (peak_exec): the recorded peak after initialization and all of ops
+theorem theoremW_M_peak … :
+    (runSt (exec initWS m₀).st ops).peak ≤
+      max m₀.peak (2 ^ (128 * Nat.log2 (ops.length + 1) + 1285) + 2 * (ops.length + 1))
+```
+
+**The constants.** Per operation (`theoremABW_M`): `c₀ = 5`, `c₁ = 2`, `W₀ = 1029`. In `i` alone
+(`theoremW_M`): `2·(wKom om + 128) + 5 ≤ 2·(64·(⌊log₂(i + 1)⌋ + 8) + 128) + 5 = 128·⌊log₂(i + 1)⌋ + 1285`.
+So operation `i` runs on words of `128·⌊log₂(i + 1)⌋ + 1286` bits, `O(log i)`; `m₀` is arbitrary except
+local `kb`, and `dpk` ignores `m₀.peak`.
+
+**Option (A), total**: A1 about 1,870 lines, A2 about 7,200 (first part 4,900, spike 400, completion
+1,900), A3 about 2,050, A4 about 620: **about 11,800 lines in 38 new files**.
