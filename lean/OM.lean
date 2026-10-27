@@ -58,3 +58,17 @@ import OM.Proof.Word.PeakInitTop
 import OM.Impl.PeakTop2
 import OM.Impl.PeakDrain
 import OM.Proof.Word.PeakTop
+import OM.Proof.Word.PeakFin
+import OM.Proof.Word.PeakJob
+import OM.Proof.Word.PeakSD
+import OM.Proof.Word.PeakStep
+import OM.Proof.Word.PeakSplit
+import OM.Proof.Word.PeakRes
+import OM.Proof.Word.PeakBg
+import OM.Proof.Word.PeakIns
+import OM.Impl.PeakMW
+import OM.Impl.PeakParams
+import OM.Impl.PeakWrapM
+import OM.Impl.PeakRebuildM
+import OM.Impl.PeakOpsM
+import OM.Impl.PeakTheoremW

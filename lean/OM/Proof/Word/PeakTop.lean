@@ -14,7 +14,7 @@ capacities below `2^K` (`CapsW K κ`), a normal run of each core procedure from 
 * `prepareStep_peak` (a core being built, `PrepM`);
 * `initCore_peak` (the empty core `freshC P` of the construction).
 
-`insertAfter` is not covered yet (see `docs/WORD.md` §7).
+`insertAfter` is `insertAfter_peak` (`PeakIns.lean`), for a core in service.
 
 Nothing here is used by Theorems A and B.
 -/

@@ -46,6 +46,8 @@ structure PRoom (K : Nat) (P : Params) : Prop where
   Be1 : 1 ≤ P.B_e
   Bg1 : 1 ≤ P.B_g
   beta1 : 1 ≤ P.beta
+  /-- The walk's threshold `a ^ ht = 1 <<< (log₂ a · ht)` (`powS`), for heights `ht ≤ H`. -/
+  aH : Nat.log2 P.a * P.H ≤ K
 
 /-- **The values stored in a core are small** (the value part of `MemW`), and the parameters
 leave room in `K`. -/

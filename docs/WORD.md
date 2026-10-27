@@ -404,16 +404,17 @@ theorem theoremABW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 
 * The constants `c₀`, `c₁`, `W₀` are fixed by stages A2–A3 (the widest expressions seen so far:
   digit × `2^(hβ)` and `ctr · 2^((h−1)β) + tg`, width `2K + 2` with `K = 64·L`, `S ≤ K`).
 
-**Stage A2 is partly done** (2026-10-27, about 4,900 lines in 15 new files, `Impl/PeakW`,
+**Stage A2 is done** (2026-10-27). Its first part (about 4,900 lines in 15 new files, `Impl/PeakW`,
 `PeakSafe`, `PeakHP`, `PeakFrame`, `PeakCore1`, `PeakCore2`, `PeakChunk`, `PeakDrive`, `PeakTop1`,
 `PeakTop2`, `PeakDrain`, `PeakInit`, `Proof/Word/PeakPhase`, `PeakInitTop`, `PeakTop`; A1's
 `PeakBound` (`MemW.fld` only below the capacity, `CapsW` gains `tbl`, `pw`, `arr`, `lcap2`) and
 `PeakLeaf` (`vb_of_WB`, `gd_of_WB`) adapted; no other existing file changed except `OM.lean`; no
-`sorry`; nothing is used by Theorems A and B).
+`sorry`; nothing is used by Theorems A and B) is described first; the spike and the completion
+(`insertAfter`, about 1,900 more lines in 7 new files) follow below.
 
 * **The invariant** `Gd K KH κ Γ s L`: `s` is encodable (`EncOK`), its stored values are bounded
   (`VB`: fields `< 2^K`, handles `< 2^KH`, lists, path rows, options, and `PRoom K s.P`: `β + 9 ≤ K`,
-  `(H+1)·β ≤ K`, …), and `L x < 2^(Γ x)`. `VB` is preserved by every write primitive with a bounded
+  `(H+1)·β ≤ K`, `log₂ a · H ≤ K`, …), and `L x < 2^(Γ x)`. `VB` is preserved by every write primitive with a bounded
   value (`VB.set/push/lset/pwr/rowReset/prep*/job*`). `gd_of_WB` gives `Gd` at entry from `Enc`,
   `WB K s` (option B), handles `< 2^KH` and `PRoom`.
 * **Syntactic safety** `Stm.Safe K KH Γ W` with sharper widths (`Exp.vw`: `max`-shapes, 0/1
@@ -434,8 +435,8 @@ theorem theoremABW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 
   `2^(2K+4) + 2^KH` (**c = 2, d = 4**, handle term `2^KH`), given `Enc`, `WB K s`, handles `< 2^KH`,
   `PRoom K s.P`, `CapsW K κ`, `8 ≤ K`, arguments `< 2^K` and a normal run.
 
-**What remains of A2** (about 3,000–4,000 lines; A2 total about 8,000–9,000, above the 2× bound, so
-stopped here): `insertAfter`, i.e.
+**What remained of A2 after its first part** (done since, see *The completion of A2* below; the
+estimate then was about 3,000–4,000 lines): `insertAfter`, i.e.
 * the drain start `startDrainS` (stages `insS` with `roomCall_pk`/`tableInsertCall_pk`, `stage3`
   with `tab_pk`, the weights of `chS` (sums at width `K + 9`, written through `Fin (FB (.n .weight))`
   with `evalF_frame_fldAt` for the two new nodes), a switch of `Γ` after `drainCut`);
@@ -449,15 +450,175 @@ stopped here): `insertAfter`, i.e.
 For the corollary without Level F notions, `PRoom` and `CapsW` must come from the parameters
 (`wK P`, `capsOf P`, stage A3), and `WB` from `theoremW_stored`'s reachability.
 
-**What remains after A2**, with revised estimates:
-* **A3, the machine-only code** (about 1,500–2,500 lines): re-run the `wp` proofs of `WrapM`,
-  `RebuildM`, `OpsM`, `InitM`, `NewCore`, `Params`, `Fresh` with `wpB` (new theorems beside the
-  existing ones; their statements stay), `wpB_coreCall` at each core call, `Expr.wdM_sound` for the
-  side conditions; `Params` (polynomials in `L`, `N`, the shifts `1 <<< UG`, `1 <<< HC`, `msb`) by
-  computing `dpk` directly as its proofs compute `exec`. Also `CapsW (wK P) (capsOf P)` from
-  `memOf_eq`/`core_mem` (and the small-`N` case).
-* **A4, the final theorem** (about 300–500 lines): the statement above, the Level F trace beside the
-  machine run, the handle bound on the operation arguments, and the cumulative corollary.
+**Spike: the end-state bounds of `insertAfter`** (2026-10-27, `Proof/Word/PeakFin.lean`, about 400
+lines, and `PRoom.aH`). The question was whether option (B) supplies the `Fin` bounds in the form
+the last-write rule needs. It does. Nothing blocks, and no existing statement changes.
+* *Where `Fin` comes from.* Option (B) bounds the end state of each *step*, not of every
+  intermediate state, so `Fin` is taken at step granularity:
+  - `fin_jobStep` (`jobAgree` + `jobStep_wb`);
+  - `fin_split` (`splitAgree_top` + `split_wb`, which is the split branch of `reservation_wb`
+    made into a lemma);
+  - `fin_insertElem` (`insertElem_agree` + `insertElem_wb`).
 
-**Total remaining: about 4,800–7,000 lines** (A2's rest, A3, A4).
+  `evalF` is a function, so the agreement run's end state is the end state of every normal run
+  (`Fin.of_run`).
+* *From the step's end back to the write:*
+  - `Fin.call` takes `Fin` into a callee;
+  - `PKok.seq_fin` passes `Fin` back through the rest of the step;
+  - the frames `FBat.back` (the rest writes no `f`) and `FBat.backAt` (the rest writes `f` only at
+    another index) carry the bound across that rest;
+  - the write itself is `PK.wr_finAt`, which is `PK.wr_fin` for a single index.
 
+  `dsMut_fin` shows these pieces composing at the sweep. The syntactic side conditions of every
+  top-level site hold by `decide` (`frame_chS`, `frame_dsTag`, `frame_split`).
+* *Per site:*
+  - **new-node weights** (`chS`): `Fin` of the job step. The second `chS` writes only at
+    `u = v2`, and the locals `v1` and `v2` are kept from `newNodesS` onwards.
+  - **sweep tag** (`dsTagS`, value width `2K + 2`): `Fin` of the job step, through `gstCall_pk`.
+  - **split tags**: `Fin` of the split. The second `guardedSetTag` writes only at `z`
+    (`gstCall_frame`), and nothing after it writes a tag.
+  - **walk weight** `wt + 2` and **height** `ht ≤ H`: these need no `Fin`. They are bounded at the
+    state *before* the step (`walk_lt`, from `walk_weight` and `Shape.htN`).
+  - **`powS`**: `powS_pk`, with the new field `PRoom.aH : log₂ a · H ≤ K`.
+  - **table labels**: already covered by `roomP_pk`, `tableInsert_pk` and `tab_pk`.
+  - **new-node and new-chunk indices**: below the capacities (`CapsW`).
+  - **job-record counters** (`ja + 1`, `jd + 1`): bounded by their guards.
+* *Points that are not end-state bounds, all cheap:*
+  - The reservation loop's peak proof must carry the joint invariant of `reservation_wb` and
+    `reservationAgree_top` (`ResInv`, `WB`, the node budget, `Mc`). Neither theorem exports it, so
+    the loop is re-proved.
+  - `childS` and `stage7S` pass `r + 2` and `r + 1` (width `K + 1`) as call arguments. Each needs a
+    hand proof from `r ≤ lcap .children = 162`, because `PKok.callS` wants widths `≤ K`.
+  - `y ≠ z` and `v1 ≠ v2` come from the push semantics.
+* `proom_wK`: `PRoom (wK P) P` for the proof parameters (`a = 8`: `3·(L/3 + 1) ≤ 64·L`).
+* **Revised estimate for the rest of A2: about 2,500–3,500 lines.** The `Fin` discharge is now
+  about 10 lines per site.
+
+**The completion of A2: `insertAfter`** (2026-10-27, about 1,900 lines in 7 new files,
+`Proof/Word/PeakJob`, `PeakSD`, `PeakStep`, `PeakSplit`, `PeakRes`, `PeakBg`, `PeakIns`; no existing
+statement changed, only `OM.lean` and a doc comment of `PeakTop.lean`; no `sorry`; `#print axioms`:
+`propext`, `Classical.choice`, `Quot.sound`; nothing is used by Theorems A and B).
+
+* **The sweep step** (`PeakJob`): `dsLab_pk` (`e1 = 2^(hβ)`, `e0 = 2^((h−1)β)` below `2^K` from the
+  guard `h < H` and `PRoom.Hb`; `old`, `new` at width `2K + 1`), `dsTag_pkok` (`tg = ty − old + new`
+  at width `2K + 2`, through `gstCall_pk` with the end state's tag), `dsP_pkok`, `fund_pkok` (`k + 1`
+  below `s` by the guard). Locals: `ΓT` (sweep), `ΓJ` (job step: `pw` at `K + 1`).
+* **The drain start** (`PeakSD`): `chS_pkok` (the weight sum `ws ≤ j·(2^K − 1)` at width `K + 9`,
+  written once, `PK.wr_finAt`), `stage56_pkok` (`v1 ≠ v2` from the push semantics, `newNodes_ne`; the
+  second `chS` writes only at `v2`, `FBat.backAt`), `stage7_pk` (`r + 1`, with `r ≤ lcap children`
+  from `findP_agree`, `findCall_le`, and `CapsW.lcap2`), `insS_pk`, `stage3_pk`, `startDrain_pkok`.
+  The switch of `Γ` after the cut: `b` (a weight sum of the cut at `K + 9`) is reassigned to a child
+  before `insS` uses the room labels `a`, `b` as call arguments, so `insS` runs at `ΓD2` (only `t`,
+  `ws` at `K + 9`).
+* **The job step** (`PeakStep`): `jcopy_pk` (`ja + 1 ≤ H`), `walk_pkok` (the weight `wt + 2` and the
+  height `ht ≤ H` read before the step, `powS_pk`), `afterDS_pkok`, `jobStep_pkok`. Its hypotheses:
+  the walk node's bounds at the state before the step (exactly `walk_lt`'s conclusion) and
+  `Fin (FB weight)`, `Fin (FB tag)` (from `fin_jobStep`).
+* **The split start** (`PeakSplit`): `iaPrep_pk`, `cins_pk`, `childS_pk` (`r + 2`),
+  `insertAround_pkok` (the two tags through `gstCall_pk`; `y ≠ z` from the pushes; the second tag
+  call writes only at `z`, `gstCall_frame`), `split_pkok`.
+* **The reservation loop** (`PeakRes`): the joint invariant `RJ` = `ResInv ∧ WB K ∧` the node budget
+  `∧ Mc` (re-proved as `rj_job`, `rj_split` from `resInv_step` and the step bounds of
+  `reservation_wb`, which does not export its invariant); `resRound_peak` (a round's peak, and the
+  invariant after it: the state after the round is Level F's, by `resAgree_job/_split/_empty` and
+  determinism); `reservation_peak` (`PKok.loop` with the flag `dn`).
+* **The background work** (`PeakBg`): `backgroundS_peak` (part by part along Level F's trace, the
+  analogue of `backgroundS_agree`), `background_peak` (the merged context of `bgAgree` and
+  `background_wb`: the group phase's hooks include `xgroup_wb`, so the chunk phase gets `WB K`).
+* **The insertion** (`PeakIns`): `insertAfter_peakG` (the merged context of `insertAgree` and
+  `insertAfter_wb`, the two `catch … bug`; the handle argument at width `KH` via `PKok.call`),
+  `insertAfter_peakM` (at `TIat TopInv P`, as `insertAgreeM`), `InService.peak`, and the wrapper:
+
+```
+theorem insertAfter_peak {p m s L x hb} (hC : CapsW K (capsOf s.P)) (hK : 8 ≤ K)
+    (hE : Enc p (capsOf s.P) s m) (hWB : WB K s) (hh : ∀ i, (s.E.getX i).h < 2 ^ KH) (hR : PRoom K s.P)
+    (hS : InService s L) (hx : x ∈ L) (hKw : wK s.P ≤ K) (hbK : hb < 2 ^ KH)
+    (he : evalF (capsOf s.P) insertAfterP.body s (setLocs 0 insertAfterP.params [x, hb]) = .ok s' L' n) :
+    pkF (capsOf s.P) insertAfterP.body s (setLocs 0 insertAfterP.params [x, hb]) < 2 ^ wPk K KH
+```
+
+  The hypotheses of the other wrappers, with `κ = capsOf s.P`, plus: `InService s L` (the
+  wrapper's Level M invariant for every core insertion: `cur`, the mirror into `nxt`, and the copy
+  steps; `WrapM` already establishes it for `InService.insert`), `x ∈ L` (the operation is valid),
+  `wK s.P ≤ K` (the word size of the operation is at least the core's; `room_wK`, `room_counts`
+  are monotone in `K`, `InService.room_at`), and the handle argument `hb < 2^KH` (instead of
+  `< 2^K`; it is an operation argument). `PRoom.mono` with `proom_wK` gives `PRoom K s.P`, and
+  `WB.mono` with `theoremW_stored` gives `WB K s`. The bound is the same `2^(2K+4) + 2^KH`
+  (**c = 2, d = 4** stay).
+
+A2 took about 6,800 lines in all (the `insertAfter` part about 1,900 against the 2,500–3,500
+estimated).
+
+**Stage A3 is done** (2026-10-27, about 2,050 lines against the 1,500–2,300 estimated, in 6 new
+files, `Impl/PeakMW`, `PeakParams`, `PeakWrapM`, `PeakRebuildM`, `PeakOpsM`, `PeakTheoremW`; no
+existing file changed except `OM.lean`; no `sorry`; `#print axioms theoremW_op`, `theoremW_init`: `propext`, `Classical.choice`, `Quot.sound`;
+nothing is used by Theorems A and B). The `wp` theorems of `WrapM`, `RebuildM`, `OpsM`, `InitM`,
+`NewCore`, `Params` and `Fresh` keep their statements; each machine piece gets a peak theorem beside
+them.
+
+* **Peak-only proofs** (`PeakMW`). A piece's peak is proved as `wpB B c TT m` (postcondition `True`);
+  the state facts the next piece needs come from the existing `wp` theorem of the previous piece
+  (`wpB_and`, `wpB_seq_of`, `wpB_seq_ofQ`, `wpB_and2`), so the existing proofs are not re-run
+  for their state. `dpk_le_of` turns a proof at the state with the peak reset into `dpk c m ≤ B`.
+  The budget of an operation is **`BW K KH = 2^(2K+4) + 2^KH`**; a core procedure's peak
+  `< 2^(wPk K KH)` is within it (`pk_BW`, `lt_pow_max_add`).
+* **`CapsW (wK P) (capsOf P)`** for `P = proofParams N` (`capsW_wK`): every capacity is a summand of
+  `memOf` (`memOf_eq`), and `memOf < 2^wK` (`core_mem` for `N ≥ 64`: `40000·N < 2^(16 + L)`; for
+  `N < 64` a direct bound `≤ 10^6` with `L = 8`, `memOf_small`); `CapsW.mono`, `capsW_at`,
+  `proom_at`. `CoreK K KH c` (proof parameters, `wK ≤ K`, `WB K`, handles `< 2^KH`) gives the
+  hypotheses of the five A2 wrappers.
+* **`Params`** (`PeakParams`): `partA_pk`, `partB_pk`, `partC_pk`, `paramsS_pk` along the exec facts
+  `partA_ok`, `partB_ok`, `partC_ok`. The expressions' peaks come from `Expr.wdM_sound` with every
+  local at width `K/2` and shifts at most `K` (`2^UG`, `2^HC`: `UG ≤ 4L`, `HC ≤ 30L + 64`). Computing
+  the width with `simp` and closing with `omega` timed out (nested `max`, case splits), so the widths
+  are bounded by a linear form `a·(K/2) + b` whose pair `(a, b)` is computed from the syntax alone
+  (`Expr.wl`, `Expr.wlp`, `wpM_le_wlp`) and checked by `decide` (`a ≤ 2`, `b ≤ 500`). Then
+  `allocSlot_pk` (`capE_maxv`, from `CapsW`), `newCore_pk` and `eagerCore_pk` (`initCore_peak`,
+  `wb_fresh`).
+* **The wrapper pieces** (`PeakWrapM`): `byPar_pk`, `orderC_pk`, `curDelC_pk`, `mirrorDelC_pk`,
+  `curInsC_pk`, `nxtInsC_pk`, `mirrorInsC_pk`, `liveIncC_pk`, `liveDecC_pk`, with the value bounds
+  `WK K KH T om`: option (B)'s `WBW T om om.nxt`, both cores of the proof parameters with `wK ≤ K`,
+  `K_B < 2^K`, `T < 2^KH`. Every insertion goes through `insertAfter_peak` with its `InService`
+  (as in `curInsW_ok`, `nxtInsW_ok`).
+* **The rebuild** (`PeakRebuildM`): `prepC_pk`, `copyC_pk`, `endC_pk`, `spendC_pk`; the loop
+  invariant `LoopB` is Level M's `LoopI` with `WK` of the state of Level F's run (carried as
+  `loop_wb` carries `WBW`: `WK.prep` from `PrepM.wb`, `WK.copy` from `copy_wbw`), because `LoopI`'s
+  existential forgets which Level F state the machine holds; `iterC_pk` re-runs `iterW_ok`'s case
+  analysis with budgets, `loopC_pk` (`wpB_loop`, the cost from `iterW_ok`). `startC_pk`: the new
+  core's capacity satisfies `N' ≤ 4N` (`MInv.nxtN`, the argument of `reach_mem`, applied to the
+  state after the operation), so `wK' ≤ wK + 128` (`wK_mono4`). `rebuildC_pk`.
+* **The operations** (`PeakOpsM`): `insertW_pk`, `deleteW_pk`, `orderW_pk`, along `insertW_ok`,
+  `deleteW_ok`, `orderW_okM`; `WK` of each intermediate wrapper state (`T = t + 1`) from option (B)'s
+  `insert_step`/`delete_step` reasoning, `mirror_wbw`, `mirrorDel_wbw`.
+
+**The results** (`PeakTheoremW`):
+
+```
+theorem opS_pk (h : WEnc om m p) (hI : MInv om Sp) (hB : WBW t om om.nxt) (hv : op.Valid Sp)
+    (hK : wKom om + 128 ≤ K) (hKB : om.KB < 2 ^ K) (hKH : t + 1 < 2 ^ KH) :
+    wpB (BW K KH) (opS op) TT m
+
+theorem theoremW_op {KB t : Nat} {om : OM} {Sp : OM.Spec.State} {m : State} {p : Nat} (h4 : 4 ≤ KB)
+    (hKB : KB < 2 ^ 512) (hR : ReachW KB t om Sp) (h : WEnc om m p) {op : OM.Spec.Op} (hv : op.Valid Sp) :
+    dpk (opS op) m < 2 ^ (2 * (wKom om + 128) + 5) + 2 * (t + 1)
+
+theorem theoremW_init {m : State} {KB : Nat} (hkb : m.loc "kb" = KB) (hKB : KB < 2 ^ 512) :
+    dpk initWS m < 2 ^ 1029
+```
+
+**The constants: c₀ = 5, c₁ = 2, W₀ = 1029.** `theoremW_op` takes `K = wKom om + 128`,
+`KH = log₂(t + 1) + 1` (`t + 1 < 2^KH ≤ 2(t + 1)`), so the budget `2^(2K+4) + 2^KH` is below
+`2^(2K+5) + 2(t+1)`. The initialization's first core has `L = 8`, `wK = 512`, and its budget
+`BW 512 1 = 2^1028 + 2` is below `2^1029`; `K_B < 2^512` (stored in `wa 7`) is below it.
+
+**What remains: A4** (about 250–400 lines). The statement of the proposal above, with `theoremW_op`
+and `theoremW_init` as its two bounds. What A4 must supply: along the machine run of `theoremAB_M`,
+each state before operation `i` holds (`WEnc om m p`) the wrapper state `om` with
+`ReachW K_B i om Sp_i`. `step_reach` gives `Reach` (some `om` with `MInv`), and the `om'` of
+`insertW_ok`, `deleteW_ok`, `orderW_okM` is Level F's `OM.apply` result (`om.insert … = .ok (_, om')`),
+so `Reach` can be strengthened to `ReachW` by threading the run (a `run_reach` with `ReachW`); the
+initial state comes from `initW_ok`'s `OM.init … = .ok om` (`ReachW.init`). The hypotheses of
+`theoremW_op` are then `4 ≤ K_B`, `K_B < 2^512` (both in the statement), `ReachW`, `WEnc` and the
+validity of the operation (from `Spec.Valid`). The cumulative corollary follows by `peak_exec`.
+
+**Total remaining: about 250–400 lines** (A4).
