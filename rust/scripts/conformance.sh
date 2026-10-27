@@ -14,7 +14,8 @@
 #  4. replay of 1,100 fuzz traces (trace.export_fuzz seeds 1..1000 short, 1..100 long).
 #
 # Needs: lean/.lake/build/bin/xrun (lake build xrun), rust/target/release/{xrun,check,replay}.
-# Usage: scripts/conformance.sh [DATE] (logs: results/*_DATE.txt); TMP= holds the traces.
+# Usage: scripts/conformance.sh [DATE] (logs: results/*_DATE.txt); TMP= holds the traces;
+# ONLY_XRUN=1 stops after the cross-check (used by ../scripts/reproduce.sh).
 set -u
 cd "$(dirname "$0")/.."
 D=${1:-$(date +%F)}
@@ -46,6 +47,9 @@ fail=0
   echo "total: $tot_ops operations, $tot_steps steps"
 } > $R/xrun_$D.txt 2>&1
 cat $R/xrun_$D.txt
+if [ -n "${ONLY_XRUN:-}" ]; then
+  echo "overall (xrun only): $([ $fail -eq 0 ] && echo PASS || echo FAIL)"; exit $fail
+fi
 
 # 2. check
 {

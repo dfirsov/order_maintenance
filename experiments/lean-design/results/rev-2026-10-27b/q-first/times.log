@@ -1,0 +1,6 @@
+q-first/q_native_random.csv: 46.01 s, max RSS 1433936 KB
+q-first/q_native_hammer.csv: 22.80 s, max RSS 1419060 KB
+q-first/q_avl_random.csv: 38.55 s, max RSS 520040 KB
+q-first/q_avl_hammer.csv: 15.53 s, max RSS 520096 KB
+q-first/q_bender_random.csv: 25.62 s, max RSS 595212 KB
+q-first/q_bender_hammer.csv: 9.20 s, max RSS 596972 KB

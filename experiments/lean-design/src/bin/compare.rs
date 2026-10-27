@@ -28,6 +28,13 @@
 //! Workloads (insertions only): `random` inserts after a uniformly random element; `hammer`
 //! always inserts right after the first element (every insertion lands at the same place);
 //! `append` inserts after the last inserted element; `front` inserts a new first element.
+//!
+//! Only the operation is timed: the element to insert after (and the pair to query) is chosen
+//! before the timer starts, and the time and work are stored after it stops. (Until revision
+//! 2026-10-27b the random choice of `random`, a random-number draw and a read of the vector of
+//! live handles at a random index, was inside the timed interval; the operation sequence is
+//! unchanged.) With the environment variable `SEED=k`, `random` uses another seed (see
+//! `insertion_seed`); unset, the sequence is the published one.
 
 use lean_design::avl::Avl;
 use om::baseline::Bender;
@@ -60,13 +67,41 @@ impl S {
     }
 }
 
+#[derive(Clone, Copy)]
+enum Wl { Random, Hammer, Append, Front }
+
+/// The seed of the generator that picks the element to insert after (`random`): by default the
+/// fixed seed of all published runs; with the environment variable `SEED=k` (k > 0), the
+/// splitmix64 hash of k instead, a different but equally deterministic workload. `SEED` does not
+/// change the query pairs.
+fn insertion_seed() -> u64 {
+    match std::env::var("SEED") {
+        Err(_) => 0x9E3779B97F4A7C15 | 1,
+        Ok(k) => {
+            let k: u64 = k.parse().expect("SEED: a positive integer");
+            assert!(k > 0, "SEED: a positive integer (unset for the default sequence)");
+            let mut z = k.wrapping_add(0x9E3779B97F4A7C15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+            (z ^ (z >> 31)) | 1
+        }
+    }
+}
+
 /// One run: the time and work of every insertion after the first, and of every query.
 fn run(imp: &str, wl: &str, n: usize, qpi: usize, times: &mut Vec<u32>, works: &mut Vec<u32>,
        qtimes: &mut Vec<u32>, qworks: &mut Vec<u32>) {
     let mut qseed: u64 = 0xD1B54A32D192ED03 | 1;
     let mut qrnd = move || { qseed ^= qseed << 13; qseed ^= qseed >> 7; qseed ^= qseed << 17; qseed };
-    let mut seed: u64 = 0x9E3779B97F4A7C15 | 1;
+    let mut seed: u64 = insertion_seed();
     let mut rnd = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
+    let wl = match wl {
+        "random" => Wl::Random,
+        "hammer" => Wl::Hammer,
+        "append" => Wl::Append,
+        "front" => Wl::Front,
+        _ => panic!("workload"),
+    };
     let mut s = match imp {
         "om" => S::Om(Om::new(4)),
         "bender" => S::B(Bender::new(1.4, n + 1)),
@@ -89,15 +124,17 @@ fn run(imp: &str, wl: &str, n: usize, qpi: usize, times: &mut Vec<u32>, works: &
     qworks.clear();
     let mut sink = 0u64;
     while live.len() < n {
+        // the argument is chosen before the timed interval (revision 2026-10-27b: the random
+        // choice, a read of `live` at a random index, used to be inside it)
+        let x = match wl {
+            Wl::Random => Some(live[(rnd() % live.len() as u64) as usize]),
+            Wl::Hammer => Some(first),
+            Wl::Append => Some(*live.last().unwrap()),
+            Wl::Front => None,
+        };
         let w0 = s.work();
         let t0 = Instant::now();
-        let h = match wl {
-            "random" => { let x = live[(rnd() % live.len() as u64) as usize]; s.insert_after(x) }
-            "hammer" => s.insert_after(first),
-            "append" => { let x = *live.last().unwrap(); s.insert_after(x) }
-            "front" => s.insert_first(),
-            _ => panic!("workload"),
-        };
+        let h = match x { Some(x) => s.insert_after(x), None => s.insert_first() };
         let dt = t0.elapsed().as_nanos();
         times.push(dt.min(u32::MAX as u128) as u32);
         works.push((s.work() - w0).min(u32::MAX as u64) as u32);

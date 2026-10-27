@@ -12,7 +12,7 @@ order query on a list) and prove it correct in Lean 4.
 | `docs/PROOF.md` | the algorithm in conventional form, with complete pen-and-paper proofs of correctness and of the O(1) bound |
 | `docs/LEAN.md` | design of the Lean formalization: deep-embedded word RAM with counted steps, two-level proof, milestones |
 | `lean/` | Lean 4 development (`lake build` in `lean/`): list specification, machine model with cost semantics, program logic, executable functional model (`OM/Model`), trace replay (`lake exe replay`) |
-| `rust/` | Rust code printed from the verified machine program (`lake exe extract`), with a random checker against the specification |
+| `rust/` | Rust code transpiled from the verified machine program (`lake exe extract`), with a random checker against the specification |
 | `prototype/` | executable Python prototype with differential tests and adversarial stress (see its README) |
 | `viz/` | interactive visualizer of one core, ported from the prototype: **[open it in the browser](https://dfirsov.github.io/order_maintenance/viz/)** (see its README) |
 | `papers/` | citations of the source papers: Dietz–Sleator 1987, Bender et al. 2002, Kopelowitz 2012, Brodal's slides |
@@ -32,8 +32,8 @@ The Lean port (`docs/LEAN.md` §7):
 * **M2–M5:** Theorem A and the cost lemmas at Level F (the executable model).
 * **M6:** the machine program. **Theorems A and B are proved for it** (`lean/OM/Impl/TheoremsM.lean`):
   it returns the specification's answers, and every operation takes at most a fixed number of machine
-  steps (`opB 4 = 1,133,561,742`, the same for every `N` and history). A core of capacity `N` uses at
-  most `40000·N` memory cells.
+  steps (`opB 4 = 1,133,561,742`, the same for every `N` and history). The arrays of a core of capacity `N`
+  have a total capacity of at most `40000·N` cells.
 * **Theorem W** (word size) is proved for the machine program (`lean/OM/Impl/PeakRun.lean`): operation
   `i` computes no value at or above `2^(128·⌊log₂(i + 1)⌋ + 1286)`, so words of `O(log #ops)` bits
   suffice. On a machine with `w`-bit words that stops with an error on any larger value (`execW`),
@@ -43,6 +43,19 @@ The Lean port (`docs/LEAN.md` §7):
 **Assumptions** (`docs/LEAN.md` §2.1): one step per instruction, and constant-time array allocation.
 Words are unbounded naturals in `exec`; Theorem W bounds them, and the `w`-bit machine `execW` bounds
 them by definition.
+
+## Reproducing the central checks
+
+`scripts/reproduce.sh` runs, in about ten minutes from a Mathlib cache:
+1. the Lean build;
+2. the axiom audit of the main theorems (`lean/Audit.lean`: only `propext`, `Classical.choice`
+   and `Quot.sound`, and no `sorry` or added axiom);
+3. a fresh transpilation compared byte for byte with `rust/src/gen.rs`;
+4. the Lean-against-Rust cross-check on the paper's nine operation files.
+
+The larger conformance checks are in `rust/scripts/conformance.sh`. The benchmarks and their raw
+results are in `experiments/lean-design/results/` (see `REVISION-2026-10-27.md` there) and
+`rust/results/compare/`.
 
 ## License
 
