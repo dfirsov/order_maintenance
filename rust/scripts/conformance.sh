@@ -32,7 +32,10 @@ fail=0
   i=0; tot_ops=0; tot_steps=0
   for spec in "20 1 mix" "100 2 mix" "300 3 churn" "500 4 mix" "1000 5 churn" "2000 6 mix" "2000 7 churn" "4000 7 mix" "4000 8 churn"; do
     i=$((i+1))
-    python3 scripts/gen_ops.py $spec > $T/ops/ops$i.txt
+    set -- $spec; want=$1
+    python3 scripts/gen_ops.py $spec > $T/ops/ops$i.txt; ge=$?
+    # the operation file must be complete and well formed: exactly $want lines of f / a x / d x / o x y
+    bad=$(grep -cvE '^(f|a [0-9]+|d [0-9]+|o [0-9]+ [0-9]+)$' $T/ops/ops$i.txt)
     $LX $T/ops/ops$i.txt > $T/ops/lean$i.out; le=$?
     $B/xrun $T/ops/ops$i.txt > $T/ops/rust$i.out; re=$?
     ops=$(wc -l < $T/ops/ops$i.txt)
@@ -40,11 +43,14 @@ fail=0
     lines=$(wc -l < $T/ops/lean$i.out)
     peak=$(tail -1 $T/ops/lean$i.out | awk '{print $NF}')
     notok=$(grep -vc '^init ok\|^ok ' $T/ops/lean$i.out)
-    if [ $le -eq 0 ] && [ $re -eq 0 ] && cmp -s $T/ops/lean$i.out $T/ops/rust$i.out; then r=IDENTICAL; else r=DIFFERENT; fail=1; fi
-    echo "file $i (gen_ops.py $spec): $ops operations, $lines output lines, $steps steps (incl. init), peak $peak bits, non-ok lines $notok, exit lean $le rust $re: $r"
+    if [ $ge -ne 0 ] || [ "$bad" -ne 0 ] || [ "$ops" -ne "$want" ] || [ "$lines" -ne $((want + 1)) ] || [ "$notok" -ne 0 ]; then
+      r=INVALID; fail=1
+    elif [ $le -eq 0 ] && [ $re -eq 0 ] && cmp -s $T/ops/lean$i.out $T/ops/rust$i.out; then r=IDENTICAL; else r=DIFFERENT; fail=1; fi
+    echo "file $i (gen_ops.py $spec): $ops operations (expected $want, malformed $bad, generator exit $ge), $lines output lines, $steps steps (incl. init), peak $peak bits, non-ok lines $notok, exit lean $le rust $re: $r"
     tot_ops=$((tot_ops+ops)); tot_steps=$((tot_steps+steps))
   done
   echo "total: $tot_ops operations, $tot_steps steps"
+  if [ "$tot_ops" -ne 13920 ]; then echo "INVALID: expected 13920 operations in all"; fail=1; fi
 } > $R/xrun_$D.txt 2>&1
 cat $R/xrun_$D.txt
 if [ -n "${ONLY_XRUN:-}" ]; then

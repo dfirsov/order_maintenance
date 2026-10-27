@@ -40,10 +40,16 @@ echo "axiom audit: 10 theorems, only standard axioms; no sorry/admit/native_deci
 
 echo "== 3. fresh transpilation"
 lean/.lake/build/bin/extract "$TMP/gen.rs"
-cmp "$TMP/gen.rs" rust/src/gen.rs && echo "rust/src/gen.rs is byte-identical to a fresh transpilation"
+if cmp "$TMP/gen.rs" rust/src/gen.rs; then
+  echo "rust/src/gen.rs is byte-identical to a fresh transpilation"
+else
+  echo "transpilation check FAILED"; exit 1
+fi
 
 echo "== 4. Lean-vs-Rust cross-check"
 (cd rust && cargo build --release --offline --bin xrun)
 (cd rust && ONLY_XRUN=1 TMP="$TMP" scripts/conformance.sh "$(date +%F)-reproduce")
-grep -q DIFFERENT "rust/results/xrun_$(date +%F)-reproduce.txt" && { echo "cross-check FAILED"; exit 1; }
+if grep -qE 'DIFFERENT|INVALID' "rust/results/xrun_$(date +%F)-reproduce.txt"; then
+  echo "cross-check FAILED"; exit 1
+fi
 echo "== all checks passed (logs in $TMP and rust/results/xrun_$(date +%F)-reproduce.txt)"
