@@ -5,7 +5,8 @@ Status (2026-10-23): option (B) done (stages B1–B3). `theoremW_stored`
 `t` valid operations: every value stored in either core is below `2^K`, `K = 64·L` for the larger `L`
 of the two cores, handles excepted; element indices and the cursor are below `2^K`; handles and
 counters are at most `t`. Not proved: the machine's peak (option A: the intermediate values of
-expressions and the loop locals). Nothing here is used by Theorems A and B. Design: §6.
+expressions and the loop locals); its infrastructure (stage A1) is done, §7. Nothing here is used by
+Theorems A and B. Design: §6.
 
 ## 1. Statement
 
@@ -322,3 +323,104 @@ Stage B3: about 730 lines (`Serve` 180, `Wrap` 551). **Total for (B): about 3,94
 **What remains**: option (A), the machine's peak (§3, §4): a bound on every intermediate value of an
 expression and on the loop locals of the machine program, given `WB` as the bound of every value read
 from memory (approach (i′) of §4). Estimate as in §5, minus (B): about 4,500–7,000 lines.
+
+## 7. Option (A): status
+
+Approach (i′) of §4, in four stages: A1 infrastructure, A2 the core-language procedures, A3 the
+machine-only code, A4 the final theorem. **Stage A1 is done** (2026-10-27, about 1,870 lines, no
+existing file changed except `OM.lean`; nothing is used by Theorems A and B):
+
+* **The peak on Level F** (`Impl/Peak.lean`). `Exp.pk κ s L e` is `Expr.maxv` of the compiled
+  expression, including the compiler's index arithmetic (`i·stride + j`, `c·(H+1) + j`, the parameter
+  index); `Exp.maxv_compile` proves the equality whenever `e` evaluates. `pkF κ c s L` follows
+  `evalF`'s run and takes the largest `pk` of every evaluated expression (loop bounds, call arguments,
+  the expressions inside the compiled `push`, `lgrow`, `lshrink`, `prepInit`, `jobSet`, …). Rules for
+  stage A2: `pkF_seq_ok/_le/_fail`, `pkF_ite`, `pkF_call`, `pkF_catch_ok/_fail`, `pkFor_le`,
+  `pkF_loop_le` (a loop invariant).
+* **The one-time extension of `sim`** (`Impl/PeakSim.lean`): `sim_peak` says that when `evalF κ c s L`
+  ends `ok` or `fail`, the compiled run from a state holding `s` ends with
+  `peak = max m.peak (pkF κ c s L)` (an equality). `sim` itself is unchanged.
+* **The generic expression lemma** (`Impl/PeakBound.lean`). Widths are computed from the syntax:
+  `Exp.wv Γ K KH S` (value) and `Exp.wp Γ K KH S` (peak), with `Γ x` the width of local `x`, `K` that
+  of every value read from the core, `KH` that of the handle field `Elem.h`, and `S` a bound on every
+  shift amount. `Exp.wd_sound`: under `MemW K KH κ s` (the leaves read from the core), `CapsW K κ`
+  (the capacities, for the index arithmetic), `∀ x, L x < 2^(Γ x)` and `ShOK` (every evaluated shift
+  amount `≤ S`; `shOK_of_noShl` for expressions without shifts), an expression that evaluates to `v`
+  has `v < 2^wv` and `pk < 2^wp`. For a concrete expression `simp [Exp.wp, Exp.wv, BinOp.wd]` computes
+  the width as a term in `K`, `S` and the `Γ` of its locals and `omega` compares it with a target (for
+  example `pv·e1 + vb·e0` of the drain step gets `2K + 2` when `Γ e1 = Γ e0 = K + 1`). The closed form
+  `Exp.wp_le_depth`: width `≤ 2^depth · (K + S)`. `lt_pow_max_add` splits a width `max K KH` into
+  "below `2^K`, or at most twice a handle", the convention of §1.
+* **The leaves from option (B)** (`Proof/Word/PeakLeaf.lean`): `memW_of_enc` derives `MemW K KH κ s`
+  from `WB K s`, handles below `2^KH`, `K ≥ 3`, the encoding (sizes, list lengths, `pw = H + 1`) and
+  capacities below `2^K`.
+* **Machine-only code** (`Impl/PeakM.lean`, `Impl/PeakCall.lean`).
+  - The peak is ghost: `exec_raise` (raising the initial peak raises the final one, nothing else
+    changes), hence `peak_exec : (exec c s).st.peak = max s.peak (dpk c s)`, where `dpk c s` is the
+    peak of the run from `s` with the peak reset to 0, i.e. the largest value the run computes;
+    `exec_reset`, `peak_le_exec`.
+  - `wpB B c Q s`: `wp` with a peak budget (the final peak is at most `max s.peak B`). Rules:
+    `wpB_skip`, `wpB_assign_g`, `wpB_store_g`, `wpB_alloc_g` (the state-forgetting form of the
+    `wp_*_g` rules the machine-only proofs use), `wpB_seq`, `wpB_ite`, `wpB_call`, `wpB_catch_ok`,
+    `wpB_loop`, `wpB_of_wp` (a `wp` proof plus `dpk ≤ B`), `wpB.wp`, `wpB.peak_le`, `wpB_mono`. Each
+    rule adds one side condition per evaluated expression, `maxv ≤ B`.
+  - `wpB_coreCall`: `wp_coreCall` with a budget: a call of a compiled core procedure stays within `B`
+    when its arguments' `maxvList` and the body's `pkF` are at most `B`. This is where stage A2's
+    bounds enter stage A3.
+  - The machine expression lemma `Expr.wdM_sound` (widths `Expr.wvM`/`wpM` per local and per array),
+    stated only for the leaves the expression reads (`Expr.LeafB`), because the initial state of
+    `theoremAB_M` has arbitrary locals and memory; `maxvList_lt` for argument lists.
+
+**The proposed final theorem** (A4). Per operation, using the reset peak, so that the history's peak
+(and the arbitrary `m₀.peak`) does not enter:
+
+```
+-- the machine states: after initialization, and after each operation
+def runSt (m : State) : List Op → List State      -- m, then exec (opS op) of each, in order
+-- Level F's wrapper states: OM.init K_B, then OM.apply of each operation (as in `ReachW`)
+
+theorem theoremABW_M {m₀ : State} {KB : Nat} (hkb : m₀.loc "kb" = KB) (h4 : 4 ≤ KB) (h512 : KB < 2 ^ 512)
+    (ops : List Op) (hv : Spec.Valid Spec.State.empty ops) :
+    <the conclusion of theoremAB_M> ∧
+    dpk initWS m₀ < 2 ^ W₀ ∧
+    ∀ i < ops.length, ∃ om p, ReachW KB i om Sp_i ∧ WEnc om (runSt (exec initWS m₀).st ops)[i] p ∧
+      dpk (opS ops[i]) (runSt (exec initWS m₀).st ops)[i] < 2 ^ (2 * (wKom om + 128) + c₀) + c₁ * (i + 1)
+```
+(pseudo-code: `Sp_i` is the specification state after the first `i` operations.)
+
+* `m₀` is arbitrary except `kb`; `dpk` ignores `m₀.peak`, and `Expr.LeafB` lets the proof ignore
+  locals and arrays that initialization does not read. `KB < 2^512` is the hypothesis of
+  `theoremW_stored` (`2^512 ≤ 2^(64·L)`, `L ≥ 8`), since `K_B` itself is read and stored.
+* **The capacity `L` varies over the history.** Operation `i` is bounded by the word size of the
+  wrapper state *before* it (`wKom om = 64·max(L_cur, L_nxt)`); the `+ 128` covers a core created
+  during the operation, whose `N' ≤ 4N` gives `L' ≤ L + 2` (`reach_mem`). The cumulative form
+  follows by `peak_exec`: the peak after `t` operations is at most `max m₀.peak` of the bounds of
+  the operations so far, i.e. `2^(c·L_max)` with `L_max` the largest `L` of the history (a retired
+  core with a larger `L` did compute larger values earlier).
+* **Handles**: an operation's arguments are handles (`opS` assigns them as literals), at most the
+  insertion counter `≤ i`; the handle maps' capacity is `nextHandle + (N − count) ≤ i + N`
+  (`WEnc.roomC`). With handles at width `KH = log₂(i+1) + 1`, `lt_pow_max_add` turns the width
+  bound `max(2K + c₀, KH + c)` into the sum above.
+* The constants `c₀`, `c₁`, `W₀` are fixed by stages A2–A3 (the widest expressions seen so far:
+  digit × `2^(hβ)` and `ctr · 2^((h−1)β) + tg`, width `2K + 2` with `K = 64·L`, `S ≤ K`).
+
+**What remains**, with revised estimates:
+* **A2, the core procedures** (about 2,500–4,000 lines): for each Lang procedure that the machine
+  calls (and its sub-procedures), `pkF ≤ 2^W` under `MemW` at entry and width bounds of its
+  parameters, following the agreement proofs (`pkF_*` rules; most expressions are reads or
+  comparisons, closed by `Exp.pk_lt` with `simp`/`omega`); the arithmetic assignments (labels, sizes,
+  tags: the Lab/Sz/Tag classes of §2) need the semantic bounds that the agreement lemmas' value
+  identities and option (B) give. Also needed: `MemW` preserved by each write primitive (`Fld.set`,
+  `LK.set`, `push`, path and prep writes) with a bounded value (about 300 lines), and `MemW` at the
+  procedures' entries from `WB` (`memW_of_enc`, or a Level F form of it).
+* **A3, the machine-only code** (about 1,500–2,500 lines): re-run the `wp` proofs of `WrapM`,
+  `RebuildM`, `OpsM`, `InitM`, `NewCore`, `Params`, `Fresh` with `wpB` (new theorems beside the
+  existing ones; their statements stay), `wpB_coreCall` at each core call, `Expr.wdM_sound` for the
+  side conditions; `Params` (polynomials in `L`, `N`, the shifts `1 <<< UG`, `1 <<< HC`, `msb`) by
+  computing `dpk` directly as its proofs compute `exec`. Also `CapsW (wK P) (capsOf P)` from
+  `memOf_eq`/`core_mem` (and the small-`N` case).
+* **A4, the final theorem** (about 300–500 lines): the statement above, the Level F trace beside the
+  machine run, the handle bound on the operation arguments, and the cumulative corollary.
+
+**Total remaining: about 4,300–7,000 lines**, in line with §5.
+

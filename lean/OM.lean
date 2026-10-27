@@ -37,3 +37,9 @@ import OM.Proof.Word.Insert
 import OM.Proof.Word.TopWB
 import OM.Proof.Word.Serve
 import OM.Proof.Word.Wrap
+import OM.Impl.Peak
+import OM.Impl.PeakSim
+import OM.Impl.PeakBound
+import OM.Impl.PeakM
+import OM.Impl.PeakCall
+import OM.Proof.Word.PeakLeaf
