@@ -63,14 +63,22 @@ fi
   for m in grow mix churn; do $B/check 200000 7 $m || { echo "FAILED: check 200000 7 $m"; fail=1; }; done
   for s in 1 2 3; do for m in grow mix churn; do $B/check 300000 $s $m || { echo "FAILED: check 300000 $s $m"; fail=1; }; done; done
 } > $R/check_$D.txt 2>&1
-grep -c "all answers agree" $R/check_$D.txt; grep FAILED $R/check_$D.txt
+agree=$(grep -c "all answers agree" $R/check_$D.txt); echo "check: $agree of 12 runs agree"
+grep FAILED $R/check_$D.txt; [ "$agree" -eq 12 ] || fail=1
 
 # 3. the 23 stress workloads
 (cd ../prototype && python3 -c "import stress; print('\n'.join(stress.WORKLOADS))" \
-  | xargs -P 8 -I{} sh -c "python3 trace.py $T/traces/{}.jsonl {} 200000 --preset proof > $T/traces/{}.log 2>&1 || echo TRACE FAILED {}")
-ls $T/traces/*.jsonl | wc -l
+  | xargs -P 8 -I{} sh -c "python3 trace.py $T/traces/{}.jsonl {} 200000 --preset proof > $T/traces/{}.log 2>&1 || echo TRACE FAILED {}") \
+  > $T/traces_gen.txt 2>&1; ge=$?
+cat $T/traces_gen.txt
+# every workload must have been generated: exit 0, no failed trace, 23 trace files
+nt=$(ls $T/traces/*.jsonl 2>/dev/null | wc -l)
+if [ $ge -ne 0 ] || grep -q "TRACE FAILED" $T/traces_gen.txt || [ "$nt" -ne 23 ]; then
+  echo "INVALID: workload generation (exit $ge, $nt of 23 traces)"; fail=1
+fi
 $B/replay $T/traces/*.jsonl > $R/replay_workloads_$D.txt 2>&1; rc=$?; [ $rc -eq 0 ] || fail=1
-echo "workloads: exit $rc, traces $(grep -c ' ops ' $R/replay_workloads_$D.txt), mismatches $(grep -c MISMATCH $R/replay_workloads_$D.txt)"
+nr=$(grep -c ' ops ' $R/replay_workloads_$D.txt); [ "$nr" -eq 23 ] || fail=1
+echo "workloads: exit $rc, traces $nr (expected 23), mismatches $(grep -c MISMATCH $R/replay_workloads_$D.txt)"
 
 # 4. the fuzz traces
 (cd ../prototype && python3 - <<EOF
@@ -83,8 +91,13 @@ with cf.ProcessPoolExecutor(8) as ex:
     rs = list(ex.map(job, jobs, chunksize=8))
 print(len(rs), "traces,", sum(r["records"] for r in rs), "records,", sum(r["rebuilds"] for r in rs), "rebuilds")
 EOF
-) > $T/fuzz_gen.txt 2>&1
+) > $T/fuzz_gen.txt 2>&1; ge=$?
 cat $T/fuzz_gen.txt
+# the generator must succeed and produce all 1,100 traces
+nf=$(ls $T/fuzz/*.jsonl 2>/dev/null | wc -l)
+if [ $ge -ne 0 ] || [ "$nf" -ne 1100 ]; then echo "INVALID: fuzz generation (exit $ge, $nf of 1100 traces)"; fail=1; fi
 { cat $T/fuzz_gen.txt; $B/replay $T/fuzz/*.jsonl; } > $R/replay_fuzz_$D.txt 2>&1; rc=$?; [ $rc -eq 0 ] || fail=1
-echo "fuzz: exit $rc, traces $(grep -c ' ops ' $R/replay_fuzz_$D.txt), mismatches $(grep -c MISMATCH $R/replay_fuzz_$D.txt), lines $(wc -l < $R/replay_fuzz_$D.txt)"
+nr=$(grep -c ' ops ' $R/replay_fuzz_$D.txt); [ "$nr" -eq 1100 ] || fail=1
+echo "fuzz: exit $rc, traces $nr (expected 1100), mismatches $(grep -c MISMATCH $R/replay_fuzz_$D.txt), lines $(wc -l < $R/replay_fuzz_$D.txt)"
 echo "overall: $([ $fail -eq 0 ] && echo PASS || echo FAIL)"
+exit $fail
