@@ -1,5 +1,7 @@
 # Order maintenance in O(1) worst case
 
+**[Paper (arXiv:2610.38616)](https://arxiv.org/abs/2610.38616)**: *Order Maintenance in Worst-Case Constant Time, Verified*.
+
 **[Interactive visualizer](https://dfirsov.github.io/order_maintenance/viz/)**: insert elements and watch groups, chunks and the top tree at work.
 
 Goal: implement an O(1) worst-case order-maintenance algorithm (insert, delete,
