@@ -17,6 +17,7 @@
 # Usage: scripts/conformance.sh [DATE] (logs: results/*_DATE.txt); TMP= holds the traces;
 # ONLY_XRUN=1 stops after the cross-check (used by ../scripts/reproduce.sh).
 set -u
+set -o pipefail
 cd "$(dirname "$0")/.."
 D=${1:-$(date +%F)}
 T=${TMP:-/tmp/om-conformance}
