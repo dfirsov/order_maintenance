@@ -43,6 +43,9 @@ The Lean port (`docs/LEAN.md` §7):
   (`lean/OM/Impl/PeakWord.lean`).
 
 **Assumptions** (`docs/LEAN.md` §2.1): one step per instruction, and constant-time array allocation.
+The allocation is not essential: `theoremAB_flat` (`lean/OM/Impl/FlatRun.lean`) runs a verified
+translation of the program, with no `alloc` and at most 5× the steps, on a single zero-filled memory
+of `memFlat t K_B` words (`O(log t)` bits) fixed before the run.
 Words are unbounded naturals in `exec`; Theorem W bounds them, and the `w`-bit machine `execW` bounds
 them by definition.
 

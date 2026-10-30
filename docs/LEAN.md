@@ -93,7 +93,11 @@ program, the deep-embedded one of §3.
    computed value: words of `128·⌊log₂(t + 1)⌋ + 1286` bits suffice for `t` operations, and the
    `w`-bit machine `execW` runs the program exactly as `exec` does (`theoremAB_word`).
 2. **Constant-time allocation.** `alloc A n` gives array `A` capacity `n`, every cell reading 0, in
-   one step (constant-time-initializable arrays).
+   one step (constant-time-initializable arrays). **Not essential:** the verified translation
+   `flatten` (`lean/OM/Machine/Flat.lean`) maps every program to one with no `alloc` that uses a
+   single memory array (a base-address table and a downward heap pointer), and `theoremAB_flat`
+   (`lean/OM/Impl/FlatRun.lean`) runs it on a zero-filled memory of `memFlat t K_B` cells with at
+   most 5× the steps; `theoremAB_flat_word` adds words of `wFlat t K_B` bits.
 3. **Unit-cost `*`, `/`, `%`, shifts and `msb`**, as in the standard word RAM.
 
 **The form of Theorem W.** The bound is in the number of operations, not in the current `N`:
