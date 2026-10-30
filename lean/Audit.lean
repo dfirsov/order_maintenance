@@ -16,3 +16,6 @@ open OM OM.Impl OM.Machine OM.Proof.Word
 #print axioms core_mem        -- core array capacity
 #print axioms opB_four
 #print axioms initB_eq
+#print axioms flatten_sim          -- the translation to a RAM without `alloc`: simulation
+#print axioms theoremAB_flat       -- Theorems A and B on a RAM without `alloc`
+#print axioms theoremAB_flat_word  -- the same on w-bit words

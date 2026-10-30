@@ -31,12 +31,12 @@ text = open(sys.argv[1]).read()
 deps = re.findall(r"depends on axioms: \[([^\]]*)\]", text)
 ok = {"propext", "Classical.choice", "Quot.sound"}
 bad = [d for d in deps if not {a.strip() for a in d.split(",")} <= ok]
-sys.exit(0 if len(deps) == 10 and not bad and "error" not in text else 1)
+sys.exit(0 if len(deps) == 13 and not bad and "error" not in text else 1)
 PY
 if grep -rnE '\bsorry\b|\badmit\b|native_decide|^\s*axiom\b' lean/OM --include=*.lean; then
   echo "source audit FAILED"; exit 1
 fi
-echo "axiom audit: 10 theorems, only standard axioms; no sorry/admit/native_decide/axiom in lean/OM"
+echo "axiom audit: 13 theorems, only standard axioms; no sorry/admit/native_decide/axiom in lean/OM"
 
 echo "== 3. fresh transpilation"
 lean/.lake/build/bin/extract "$TMP/gen.rs"

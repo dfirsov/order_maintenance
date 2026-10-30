@@ -78,3 +78,5 @@ import OM.Impl.PeakCap
 import OM.Impl.PeakFinal
 import OM.Impl.PeakRun
 import OM.Impl.PeakWord
+import OM.Machine.Flat
+import OM.Impl.FlatRun
