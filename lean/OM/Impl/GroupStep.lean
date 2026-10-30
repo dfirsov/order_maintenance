@@ -21,17 +21,17 @@ local notation "upd" => OM.Machine.State.upd
 def startGroupSplitP : Proc := { name := "startGroupSplit", params := ["g"], rets := [], body := startGroupSplitS }
 
 /-- Quiet the overflow sibling `x` of `g` (flag `q`). -/
-def quietE (x : Reg) : Exp := (.gF .st x =ₑ 1) &&ₑ (.gF .src x =ₑ "g")
+def quietE (x : Reg) : Exp := cme{ G[‹x›].st = 1 && G[‹x›].src = g }
 def quietS (x q : Reg) : Stm :=
-  q ::= 0 ;; .ite (quietE x) (.wgF .st x 0 ;; .wgF .src x 0 ;; q ::= 1) .skip
+  cm{ ‹q› := 0; if ‹quietE x› then { G[‹x›].st := 0; G[‹x›].src := 0; ‹q› := 1 } }
 /-- Split the quieted sibling `x` if it is full. -/
-def splitIfE (x q : Reg) : Exp := .var q &&ₑ (.prm .G ≤ₑ .gF .size x)
-def splitIfS (x q : Reg) : Stm := .ite (splitIfE x q) (startGroupSplitP.call [.var x] []) .skip
+def splitIfE (x q : Reg) : Exp := cme{ ‹q› && P.G ≤ G[‹x›].size }
+def splitIfS (x q : Reg) : Stm := cm{ if ‹splitIfE x q› then call startGroupSplitP(‹x›) }
 
 /-- `removeGroup g`: unlink and free `g`, then its overflow siblings become quiet (and split if full). -/
-def removeGroupS : Stm :=
-  unlinkGroupS ;; "gL" ::= .gF .l "g" ;; "gR" ::= .gF .r "g" ;;
-  quietS "gL" "qL" ;; quietS "gR" "qR" ;; splitIfS "gL" "qL" ;; splitIfS "gR" "qR"
+def removeGroupS : Stm := cm{
+  unlinkGroupS; gL := G[g].l; gR := G[g].r
+  ‹quietS "gL" "qL"›; ‹quietS "gR" "qR"›; ‹splitIfS "gL" "qL"›; ‹splitIfS "gR" "qR"› }
 
 theorem quietS_ok {κ : Caps} {S0 : Core} {L : Loc} {x q : Reg} {j p : Nat} (hx : L x = j) (hg : L "g" = p)
     (hq : q ≠ x) (hqg : q ≠ "g") (hst : (S0.Gs.getX j).st = .overflow) (hsrc : (S0.Gs.getX j).src = p) (hj : j < S0.Gs.size)
@@ -134,22 +134,23 @@ theorem removeGroupS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g
 /-! ### `moveElem` -/
 
 /-- The centre label `1 <<< (B_e - 1)`. -/
-def centreE : Exp := .bin .shl 1 (Exp.monus (.prm .Be) 1)
-def moveLabL : Stm :=
-  .ite (.gF .first "gl" =ₑ 0) ("lab" ::= centreE)
-    ("a" ::= .eF .lab (.gF .last "gl") ;; "D" ::= .prm .De ;; "B" ::= .prm .Be ;; afterS)
-def moveLabR : Stm :=
-  .ite (.gF .first "gr" =ₑ 0) ("lab" ::= centreE)
-    ("b" ::= .eF .lab (.gF .first "gr") ;; "D" ::= .prm .De ;; beforeS)
+def centreE : Exp := cme{ 1 <<< (P.Be ∸ 1) }
+def moveLabL : Stm := cm{
+  if G[gl].first = 0 then lab := ‹centreE›
+  else { a := E[G[gl].last].lab; D := P.De; B := P.Be; afterS } }
+def moveLabR : Stm := cm{
+  if G[gr].first = 0 then lab := ‹centreE›
+  else { b := E[G[gr].first].lab; D := P.De; beforeS } }
 def moveP (first : Bool) : Proc := { name := "move", params := ["g", "d", "e", "lab"], rets := [], body := moveS first }
 /-- `d := moveElem g` (local `g`): move one element to the lighter sibling. -/
-def moveElemS : Stm :=
-  "gl" ::= .gF .l "g" ;; "gr" ::= .gF .r "g" ;;
-  .ite (.gF .size "gl" ≤ₑ .gF .size "gr")
-    (moveLabL ;; "d" ::= "gl" ;; "e" ::= .gF .first "g" ;;
-      (moveP true).call [.var "g", .var "d", .var "e", .var "lab"] [])
-    (moveLabR ;; "d" ::= "gr" ;; "e" ::= .gF .last "g" ;;
-      (moveP false).call [.var "g", .var "d", .var "e", .var "lab"] [])
+def moveElemS : Stm := cm{
+  gl := G[g].l; gr := G[g].r
+  if G[gl].size ≤ G[gr].size then {
+    moveLabL; d := gl; e := G[g].first
+    call ‹moveP true›(g, d, e, lab) }
+  else {
+    moveLabR; d := gr; e := G[g].last
+    call ‹moveP false›(g, d, e, lab) } }
 
 theorem centreE_ev {κ : Caps} {S0 : Core} {L : Loc} : centreE.ev κ S0 L = some (OM.Proof.cE S0.P) := by
   have hm := Exp.ev_monus κ S0 L (a := .prm .Be) (b := (1 : Exp)) (x := S0.P.B_e) (y := 1) (by simp [Exp.ev, PF.get]) rfl
@@ -293,15 +294,15 @@ theorem moveElemS_right (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L "g" =
 
 /-! ### `groupSplitStep` -/
 
-def gssChkE : Exp := .gF .chk "d" =ₑ .gF .chk "g"
+def gssChkE : Exp := cme{ G[d].chk = G[g].chk }
 /-- After a move: the sizes, and (unreachable under invariant F) a move across chunks. -/
-def gssTail : Stm :=
-  .wgF .size "g" (Exp.monus (.gF .size "g") 1) ;; .wgF .size "d" (.gF .size "d" + 1) ;;
-  .ite gssChkE .skip .bug ;; "ok" ::= 1
+def gssTail : Stm := cm{
+  G[g].size := G[g].size ∸ 1; G[d].size := G[d].size + 1
+  if ‹gssChkE› then skip else bug; ok := 1 }
 /-- `ok := groupSplitStep g` (local `g`): one move of the split, or the removal of the empty group. -/
-def groupSplitStepS : Stm :=
-  "gf" ::= .gF .first "g" ;;
-  .ite ("gf" =ₑ 0) (removeGroupS ;; "ok" ::= 0) (moveElemS ;; gssTail)
+def groupSplitStepS : Stm := cm{
+  gf := G[g].first
+  if gf = 0 then { removeGroupS; ok := 0 } else { moveElemS; gssTail } }
 
 theorem gssTail_ok {κ : Caps} {S1 : Core} {L : Loc} {p d : Nat} (hg : L "g" = p) (hd : L "d" = d)
     (hpS : p < S1.Gs.size) (hdS : d < S1.Gs.size) (hpT : p < κ.tbl .G) (hdT : d < κ.tbl .G)
@@ -395,10 +396,9 @@ theorem groupSplitStepS_remove (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : 
 /-! ### The drive loop -/
 
 def groupSplitStepP : Proc := { name := "groupSplitStep", params := ["g"], rets := ["ok"], body := groupSplitStepS }
-def driveBody : Stm :=
-  .ite ("dn" =ₑ 0) (groupSplitStepP.call [.var "g"] ["ok"] ;; .ite ("ok" =ₑ 0) ("dn" ::= 1) .skip) .skip
+def driveBody : Stm := cm{ if dn = 0 then { ok ← groupSplitStepP(g); if ok = 0 then dn := 1 } }
 /-- `driveGroupFrom g`: up to `K_G` split steps, stopping once `g` is removed. -/
-def driveGroupFromS : Stm := "dn" ::= 0 ;; .loop "jj" (.prm .KG) driveBody
+def driveGroupFromS : Stm := cm{ dn := 0; for jj < P.KG do driveBody }
 
 /-- A Level M split step that agrees with a Level F one (`b` = Level F's result). -/
 def StepAgree (κ : Caps) (p : Nat) (t t' : Core) (b : Bool) : Prop :=
@@ -511,10 +511,10 @@ theorem driveGroupFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L
 
 def driveP : Proc := { name := "driveGroupFrom", params := ["g"], rets := [], body := driveGroupFromS }
 /-- `driveGroup g`: drive the split `g` belongs to, if any (local `g`). -/
-def driveGroupS : Stm :=
-  "st" ::= .gF .st "g" ;;
-  .ite ("st" =ₑ 2) (driveP.call [.var "g"] [])
-    (.ite ("st" =ₑ 1) (driveP.call [.gF .src "g"] []) .skip)
+def driveGroupS : Stm := cm{
+  st := G[g].st
+  if st = 2 then call driveP(g)
+  else if st = 1 then call driveP(G[g].src) }
 
 /-- The drive of the split rooted at `q` agrees at Level M, ending in `t'`. -/
 def DriveAgree (κ : Caps) (q : Nat) (s t' : Core) : Prop :=

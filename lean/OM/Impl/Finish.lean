@@ -21,9 +21,9 @@ local notation "upd" => OM.Machine.State.upd
 /-! ### `dropTable` -/
 
 /-- Remove `v` from list `k` of record `e`, if there (locals `e v`). -/
-def dropS (k : LK) : Stm :=
-  (findP k).call [.var "e", .var "v"] ["r"] ;; "n" ::= .llen k "e" ;;
-  .ite ("r" <ₑ "n") ((eraseIdxP k).call [.var "e", .var "r"] []) .skip
+def dropS (k : LK) : Stm := cm{
+  r ← ‹findP k›(e, v); n := len k[e]
+  if r < n then call ‹eraseIdxP k›(e, r) }
 
 theorem dropS_ok {κ : Caps} {k : LK} {s : Core} {L : Loc} {e v : Nat} (he : L "e" = e) (hv : L "v" = v)
     (her : e < κ.lrec k) (hcap : (k.view s e).length ≤ κ.lcap k)
@@ -102,7 +102,7 @@ theorem dropS_inTab_eq (s : Core) (v e hh : Nat) (hh0 : hh ≠ 0) :
   · simp only [LK.put, ← List.eraseIdx_map, List.map_map, Function.comp_def, List.map_id', erase_eq_eraseIdx']
   · rfl
 
-def dtBody : Stm := "e" ::= .lrd .table false "v" "j" ;; .ite ("hh" =ₑ 0) (dropS .cin) (dropS .inTab)
+def dtBody : Stm := cm{ e := table[v][j].fst; if hh = 0 then ‹dropS .cin› else ‹dropS .inTab› }
 
 theorem dropTableS_cin_len (v hh : Nat) (s : Core) (e e' : Nat) :
     ((dropTableS v hh s e').cin.getX e).length ≤ (s.cin.getX e).length := by
@@ -179,7 +179,7 @@ theorem dtBody_ok {κ : Caps} {X : Core} {L : Loc} {v hh e j B : Nat} (hv : L "v
       fun r a b c d => (hF2 r c d).trans (h1F r a b)⟩
     simp only [LK.view, List.length_map] at hc2; simp only [Exp.cost]; nlinarith
 
-def dtLoopS : Stm := "m" ::= .llen .table "v" ;; .loop "j" "m" dtBody
+def dtLoopS : Stm := cm{ m := len table[v]; for j < m do dtBody }
 
 theorem dtLoopS_ok {κ : Caps} {s : Core} {L : Loc} {v hh B : Nat} (hv : L "v" = v) (hhh : L "hh" = hh)
     (hvr : v < κ.lrec .table)
@@ -227,10 +227,10 @@ theorem dtLoopS_ok {κ : Caps} {s : Core} {L : Loc} {v hh B : Nat} (hv : L "v" =
 
 /-! ### `dropEntry` -/
 
-def deBody : Stm :=
-  "T" ::= .lrd .inTab false "v" "j" ;;
-  (findP .table).call [.var "T", .var "v"] ["r"] ;; "n" ::= .llen .table "T" ;; .ite ("r" <ₑ "n") .skip .fail ;;
-  (filterP .table).call [.var "T", .var "v"] [] ;; (filterP .side).call [.var "T", .var "v"] []
+def deBody : Stm := cm{
+  T := inTab[v][j].fst
+  r ← ‹findP .table›(T, v); n := len table[T]; if r < n then skip else fail
+  call ‹filterP .table›(T, v); call ‹filterP .side›(T, v) }
 
 theorem encS_filter (l : List (Nat × Side)) (v : Nat) :
     (encS l).filter (·.1 != v) = encS (assocErase l v) := by
@@ -370,7 +370,7 @@ theorem foldl_dropEntryS_size (v : Nat) : ∀ (l : List Nat) (s : Core), (l.fold
 
 /-! ### The `dropEntry` loop -/
 
-def deLoopS : Stm := "m" ::= .llen .inTab "v" ;; .loop "j" "m" deBody
+def deLoopS : Stm := cm{ m := len inTab[v]; for j < m do deBody }
 
 theorem deLoopS_ok {κ : Caps} {X : Core} {L : Loc} {v B : Nat} (hv : L "v" = v) (hvi : v < κ.lrec .inTab)
     (hnd : (X.nodes.getX v).inTables.Nodup) (hT : ∀ T ∈ (X.nodes.getX v).inTables, v ∈ (X.nodes.getX T).order)
@@ -414,8 +414,7 @@ theorem deLoopS_ok {κ : Caps} {X : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
 /-! ### `finishDrain` -/
 
 /-- `release v (field f of v)` (locals `v`). -/
-def relS (f : NF) : Stm :=
-  "tt" ::= .rd (.n f) "v" ;; .ite (.rd (.n .overflow) "tt" =ₑ "v") (.wr (.n .overflow) "tt" 0) .skip
+def relS (f : NF) : Stm := cm{ tt := N[v].‹f›; if N[tt].overflow = v then N[tt].overflow := 0 }
 
 theorem relS_ok {κ : Caps} {S : Core} {L : Loc} {v t : Nat} {f : NF} (hv : L "v" = v) (hf : NF.get (S.nodes.getX v) f = t)
     (hv0 : v ≠ 0) (hvN : v < κ.tbl .N) (htN : t < κ.tbl .N) :
@@ -451,9 +450,9 @@ theorem releaseS_node (v : Nat) (S : Core) (t u : Nat) :
 theorem releaseS_size (v : Nat) (S : Core) (t : Nat) : (releaseS v S t).nodes.size = S.nodes.size := by
   unfold releaseS; split <;> simp
 
-def finishDrainS : Stm :=
-  "hh" ::= .monus "h" 1 ;; dtLoopS ;; deLoopS ;; relS .t1 ;; relS .t2 ;;
-  .wr (.n .dead) "v" 1 ;; .lclear .inTab "v"
+def finishDrainS : Stm := cm{
+  hh := h ∸ 1; dtLoopS; deLoopS; ‹relS .t1›; ‹relS .t2›
+  N[v].dead := 1; clear inTab[v] }
 
 theorem finishDrainS_ok {κ : Caps} {s : Core} {L : Loc} {v B : Nat} (hv : L "v" = v)
     (hLh : L "h" = (s.nodes.getX v).height)

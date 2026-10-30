@@ -1,4 +1,5 @@
 import OM.Impl.Loop
+import OM.Impl.CM
 
 /-!
 # M6: a list library for the core language
@@ -23,11 +24,11 @@ def findP (k : LK) : Proc where
   name := "find"
   params := ["i", "x"]
   rets := ["r"]
-  body :=
-    "n" ::= .llen k "i" ;;
-    "r" ::= "n" ;;
-    "f" ::= 0 ;;
-    .loop "j" "n" (.ite (("f" =ₑ 0) &&ₑ (.lrd k false "i" "j" =ₑ "x")) ("r" ::= "j" ;; "f" ::= 1) .skip)
+  body := cm{
+    n := len k[i]
+    r := n
+    f := 0
+    for j < n do if f = 0 && k[i][j].fst = x then { r := j; f := 1 } }
 
 theorem findIdx_key (l : List (Nat × Nat)) (x : Nat) :
     (∀ m < l.length, key l m ≠ x) → l.findIdx (·.1 == x) = l.length := by
@@ -276,10 +277,10 @@ def assocSetP (k : LK) : Proc where
   name := "assocSet"
   params := ["i", "x", "y"]
   rets := []
-  body :=
-    "n" ::= .llen k "i" ;; "f" ::= 0 ;;
-    .loop "j" "n" (.ite (.lrd k false "i" "j" =ₑ "x") (.lwr k true "i" "j" "y" ;; "f" ::= 1) .skip) ;;
-    .ite ("f" =ₑ 0) (.lgrow k "i" "x" "y") .skip
+  body := cm{
+    n := len k[i]; f := 0
+    for j < n do if k[i][j].fst = x then { k[i][j].snd := y; f := 1 }
+    if f = 0 then append k[i] (x, y) }
 
 theorem take_succ_any (l : List (Nat × Nat)) (x j : Nat) (hj : j < l.length) :
     (l.take (j + 1)).any (·.1 == x) = ((l.take j).any (·.1 == x) || l[j].1 == x) := by
@@ -400,9 +401,9 @@ def lookupP (k : LK) : Proc where
   name := "lookup"
   params := ["i", "x"]
   rets := ["f", "v"]
-  body :=
-    (findP k).call [.var "i", .var "x"] ["r"] ;; "n" ::= .llen k "i" ;; "f" ::= ("r" <ₑ "n") ;;
-    .ite "f" ("v" ::= .lrd k true "i" "r") ("v" ::= 0)
+  body := cm{
+    r ← ‹findP k›(i, x); n := len k[i]; f := r < n
+    if f then v := k[i][r].snd else v := 0 }
 
 theorem lookup_findIdx (l : List (Nat × Nat)) (x : Nat) :
     lookup l x = if h : l.findIdx (·.1 == x) < l.length then some l[l.findIdx (·.1 == x)].2 else none := by
@@ -520,20 +521,20 @@ theorem bubble_insertIdx (l : List (Nat × Nat)) (x : Nat × Nat) {p : Nat} (hp 
 theorem bubble_len (l : List (Nat × Nat)) (x : Nat × Nat) : bubble l x l.length = l ++ [x] := by
   simp [bubble]
 
-def swapS (k : LK) : Stm :=
-  "q" ::= ("n" - 1) - "t" ;;
-  "x1" ::= .lrd k false "i" "q" ;; "y1" ::= .lrd k true "i" "q" ;;
-  "x2" ::= .lrd k false "i" ("q" + 1) ;; "y2" ::= .lrd k true "i" ("q" + 1) ;;
-  .lwr k false "i" "q" "x2" ;; .lwr k true "i" "q" "y2" ;;
-  .lwr k false "i" ("q" + 1) "x1" ;; .lwr k true "i" ("q" + 1) "y1"
+def swapS (k : LK) : Stm := cm{
+  q := n - 1 - t
+  x1 := k[i][q].fst; y1 := k[i][q].snd
+  x2 := k[i][q + 1].fst; y2 := k[i][q + 1].snd
+  k[i][q].fst := x2; k[i][q].snd := y2
+  k[i][q + 1].fst := x1; k[i][q + 1].snd := y1 }
 
 def insertIdxP (k : LK) : Proc where
   name := "insertIdx"
   params := ["i", "p", "a", "b"]
   rets := []
-  body :=
-    "n" ::= .llen k "i" ;; .lgrow k "i" "a" "b" ;; "c" ::= .monus "n" "p" ;;
-    .loop "t" "c" (swapS k)
+  body := cm{
+    n := len k[i]; append k[i] (a, b); c := n ∸ p
+    for t < c do ‹swapS k› }
 
 theorem LK.valid_pair_snd {k : LK} {u u' w : Nat} (h : k.valid [(u, w)] = true) : k.valid [(u', w)] = true := by
   cases k <;> simp_all [LK.valid]
@@ -738,8 +739,8 @@ theorem insertIdxP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i p a b : Na
 
 /-! ### Copying a list -/
 
-def copyBody (k : LK) : Stm := .lgrow k "w" (.lrd k false "a" "j") (.lrd k true "a" "j")
-def copyS (k : LK) : Stm := "n" ::= .llen k "a" ;; .loop "j" "n" (copyBody k)
+def copyBody (k : LK) : Stm := cm{ append k[w] (k[a][j].fst, k[a][j].snd) }
+def copyS (k : LK) : Stm := cm{ n := len k[a]; for j < n do ‹copyBody k› }
 
 /-- **`copyS` appends list `k` of record `a` to that of record `w`** (`w ≠ a`). -/
 theorem copyS_ok {κ : Caps} {k : LK} {s : Core} {L : Loc} {a w : Nat} (ha : L "a" = a) (hw : L "w" = w)

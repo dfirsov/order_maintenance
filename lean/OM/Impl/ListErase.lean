@@ -16,7 +16,7 @@ open OM.Machine (Reg BinOp UnOp)
 
 /-- Element `src` of list `k` of record `i` is copied to position `dst`. -/
 def mvS (k : LK) (dst src : Exp) : Stm :=
-  .lwr k false "i" dst (.lrd k false "i" src) ;; .lwr k true "i" dst (.lrd k true "i" src)
+  cm{ k[i][‹dst›].fst := k[i][‹src›].fst; k[i][‹dst›].snd := k[i][‹src›].snd }
 
 theorem LK.view_put_self {s : Core} {i : Nat} {l : List (Nat × Nat)} {k : LK} (hr : k.recOk s i = true)
     (hv : k.valid l = true) : k.view (k.put s i l) i = l := by
@@ -117,9 +117,10 @@ def eraseIdxP (k : LK) : Proc where
   name := "eraseIdx"
   params := ["i", "p"]
   rets := []
-  body :=
-    "n" ::= .llen k "i" ;; "c" ::= .monus (.monus "n" 1) "p" ;;
-    .loop "t" "c" (mvS k ("p" + "t") ("p" + "t" + 1)) ;; .lshrink k "i"
+  body := cm{
+    n := len k[i]; c := n ∸ 1 ∸ p
+    for t < c do ‹mvS k ("p" + "t") ("p" + "t" + 1)›
+    pop k[i] }
 
 /-- **`eraseIdxP` computes `eraseIdx`.** -/
 theorem eraseIdxP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i p : Nat} (hi : L "i" = i) (hp : L "p" = p)
@@ -211,15 +212,16 @@ theorem valid_keepF {k : LK} {l : List (Nat × Nat)} (hv : k.valid l = true) (x 
   rw [LK.valid_iff] at hv ⊢
   intro z hz; exact hv z (List.mem_of_mem_take (List.mem_of_mem_filter hz))
 
-def filterBody (k : LK) : Stm := .ite (.lrd k false "i" "j" =ₑ "x") .skip (mvS k "w" "j" ;; "w" ::= "w" + 1)
+def filterBody (k : LK) : Stm :=
+  cm{ if k[i][j].fst = x then skip else { ‹mvS k "w" "j"›; w := w + 1 } }
 
 def filterP (k : LK) : Proc where
   name := "filter"
   params := ["i", "x"]
   rets := []
-  body :=
-    "n" ::= .llen k "i" ;; "w" ::= 0 ;; .loop "j" "n" (filterBody k) ;;
-    "c" ::= .monus "n" "w" ;; .loop "t" "c" (.lshrink k "i")
+  body := cm{
+    n := len k[i]; w := 0; for j < n do ‹filterBody k›
+    c := n ∸ w; for t < c do pop k[i] }
 
 /-- **`filterP` keeps the elements whose key is not `x`.** -/
 theorem filterP_agree (κ : Caps) (k : LK) (s : Core) (L : Loc) {i x : Nat} (hi : L "i" = i) (hx : L "x" = x)

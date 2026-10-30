@@ -100,7 +100,7 @@ open OM.Machine (Reg BinOp UnOp)
 local notation "upd" => OM.Machine.State.upd
 
 /-- `w := drainWt h e`. -/
-def wtS : Stm := .ite ("h" =ₑ 1) ("w" ::= 1) ("w" ::= .rd (.n .weight) "e")
+def wtS : Stm := cm{ if h = 1 then w := 1 else w := N[e].weight }
 
 theorem wtS_ok {κ : Caps} {s : Core} {L : Loc} {h e : Nat} (hh : L "h" = h) (he : L "e" = e)
     (heN : h ≠ 1 → e < κ.tbl .N) : ∃ c, evalF κ wtS s L = .ok s (upd L "w" (drainWt s.nodes h e)) c ∧ c ≤ 10 := by
@@ -111,8 +111,8 @@ theorem wtS_ok {κ : Caps} {s : Core} {L : Loc} {h e : Nat} (hh : L "h" = h) (he
       NF.get]
 
 /-- `t := the sum of the weights of the children of `v``. -/
-def sumBody : Stm := "e" ::= .lrd .children false "v" "j" ;; wtS ;; "t" ::= "t" + "w"
-def sumS : Stm := "t" ::= 0 ;; .loop "j" "n" sumBody
+def sumBody : Stm := cm{ e := children[v][j].fst; wtS; t := t + w }
+def sumS : Stm := cm{ t := 0; for j < n do sumBody }
 
 theorem sumS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (hh : L "h" = h)
     (hn : L "n" = (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
@@ -154,10 +154,10 @@ theorem sumS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (h
     simp [OM.Machine.State.upd]
 
 /-- The greedy cut over the first `n - 1` children, with budget `t / 2`. -/
-def cutBody : Stm :=
-  "e" ::= .lrd .children false "v" "j" ;; wtS ;;
-  .ite (("d" =ₑ 0) &&ₑ ("w" ≤ₑ "b")) ("c" ::= "c" + 1 ;; "b" ::= "b" - "w") ("d" ::= 1)
-def cutS : Stm := "b" ::= "t" / 2 ;; "c" ::= 0 ;; "d" ::= 0 ;; .loop "j" (.monus "n" 1) cutBody
+def cutBody : Stm := cm{
+  e := children[v][j].fst; wtS
+  if d = 0 && w ≤ b then { c := c + 1; b := b - w } else d := 1 }
+def cutS : Stm := cm{ b := t / 2; c := 0; d := 0; for j < n ∸ 1 do cutBody }
 
 theorem cutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (hh : L "h" = h)
     (hn : L "n" = (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
@@ -239,9 +239,9 @@ theorem cutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (h
     rw [foldl_cutStep]; simp
 
 /-- Read children `k - 1` and `k` into `a`, `e` (for `0 < k < n`). -/
-def prS : Stm := "a" ::= .lrd .children false "v" ("k" - 1) ;; "e" ::= .lrd .children false "v" "k"
+def prS : Stm := cm{ a := children[v][k - 1].fst; e := children[v][k].fst }
 /-- `drainPr`: children `a`, `e` are targets of one drain. -/
-def prE : Exp := (!ₑ (.rd (.n .overflow) "a" =ₑ 0)) &&ₑ (.rd (.n .overflow) "a" =ₑ .rd (.n .overflow) "e")
+def prE : Exp := cme{ N[a].overflow ≠ 0 && N[a].overflow = N[e].overflow }
 
 theorem prS_ok {κ : Caps} {s : Core} {L : Loc} {v k : Nat} (hv : L "v" = v) (hk : L "k" = k) (hk0 : 0 < k)
     (hkn : k < (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
@@ -270,9 +270,9 @@ theorem prS_ok {κ : Caps} {s : Core} {L : Loc} {v k : Nat} (hv : L "v" = v) (hk
   · intro r h1 h2; simp [OM.Machine.State.upd, h1, h2]
 
 /-- `shiftR`: move the cut `k` right past pairs, at most `n` times. -/
-def shRC : Exp := (("d" =ₑ 0) &&ₑ (0 <ₑ "k")) &&ₑ ("k" <ₑ "n")
-def shRBody : Stm := .ite shRC (prS ;; .ite prE ("k" ::= "k" + 1) ("d" ::= 1)) ("d" ::= 1)
-def shRS : Stm := "d" ::= 0 ;; .loop "j" "n" shRBody
+def shRC : Exp := cme{ (d = 0 && 0 < k) && k < n }
+def shRBody : Stm := cm{ if ‹shRC› then { prS; if ‹prE› then k := k + 1 else d := 1 } else d := 1 }
+def shRS : Stm := cm{ d := 0; for j < n do shRBody }
 
 theorem shRS_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v)
     (hn : L "n" = (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
@@ -344,9 +344,9 @@ theorem shRS_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v)
     rw [this, h0, foldl_shRStep, List.length_range]
 
 /-- `shiftL` from `n - 1`: move the cut left past pairs, at most `n` times. -/
-def shLC : Exp := ("d" =ₑ 0) &&ₑ (0 <ₑ "k")
-def shLBody : Stm := .ite shLC (prS ;; .ite prE ("k" ::= "k" - 1) ("d" ::= 1)) ("d" ::= 1)
-def shLS : Stm := "k" ::= .monus "n" 1 ;; "d" ::= 0 ;; .loop "j" "n" shLBody
+def shLC : Exp := cme{ d = 0 && 0 < k }
+def shLBody : Stm := cm{ if ‹shLC› then { prS; if ‹prE› then k := k - 1 else d := 1 } else d := 1 }
+def shLS : Stm := cm{ k := n ∸ 1; d := 0; for j < n do shLBody }
 
 theorem shLS_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v)
     (hn : L "n" = (s.nodes.getX v).children.length) (hvr : v < κ.lrec .children)
@@ -423,9 +423,9 @@ theorem shLS_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v)
     rw [this, h0, foldl_shLStep, List.length_range]
 
 /-- **`startDrain`'s cut**: `k := drainCut (children of v) …` for a node `v` of height `h`. -/
-def drainCutS : Stm :=
-  "n" ::= .llen .children "v" ;; sumS ;; cutS ;; "k" ::= Exp.max "c" 1 ;;
-  .ite (1 <ₑ "h") (shRS ;; .ite ("n" ≤ₑ "k") shLS .skip) .skip
+def drainCutS : Stm := cm{
+  n := len children[v]; sumS; cutS; k := max(c, 1)
+  if 1 < h then { shRS; if n ≤ k then shLS } }
 
 theorem drainCutS_ok {κ : Caps} {s : Core} {L : Loc} {v h : Nat} (hv : L "v" = v) (hh : L "h" = h)
     (hvr : v < κ.lrec .children) (hkN : h ≠ 1 → ∀ e ∈ (s.nodes.getX v).children, e < κ.tbl .N) :

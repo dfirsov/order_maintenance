@@ -1,5 +1,6 @@
 import OM.Impl.ArrayLemmas
 import OM.Impl.PQ
+import OM.Impl.CM
 
 /-!
 # M6: elements (`Model/Core.lean`: insertion, deletion, order)
@@ -10,24 +11,18 @@ namespace OM.Impl
 open OM.Model
 open OM.Machine (Reg BinOp UnOp)
 
-def Exp.eF (k : EF) (i : Exp) : Exp := .rd (.e k) i
-def Exp.gF (k : GF) (i : Exp) : Exp := .rd (.g k) i
-def Exp.cF (k : CF) (i : Exp) : Exp := .rd (.c k) i
-def Stm.weF (k : EF) (i e : Exp) : Stm := .wr (.e k) i e
-def Stm.wgF (k : GF) (i e : Exp) : Stm := .wr (.g k) i e
-def Stm.wcF (k : CF) (i e : Exp) : Stm := .wr (.c k) i e
 
 /-- `linkElem`: link the new element `y` after `x` (locals `x g glast nx lab h`). -/
-def linkElemS : Stm :=
-  .push .E "y" ;;
-  .weF .grp "y" "g" ;; .weF .lab "y" "lab" ;; .weF .h "y" "h" ;; .weF .prev "y" "x" ;;
-  .weF .next "y" "nx" ;;
-  .ite (!ₑ ("nx" =ₑ 0)) (.weF .prev "nx" "y") .skip ;;
-  .weF .next "x" "y" ;;
-  .ite (.sc .tail =ₑ "x") (.wsc .tail "y") .skip ;;
-  .ite ("glast" =ₑ "x") (.wgF .last "g" "y") .skip ;;
-  .wgF .size "g" (.gF .size "g" + 1) ;;
-  .wsc .count (.sc .count + 1)
+def linkElemS : Stm := cm{
+  y := new E
+  E[y].grp := g; E[y].lab := lab; E[y].h := h; E[y].prev := x
+  E[y].next := nx
+  if nx ≠ 0 then E[nx].prev := y
+  E[x].next := y
+  if S.tail = x then S.tail := y
+  if glast = x then G[g].last := y
+  G[g].size := G[g].size + 1
+  S.count := S.count + 1 }
 
 theorem linkElemS_agree (κ : Caps) (σ : Core) (L : Loc) {x lab hh : Nat} (hx : L "x" = x)
     (hg : L "g" = (σ.E.getX x).grp) (hgl : L "glast" = (σ.Gs.getX (σ.E.getX x).grp).last)
@@ -59,18 +54,19 @@ theorem linkElemS_agree (κ : Caps) (σ : Core) (L : Loc) {x lab hh : Nat} (hx :
   all_goals (try (apply Array.modify_congr_getX; simp [GF.set, hlast]))
 
 /-- The label of the new element, guarded. -/
-def insertElemPre : Stm :=
-  "g" ::= .eF .grp "x" ;;
-  "glast" ::= .gF .last "g" ;;
-  "exlab" ::= .eF .lab "x" ;;
-  "nx" ::= .eF .next "x" ;;
-  .ite ("x" =ₑ "glast")
-    ("v" ::= Exp.var "exlab" + .prm .De ;;
-     .ite ((Exp.bin .shl 1 (.prm .Be) ≤ₑ "v") ||ₑ ("v" ≤ₑ "exlab")) .fail .skip ;;
-     "lab" ::= "v")
-    ("b" ::= .eF .lab "nx" ;;
-     .ite ("b" ≤ₑ Exp.var "exlab" + 1) .fail .skip ;;
-     "lab" ::= (Exp.var "exlab" + "b") / 2)
+def insertElemPre : Stm := cm{
+  g := E[x].grp
+  glast := G[g].last
+  exlab := E[x].lab
+  nx := E[x].next
+  if x = glast then {
+    v := exlab + P.De
+    if 1 <<< P.Be ≤ v || v ≤ exlab then fail
+    lab := v }
+  else {
+    b := E[nx].lab
+    if b ≤ exlab + 1 then fail
+    lab := (exlab + b) / 2 } }
 
 /-- `insertElem x h`: a new element with handle `h` right after `x`. -/
 def insertElemP : Proc where
@@ -130,7 +126,7 @@ def markDeadP : Proc where
   name := "markDead"
   params := ["x"]
   rets := []
-  body := .weF .dead "x" 1
+  body := cm{ E[x].dead := 1 }
 
 theorem markDead_agree (κ : Caps) (σ : Core) (L : Loc) {x : Nat} (hx : L "x" = x) (hxE : x < σ.E.size)
     (hE : σ.E.size ≤ κ.tbl .E) {σ' : Core} (h : (markDead x).run σ = .ok () σ') :
@@ -141,20 +137,20 @@ theorem markDead_agree (κ : Caps) (σ : Core) (L : Loc) {x : Nat} (hx : L "x" =
   rfl
 
 /-- The key of element `e`: its chunk's tag, its group's label, its own label. -/
-def keyS (e t g l : Reg) : Stm :=
-  g ::= .eF .grp e ;;
-  l ::= .eF .lab e ;;
-  t ::= .cF .tag (.gF .chk g) ;;
-  g ::= .gF .lab g
+def keyS (e t g l : Reg) : Stm := cm{
+  ‹g› := E[‹e›].grp
+  ‹l› := E[‹e›].lab
+  ‹t› := C[G[‹g›].chk].tag
+  ‹g› := G[‹g›].lab }
 
 def orderP : Proc where
   name := "order"
   params := ["x", "y"]
   rets := ["r"]
-  body :=
-    keyS "x" "ta" "ga" "ea" ;;
-    keyS "y" "tb" "gb" "eb" ;;
-    "r" ::= (("ta" <ₑ "tb") ||ₑ (("ta" =ₑ "tb") &&ₑ (("ga" <ₑ "gb") ||ₑ (("ga" =ₑ "gb") &&ₑ ("ea" <ₑ "eb")))))
+  body := cm{
+    ‹keyS "x" "ta" "ga" "ea"›
+    ‹keyS "y" "tb" "gb" "eb"›
+    r := ta < tb || (ta = tb && (ga < gb || (ga = gb && ea < eb))) }
 
 theorem order_agree (κ : Caps) (σ : Core) (L : Loc) {x y : Nat} (hx : L "x" = x) (hy : L "y" = y)
     (hxE : x < κ.tbl .E) (hyE : y < κ.tbl .E) (hxG : (σ.E.getX x).grp < κ.tbl .G)

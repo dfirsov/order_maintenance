@@ -46,6 +46,13 @@ def Exp.sc (k : SF) : Exp := .rd (.s k) 0
 def Stm.wsc (k : SF) (e : Exp) : Stm := .wr (.s k) 0 e
 def Exp.ar (k : AF) (i : Exp) : Exp := .rd (.a k) i
 def Stm.war (k : AF) (i e : Exp) : Stm := .wr (.a k) i e
+/-- Field `k` of element, group or chunk `i`, and writes to it. -/
+def Exp.eF (k : EF) (i : Exp) : Exp := .rd (.e k) i
+def Exp.gF (k : GF) (i : Exp) : Exp := .rd (.g k) i
+def Exp.cF (k : CF) (i : Exp) : Exp := .rd (.c k) i
+def Stm.weF (k : EF) (i e : Exp) : Stm := .wr (.e k) i e
+def Stm.wgF (k : GF) (i e : Exp) : Stm := .wr (.g k) i e
+def Stm.wcF (k : CF) (i e : Exp) : Stm := .wr (.c k) i e
 
 theorem Exp.ev_max (κ : Caps) (s : Core) (L : Loc) {a b : Exp} {x y : Nat} (ha : a.ev κ s L = some x)
     (hb : b.ev κ s L = some y) : (Exp.max a b).ev κ s L = some (Nat.max x y) := by

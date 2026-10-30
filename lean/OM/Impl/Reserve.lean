@@ -49,14 +49,14 @@ theorem cJ_size (S0 : Core) (x y z j : Nat) : (cJ S0 x y z j).nodes.size = S0.no
 
 theorem cJ_zero (S0 : Core) (x y z : Nat) : cJ S0 x y z 0 = S0 := by simp [cJ]
 
-def cinsBody : Stm :=
-  "T" ::= .lrd .cin false "x" "j" ;;
-  roomP.call [.var "T", .var "x", 1] ["a"] ;;
-  roomP.call [.var "T", .var "x", 0] ["b"] ;;
-  tableInsertP.call [.var "T", .var "x", .var "y", 1, .var "a"] [] ;;
-  tableInsertP.call [.var "T", .var "x", .var "z", 0, .var "b"] []
+def cinsBody : Stm := cm{
+  T := cin[x][j].fst
+  a ← roomP(T, x, 1)
+  b ← roomP(T, x, 0)
+  call tableInsertP(T, x, y, 1, a)
+  call tableInsertP(T, x, z, 0, b) }
 
-def cinsS : Stm := "m" ::= .llen .cin "x" ;; .loop "j" "m" cinsBody
+def cinsS : Stm := cm{ m := len cin[x]; for j < m do cinsBody }
 
 theorem cinsStep_ok {κ : Caps} {S0 : Core} {L : Loc} {x y z j B : Nat}
     (hnd : (S0.cin.getX x).Nodup) (hyx : y ≠ x)
@@ -221,7 +221,7 @@ theorem cinsS_ok {κ : Caps} {S0 : Core} {L : Loc} {x y z B : Nat}
 
 /-- `joinChunk (cin x) lp w` (locals `w x lp`). The list of `w` is cleared first, so that the copy
 starts from a row that exists. -/
-def joinCS : Stm := .rowReset "w" ;; .lclear .cin "w" ;; "a" ::= .var "x" ;; copyS .cin ;; .wr (.a .lpar) "w" "lp"
+def joinCS : Stm := cm{ rowReset(w); clear cin[w]; a := x; ‹copyS .cin›; lpar[w] := lp }
 
 theorem joinCS_ok {κ : Caps} {s : Core} {L : Loc} {w x lp : Nat} (hw : L "w" = w) (hx : L "x" = x)
     (hlp : L "lp" = lp) (hwx : w ≠ x) (hwC : w < κ.tbl .C) (hz : rowZero κ s w) (hnp : notPrep s w)
@@ -265,12 +265,12 @@ def gstP : Proc where
   name := "guardedSetTag"
   params := ["c", "t"]
   rets := []
-  body :=
-    "cp" ::= .rd (.c .prev) "c" ;;
-    .ite ("cp" =ₑ 0) .skip (.ite (.rd (.c .tag) "cp" <ₑ "t") .skip .fail) ;;
-    "cn" ::= .rd (.c .next) "c" ;;
-    .ite ("cn" =ₑ 0) .skip (.ite ("t" <ₑ .rd (.c .tag) "cn") .skip .fail) ;;
-    .wr (.c .tag) "c" "t"
+  body := cm{
+    cp := C[c].prev
+    if cp = 0 then skip else if C[cp].tag < t then skip else fail
+    cn := C[c].next
+    if cn = 0 then skip else if t < C[cn].tag then skip else fail
+    C[c].tag := t }
 
 theorem gstP_agree {κ : Caps} {s : Core} {L : Loc} {c t : Nat} (hc : L "c" = c) (ht : L "t" = t)
     (hcs : c < s.C.size) (hcT : c < κ.tbl .C) (hpT : (s.C.getX c).prev < κ.tbl .C)
@@ -326,10 +326,10 @@ theorem replace1_eq3 (x a b : Nat) : ∀ (l : List Nat), x ∈ l →
       rw [replace1_eq3 x a b l hx]
       simp [List.insertIdx_succ_cons]
 
-def childS : Stm :=
-  (findP .children).call [.var "lp", .var "x"] ["r"] ;;
-  (insertIdxP .children).call [.var "lp", .var "r", .var "y", 0] [] ;;
-  (insertIdxP .children).call [.var "lp", "r" + 2, .var "z", 0] []
+def childS : Stm := cm{
+  r ← ‹findP .children›(lp, x)
+  call ‹insertIdxP .children›(lp, r, y, 0)
+  call ‹insertIdxP .children›(lp, r + 2, z, 0) }
 
 theorem map_insertIdx_pair0 (l : List Nat) (i a : Nat) :
     (l.map fun e => (e, 0)).insertIdx i (a, 0) = (l.insertIdx i a).map fun e => (e, 0) := by
@@ -409,17 +409,17 @@ theorem childS_ok {κ : Caps} {s : Core} {L : Loc} {lp x y z : Nat} (hlp : L "lp
 
 /-- The labels and tags `insertAround x y z` reads (locals `x`): the tags `ty`, `tz` and the live
 parent `lp`. -/
-def iaPrepS : Stm :=
-  "p1" ::= .prd "x" 1 ;;
-  (lookupP .table).call [.var "p1", .var "x"] ["f", "f1"] ;;
-  .ite "f" .skip .fail ;;
-  roomP.call [.var "p1", .var "x", 1] ["a"] ;;
-  roomP.call [.var "p1", .var "x", 0] ["b"] ;;
-  "tx" ::= .rd (.c .tag) "x" ;;
-  .ite ("tx" <ₑ "f1") .fail .skip ;;
-  "lp" ::= .rd (.a .lpar) "x" ;;
-  "ty" ::= Exp.monus "tx" "f1" + "a" ;;
-  "tz" ::= Exp.monus "tx" "f1" + "b"
+def iaPrepS : Stm := cm{
+  p1 := path(x, 1)
+  (f, f1) ← ‹lookupP .table›(p1, x)
+  if f then skip else fail
+  a ← roomP(p1, x, 1)
+  b ← roomP(p1, x, 0)
+  tx := C[x].tag
+  if tx < f1 then fail
+  lp := lpar[x]
+  ty := tx ∸ f1 + a
+  tz := tx ∸ f1 + b }
 
 theorem rowOf_notPrep {s : Core} {c : Nat} (h : notPrep s c) : rowOf s c = s.path.getX c := by
   unfold rowOf; unfold notPrep at h; split
@@ -539,14 +539,14 @@ theorem iaPrepS_ok {κ : Caps} {s : Core} {L : Loc} {x f1x i1 : Nat} (hLx : L "x
 /-! ### `insertAround` -/
 
 /-- `insertAround x y z` (locals `x y z`). -/
-def insertAroundS : Stm :=
-  iaPrepS ;;
-  gstP.call [.var "y", .var "ty"] [] ;;
-  gstP.call [.var "z", .var "tz"] [] ;;
-  cinsS ;;
-  "w" ::= .var "y" ;; joinCS ;;
-  "w" ::= .var "z" ;; joinCS ;;
-  childS
+def insertAroundS : Stm := cm{
+  iaPrepS
+  call gstP(y, ty)
+  call gstP(z, tz)
+  cinsS
+  w := y; joinCS
+  w := z; joinCS
+  childS }
 
 theorem fold_cStep_children (S0 : Core) (x y z : Nat) (g : Nat → List Nat) :
     ∀ (l : List Nat) (a : Array Node), (∀ u, (a.getX u).children = g u) →
@@ -735,14 +735,13 @@ theorem ev_var_const {κ : Caps} {L : Loc} {r : Reg} {v : Nat} (h : L r = v) :
 
 theorem ev_lit_const {κ : Caps} {L : Loc} (v : Nat) : ∀ S : Core, (Exp.lit v).ev κ S L = some v := fun _ => rfl
 
-def lcpY : Stm := .wcF .prev "y" "xp" ;; .wcF .next "y" "x"
-def lcpP : Stm := .ite ("xp" =ₑ 0) (.wsc .firstChunk "y") (.wcF .next "xp" "y")
-def lcpZ : Stm := .wcF .prev "z" "x" ;; .wcF .next "z" "xn"
-def lcpN : Stm := .ite ("xn" =ₑ 0) .skip (.wcF .prev "xn" "z")
-def lcpX : Stm := .wcF .prev "x" "y" ;; .wcF .next "x" "z"
+def lcpY : Stm := cm{ C[y].prev := xp; C[y].next := x }
+def lcpP : Stm := cm{ if xp = 0 then S.firstChunk := y else C[xp].next := y }
+def lcpZ : Stm := cm{ C[z].prev := x; C[z].next := xn }
+def lcpN : Stm := cm{ if xn = 0 then skip else C[xn].prev := z }
+def lcpX : Stm := cm{ C[x].prev := y; C[x].next := z }
 /-- `linkChunkPair x y z`: `y`, `z` go before and after `x` in the chunk list (locals `x y z`). -/
-def linkChunkPairS : Stm :=
-  "xp" ::= .cF .prev "x" ;; "xn" ::= .cF .next "x" ;; lcpY ;; lcpP ;; lcpZ ;; lcpN ;; lcpX
+def linkChunkPairS : Stm := cm{ xp := C[x].prev; xn := C[x].next; lcpY; lcpP; lcpZ; lcpN; lcpX }
 
 theorem linkChunkPairS_ok {κ : Caps} {s : Core} {L : Loc} {x y z : Nat} (hx : L "x" = x) (hy : L "y" = y)
     (hz : L "z" = z) (hxs : x < s.C.size) (hys : y < s.C.size) (hzs : z < s.C.size) (hC : s.C.size ≤ κ.tbl .C)
@@ -826,11 +825,11 @@ theorem linkChunkPairS_ok {κ : Caps} {s : Core} {L : Loc} {x y z : Nat} (hx : L
     (evalF_seq_ok2 e6 e7))))), ?_, hF2⟩
   simp only [Exp.cost, Exp.cF] at hc4 hc6 ⊢; omega
 
-def msX : Stm := .wcF .st "x" 2 ;; .wcF .l "x" "y" ;; .wcF .r "x" "z"
-def msY : Stm := .wcF .st "y" 1 ;; .wcF .src "y" "x"
-def msZ : Stm := .wcF .st "z" 1 ;; .wcF .src "z" "x"
+def msX : Stm := cm{ C[x].st := 2; C[x].l := y; C[x].r := z }
+def msY : Stm := cm{ C[y].st := 1; C[y].src := x }
+def msZ : Stm := cm{ C[z].st := 1; C[z].src := x }
 /-- `markSplit x y z job` for the job `insertAround` returns (locals `x y z`). -/
-def markSplitS : Stm := msX ;; msY ;; msZ ;; .jobSet "x" "y" "z" 0 1 0 0 0
+def markSplitS : Stm := cm{ msX; msY; msZ; jobSet(x, y, z, 0, 1, 0, 0, 0) }
 
 theorem markSplitS_ok {κ : Caps} {t : Core} {L : Loc} {x y z : Nat} (hx : L "x" = x) (hy : L "y" = y)
     (hz : L "z" = z) (hxs : x < t.C.size) (hys : y < t.C.size) (hzs : z < t.C.size) (hC : t.C.size ≤ κ.tbl .C) :
@@ -924,10 +923,10 @@ theorem IAOK.agree {κ : Caps} {s : Core} {L : Loc} {x y z f1x i1 B : Nat} (h : 
     h.H h.xa h.ya h.za h.ys h.zs h.yC h.zC h.yP h.yN h.zP h.zN h.ry h.rz h.xi h.yi h.zi h.cin h.capT h.tB h.lr h.ccap
 
 /-- `splitChunkStart x` (local `x`; `y`, `z` receive the new chunks). -/
-def splitChunkStartS : Stm :=
-  .ite ("x" =ₑ 0) .fail (.ite (.size .C ≤ₑ "x") .fail .skip) ;;
-  .push .C "y" ;; .push .C "z" ;;
-  linkChunkPairS ;; insertAroundS ;; markSplitS
+def splitChunkStartS : Stm := cm{
+  if x = 0 then fail else if size C ≤ x then fail
+  y := new C; z := new C
+  linkChunkPairS; insertAroundS; markSplitS }
 
 theorem splitChunkStartS_ok {κ : Caps} {s : Core} {L : Loc} {x f1x i1 B : Nat} (hx : L "x" = x) (hx0 : x ≠ NIL)
     (hxs : x < s.C.size) (hC : s.C.size + 2 ≤ κ.tbl .C)

@@ -22,12 +22,12 @@ local notation "upd" => OM.Machine.State.upd
 
 /-! ### A copy step -/
 
-def jcopyS : Stm :=
-  "v" ::= .prd "jx" "ja" ;;
-  .pwr "jy" "ja" "v" ;; .pwr "jz" "ja" "v" ;;
-  .ite (.rd (.n .first) "v" =ₑ "jx") (.wr (.n .first) "v" "jy") .skip ;;
-  .ite (.rd (.n .last) "v" =ₑ "jx") (.wr (.n .last) "v" "jz") .skip ;;
-  .ite ("ja" <ₑ .prm .H) (.pcSet 0 ("ja" + 1) 0 0 0) (.pcSet 1 0 0 0 0)
+def jcopyS : Stm := cm{
+  v := path(jx, ja)
+  path(jy, ja) := v; path(jz, ja) := v
+  if N[v].first = jx then N[v].first := jy
+  if N[v].last = jx then N[v].last := jz
+  if ja < P.H then pcSet(0, ja + 1, 0, 0, 0) else pcSet(1, 0, 0, 0, 0) }
 
 theorem getX_default_of_le {α : Type} [Inhabited α] {a : Array α} {i : Nat} (h : a.size ≤ i) : a.getX i = default := by
   simp [Array.getX, Array.getD, show ¬i < a.size by omega]
@@ -141,7 +141,7 @@ theorem lor_shift (a c b h : Nat) (hc : c < 2 ^ b) (hh : 1 ≤ h) :
   simp only [Nat.shiftLeft_eq, pow_add]; ring
 
 /-- `r := belowOf h c` (local `h`). -/
-def belowS (c r : Reg) : Stm := .ite ("h" =ₑ 1) (r ::= .var c) (r ::= .prd c ("h" - 1))
+def belowS (c r : Reg) : Stm := cm{ if h = 1 then ‹r› := ‹c› else ‹r› := path(‹c›, h - 1) }
 
 theorem belowS_ok {κ : Caps} {s : Core} {L : Loc} {c r : Reg} {h y : Nat} (hh : L "h" = h) (hc : L c = y)
     (h1 : 1 ≤ h) (hnp : notPrep s y) (hyC : y < κ.tbl .C) (hw : h - 1 < κ.pw) :
@@ -152,16 +152,16 @@ theorem belowS_ok {κ : Caps} {s : Core} {L : Loc} {c r : Reg} {h y : Nat} (hh :
   · simp [belowS, evalF, Exp.ev, hh, hc, OM.Machine.BinOp.eval, e, Exp.cost, Res.addCost, hyC, hw,
       rowOf_notPrep hnp, h1]
 
-def dsLeftS : Stm := "t" ::= .rd (.n .t1) "v" ;; "lf" ::= 1 ;; "y" ::= .var "y0" ;; "bl" ::= .var "b0"
-def dsRightS : Stm :=
-  "y" ::= .rd (.n .last) "v" ;; belowS "y" "bl" ;;
-  (lookupP .side).call [.var "v", .var "bl"] ["f", "sd"] ;; .ite "f" .skip .fail ;;
-  .ite ("sd" =ₑ 1) .skip .fail ;; "t" ::= .rd (.n .t2) "v" ;; "lf" ::= 0
+def dsLeftS : Stm := cm{ t := N[v].t1; lf := 1; y := y0; bl := b0 }
+def dsRightS : Stm := cm{
+  y := N[v].last; ‹belowS "y" "bl"›
+  (f, sd) ← ‹lookupP .side›(v, bl); if f then skip else fail
+  if sd = 1 then skip else fail; t := N[v].t2; lf := 0 }
 /-- The chunk moved (`y`), its target (`t`), the direction (`lf`) and the entry below (`bl`). -/
-def dsPickS : Stm :=
-  "y0" ::= .rd (.n .first) "v" ;; belowS "y0" "b0" ;;
-  (lookupP .side).call [.var "v", .var "b0"] ["f", "sd"] ;; .ite "f" .skip .fail ;;
-  .ite ("sd" =ₑ 0) dsLeftS dsRightS
+def dsPickS : Stm := cm{
+  y0 := N[v].first; ‹belowS "y0" "b0"›
+  (f, sd) ← ‹lookupP .side›(v, b0); if f then skip else fail
+  if sd = 0 then dsLeftS else dsRightS }
 
 theorem dsPickS_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v) (hh : L "h" = (s.nodes.getX v).height)
     (h1 : 1 ≤ (s.nodes.getX v).height)
@@ -322,12 +322,12 @@ theorem labS_ok {κ : Caps} {s : Core} {L : Loc} {t e r : Reg} {tv ev l : Nat} (
   omega
 
 /-- The labels around the move and the tag fields they make (locals `v h y t bl`). -/
-def dsLabS : Stm :=
-  .ite ("h" <ₑ .prm .H) .skip .fail ;;
-  "pr" ::= .prd "y" ("h" + 1) ;;
-  labS "pr" "t" "pt" ;; labS "t" "bl" "tb" ;; labS "pr" "v" "pv" ;; labS "v" "bl" "vb" ;;
-  "e1" ::= .bin .shl 1 ("h" * .prm .beta) ;; "e0" ::= .bin .shl 1 (("h" - 1) * .prm .beta) ;;
-  "old" ::= "pv" * "e1" + "vb" * "e0" ;; "new" ::= "pt" * "e1" + "tb" * "e0"
+def dsLabS : Stm := cm{
+  if h < P.H then skip else fail
+  pr := path(y, h + 1)
+  ‹labS "pr" "t" "pt"›; ‹labS "t" "bl" "tb"›; ‹labS "pr" "v" "pv"›; ‹labS "v" "bl" "vb"›
+  e1 := 1 <<< (h * P.beta); e0 := 1 <<< ((h - 1) * P.beta)
+  old := pv * e1 + vb * e0; new := pt * e1 + tb * e0 }
 
 theorem dsLabS_ok {κ : Caps} {s : Core} {L : Loc} {v h y t bl pt tb pv vb : Nat}
     (hv : L "v" = v) (hh : L "h" = h) (hy : L "y" = y) (ht : L "t" = t) (hbl : L "bl" = bl)
@@ -412,17 +412,18 @@ theorem evalF_wrN2 {κ : Caps} {s : Core} {L : Loc} {k1 k2 : NF} {i e1 e2 : Exp}
   rw [Array.modify_modify_same] at w2'
   exact evalF_seq_ok2 w1' w2'
 
-def dsTagS : Stm :=
-  "ty" ::= .rd (.c .tag) "y" ;; .ite ("ty" <ₑ "old") .fail .skip ;;
-  "tg" ::= "ty" - "old" + "new" ;; gstP.call [.var "y", .var "tg"] []
-def dsRangeS : Stm :=
-  .ite (.rd (.n .first) "v" =ₑ .rd (.n .last) "v") (.wr (.n .first) "v" 0 ;; .wr (.n .last) "v" 0)
-    (.ite "lf" (.wr (.n .first) "v" (.rd (.c .next) "y")) (.wr (.n .last) "v" (.rd (.c .prev) "y")))
-def dsTgtS : Stm :=
-  .ite "lf" (.ite (.rd (.n .first) "t" =ₑ 0) (.wr (.n .first) "t" "y") .skip ;; .wr (.n .last) "t" "y")
-            (.ite (.rd (.n .last) "t" =ₑ 0) (.wr (.n .last) "t" "y") .skip ;; .wr (.n .first) "t" "y")
+def dsTagS : Stm := cm{
+  ty := C[y].tag; if ty < old then fail
+  tg := ty - old + new; call gstP(y, tg) }
+def dsRangeS : Stm := cm{
+  if N[v].first = N[v].last then { N[v].first := 0; N[v].last := 0 }
+  else if lf then N[v].first := C[y].next
+  else N[v].last := C[y].prev }
+def dsTgtS : Stm := cm{
+  if lf then { if N[t].first = 0 then N[t].first := y; N[t].last := y }
+  else { if N[t].last = 0 then N[t].last := y; N[t].first := y } }
 /-- The writes of a sweep step that moves chunk `y` to target `t` (locals `v h y t lf old new`). -/
-def dsMutS : Stm := dsTagS ;; .pwr "y" "h" "t" ;; dsRangeS ;; dsTgtS
+def dsMutS : Stm := cm{ dsTagS; path(y, h) := t; dsRangeS; dsTgtS }
 
 theorem dsMutS_ok {κ : Caps} {s : Core} {L : Loc} {v old new : Nat}
     (hv : L "v" = v) (hh : L "h" = (s.nodes.getX v).height) (hy : L "y" = dsY s v) (ht : L "t" = dsT s v)
@@ -639,10 +640,11 @@ def dsP : Proc where
   name := "drainStep"
   params := ["v"]
   rets := ["ok"]
-  body :=
-    .ite (.rd (.n .dead) "v") ("ok" ::= 0)
-      ("h" ::= .rd (.n .height) "v" ;;
-       .ite (.rd (.n .first) "v" =ₑ 0) (finishDrainS ;; "ok" ::= 0) (dsMoveS ;; "ok" ::= 1))
+  body := cm{
+    if N[v].dead then ok := 0
+    else {
+      h := N[v].height
+      if N[v].first = 0 then { finishDrainS; ok := 0 } else { dsMoveS; ok := 1 } } }
 
 theorem dsP_dead {κ : Caps} {s : Core} {L : Loc} {v : Nat} (hv : L "v" = v) (hvN : v < κ.tbl .N)
     (hal : (s.nodes.getX v).alive = false) :
@@ -737,10 +739,11 @@ def DSAgree (κ : Caps) (S : Core) (src D : Nat) : Prop :=
       L' "ok" = b2n b ∧ c ≤ D ∧ S'.resJob = S.resJob
 
 /-- `fundLoop` (locals `ja jb jc jd` = `v up src k`); the job's counter is updated. -/
-def fundS : Stm :=
-  .ite ("jd" <ₑ .prm .s)
-    (dsP.call [.var "jc"] ["dk"] ;; .ite "dk" (.pcSet 4 "ja" "jb" "jc" ("jd" + 1)) (.pcSet 2 "jb" 0 0 0))
-    (.pcSet 2 "jb" 0 0 0)
+def fundS : Stm := cm{
+  if jd < P.s then {
+    dk ← dsP(jc)
+    if dk then pcSet(4, ja, jb, jc, jd + 1) else pcSet(2, jb, 0, 0, 0) }
+  else pcSet(2, jb, 0, 0, 0) }
 
 theorem fundS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up src k D : Nat} (hjob : S.resJob = some j)
     (ha : L "ja" = v) (hb : L "jb" = up) (hc : L "jc" = src) (hd : L "jd" = k) (hds : DSAgree κ S src D)
@@ -785,8 +788,8 @@ theorem fundS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up src k D : N
     simp [Exp.cost]
 
 /-- `afterDrain` (locals `av au` = `v up`). -/
-def afSetS : Stm := "ja" ::= .var "av" ;; "jb" ::= .var "au" ;; "jc" ::= .var "src" ;; "jd" ::= 0
-def afterDS : Stm := "src" ::= .rd (.n .overflow) "av" ;; .ite ("src" =ₑ 0) (.pcSet 2 "au" 0 0 0) (afSetS ;; fundS)
+def afSetS : Stm := cm{ ja := av; jb := au; jc := src; jd := 0 }
+def afterDS : Stm := cm{ src := N[av].overflow; if src = 0 then pcSet(2, au, 0, 0, 0) else { afSetS; fundS } }
 
 theorem afterDS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v up D : Nat} (hjob : S.resJob = some j)
     (hv : L "av" = v) (hu : L "au" = up) (hvN : v < κ.tbl .N)
@@ -841,7 +844,7 @@ def SDAgree (κ : Caps) (S : Core) (v D : Nat) : Prop :=
       S'.resJob = S.resJob
 
 /-- `pw := a ^ ht`, in one step: `a` is a power of two, so `a ^ ht = 1 <<< (log₂ a · ht)`. -/
-def powS : Stm := "pw" ::= .bin .shl 1 (.un .msb (.prm .a) * "ht")
+def powS : Stm := cm{ pw := 1 <<< (msb(P.a) * ht) }
 
 theorem powS_ok {κ : Caps} {S : Core} {L : Loc} {h : Nat} (hh : L "ht" = h) (ha : S.P.a = 2 ^ Nat.log2 S.P.a) :
     ∃ L' c, evalF κ powS S L = .ok S L' c ∧ L' "pw" = S.P.a ^ h ∧ c ≤ 10 ∧
@@ -852,15 +855,17 @@ theorem powS_ok {κ : Caps} {S : Core} {L : Loc} {h : Nat} (hh : L "ht" = h) (ha
   conv_rhs => rw [ha]
   rw [← pow_mul]
 
-def walkC : Exp := (!ₑ ("up" =ₑ 0)) &&ₑ ((!ₑ "dr") &&ₑ (("ov" =ₑ 0) &&ₑ (2 * "pw" <ₑ "wt" + 2)))
-def walkRd : Stm :=
-  "up" ::= .rd (.n .livePar) "wv" ;; "wt" ::= .rd (.n .weight) "wv" ;; "ht" ::= .rd (.n .height) "wv" ;;
-  "dr" ::= .rd (.n .draining) "wv" ;; "ov" ::= .rd (.n .overflow) "wv"
+def walkC : Exp := cme{ up ≠ 0 && !dr && ov = 0 && 2 * pw < wt + 2 }
+def walkRd : Stm := cm{
+  up := N[wv].livePar; wt := N[wv].weight; ht := N[wv].height
+  dr := N[wv].draining; ov := N[wv].overflow }
 /-- `walkBody` at node `wv`. -/
-def walkS : Stm :=
-  .ite ("wv" =ₑ 0) .jobClear
-    (walkRd ;; .wr (.n .weight) "wv" ("wt" + 2) ;; powS ;;
-     .ite walkC (sdP.call [.var "wv"] [] ;; .pcSet 3 "wv" "up" 0 0) ("av" ::= .var "wv" ;; "au" ::= .var "up" ;; afterDS))
+def walkS : Stm := cm{
+  if wv = 0 then jobClear
+  else {
+    walkRd; N[wv].weight := wt + 2; powS
+    if ‹walkC› then { call sdP(wv); pcSet(3, wv, up, 0, 0) }
+    else { av := wv; au := up; afterDS } } }
 
 theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (hjob : S.resJob = some j)
     (hv : L "wv" = v) (hvs : v ≠ 0 → v < S.nodes.size) (hvN : v ≠ 0 → v < κ.tbl .N)
@@ -966,17 +971,18 @@ theorem walkS_agree {κ : Caps} {S : Core} {L : Loc} {j : Job} {v D1 D2 : Nat} (
 
 /-! ### The job step -/
 
-def jobRdS : Stm :=
-  "jx" ::= .opt .jobX ;; "jy" ::= .opt .jobY ;; "jz" ::= .opt .jobZ ;; "jt" ::= .opt .jobT ;;
-  "ja" ::= .opt .jobA ;; "jb" ::= .opt .jobB ;; "jc" ::= .opt .jobC ;; "jd" ::= .opt .jobD
+def jobRdS : Stm := cm{
+  jx := O.jobX; jy := O.jobY; jz := O.jobZ; jt := O.jobT
+  ja := O.jobA; jb := O.jobB; jc := O.jobC; jd := O.jobD }
 
 /-- One resumption of the running job; the job's record is updated (or cleared). -/
-def jobStepS : Stm :=
-  jobRdS ;;
-  .ite ("jt" =ₑ 0) jcopyS
-  (.ite ("jt" =ₑ 1) ("wv" ::= .rd (.a .lpar) "jy" ;; walkS)
-  (.ite ("jt" =ₑ 2) ("wv" ::= .var "ja" ;; walkS)
-  (.ite ("jt" =ₑ 3) ("av" ::= .var "ja" ;; "au" ::= .var "jb" ;; afterDS) fundS)))
+def jobStepS : Stm := cm{
+  jobRdS
+  if jt = 0 then jcopyS
+  else if jt = 1 then { wv := lpar[jy]; walkS }
+  else if jt = 2 then { wv := ja; walkS }
+  else if jt = 3 then { av := ja; au := jb; afterDS }
+  else fundS }
 
 theorem jobRdS_ok {κ : Caps} {s : Core} {L : Loc} {j : Job} (hjob : s.resJob = some j) :
     ∃ L', evalF κ jobRdS s L = .ok s L' 24 ∧ L' "jx" = j.x ∧ L' "jy" = j.y ∧ L' "jz" = j.z ∧

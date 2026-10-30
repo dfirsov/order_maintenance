@@ -36,16 +36,15 @@ def tableInsertP : Proc where
   name := "tableInsert"
   params := ["t", "e", "w", "bf", "lab"]
   rets := []
-  body :=
-    (findP .table).call [.var "t", .var "e"] ["r"] ;;
-    "n" ::= .llen .table "t" ;;
-    .ite ("r" <ₑ "n") .skip .fail ;;
-    "p" ::= "r" + (1 - "bf") ;;
-    (insertIdxP .table).call [.var "t", .var "p", .var "w", .var "lab"] [] ;;
-    .ite (.rd (.n .draining) "t")
-      ((lookupP .side).call [.var "t", .var "e"] ["f", "x"] ;;
-       .ite "f" ((assocSetP .side).call [.var "t", .var "w", .var "x"] []) .fail)
-      .skip
+  body := cm{
+    r ← ‹findP .table›(t, e)
+    n := len table[t]
+    if r < n then skip else fail
+    p := r + (1 - bf)
+    call ‹insertIdxP .table›(t, p, w, lab)
+    if N[t].draining then {
+      (f, x) ← ‹lookupP .side›(t, e)
+      if f then call ‹assocSetP .side›(t, w, x) else fail } }
 
 theorem getX_size_le {α : Type} [Inhabited α] {a : Array α} {i : Nat} (h : a.size ≤ i) : a.getX i = default := by
   simp [Array.getX, Array.getD, show ¬i < a.size by omega]
@@ -197,25 +196,26 @@ theorem Exp.ev_bin' {κ : Caps} {σ : Core} {L : Loc} {op : BinOp} {a b : Exp} {
   simp [Exp.ev, ha, hb]
 
 /-- The bounds around position `r` of table `t`. -/
-def boundsS : Stm :=
-  .ite "bf"
-    (.ite (0 <ₑ "r") ("lo" ::= .lrd .table true "t" ("r" - 1) + 1) ("lo" ::= 0) ;;
-     "hi" ::= .lrd .table true "t" "r")
-    ("lo" ::= .lrd .table true "t" "r" + 1 ;;
-     .ite ("r" + 1 <ₑ "n") ("hi" ::= .lrd .table true "t" ("r" + 1)) ("hi" ::= .bin .shl 1 (.prm .beta)))
+def boundsS : Stm := cm{
+  if bf then {
+    if 0 < r then lo := table[t][r - 1].snd + 1 else lo := 0
+    hi := table[t][r].snd }
+  else {
+    lo := table[t][r].snd + 1
+    if r + 1 < n then hi := table[t][r + 1].snd else hi := 1 <<< P.beta } }
 
 /-- `roomNextTo t e before` (`bf` = 1 for `before`): a free label next to `e` in table `t`. -/
 def roomP : Proc where
   name := "roomNextTo"
   params := ["t", "e", "bf"]
   rets := ["l"]
-  body :=
-    (findP .table).call [.var "t", .var "e"] ["r"] ;;
-    "n" ::= .llen .table "t" ;;
-    .ite ("r" <ₑ "n") .skip .fail ;;
-    boundsS ;;
-    .ite ("hi" ≤ₑ "lo") .fail .skip ;;
-    "l" ::= ("lo" + "hi" - 1) / 2
+  body := cm{
+    r ← ‹findP .table›(t, e)
+    n := len table[t]
+    if r < n then skip else fail
+    boundsS
+    if hi ≤ lo then fail
+    l := (lo + hi - 1) / 2 }
 
 /-- The bounds `roomNextTo` takes: one above the lower neighbour's label, and the upper one. -/
 def rLo (tab : List (Nat × Nat)) (i : Nat) (before : Bool) : Nat :=

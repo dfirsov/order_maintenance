@@ -51,8 +51,7 @@ theorem evalF_wrN_ok {κ : Caps} {s : Core} {L : Loc} {k : NF} {i e : Exp} {j w 
 
 /-! ### Stage 1: the two new nodes -/
 
-def newNodesS : Stm :=
-  .push .N "v1" ;; .wr (.n .height) "v1" "h" ;; .push .N "v2" ;; .wr (.n .height) "v2" "h"
+def newNodesS : Stm := cm{ v1 := new N; N[v1].height := h; v2 := new N; N[v2].height := h }
 
 theorem newNodesS_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
     (hh : L "h" = sH t v) (hv : v < t.nodes.size) (hcap : t.nodes.size + 2 ≤ κ.tbl .N) :
@@ -134,14 +133,14 @@ theorem sdJ_all (t : Core) (v : Nat) : sdJ t v (t.nodes.getX v).inTables.length 
 theorem sd1_getX (t : Core) (v : Nat) {u : Nat} (hu : u < t.nodes.size) : (sd1 t v).nodes.getX u = t.nodes.getX u := by
   simp only [sd1, getX_push', Array.size_push]; rw [if_neg (by omega), if_neg (by omega)]
 
-def insBody : Stm :=
-  "T" ::= .lrd .inTab false "v" "j" ;;
-  roomP.call [.var "T", .var "v", 1] ["a"] ;;
-  roomP.call [.var "T", .var "v", 0] ["b"] ;;
-  tableInsertP.call [.var "T", .var "v", .var "v1", 1, .var "a"] [] ;;
-  tableInsertP.call [.var "T", .var "v", .var "v2", 0, .var "b"] []
+def insBody : Stm := cm{
+  T := inTab[v][j].fst
+  a ← roomP(T, v, 1)
+  b ← roomP(T, v, 0)
+  call tableInsertP(T, v, v1, 1, a)
+  call tableInsertP(T, v, v2, 0, b) }
 
-def insS : Stm := "m" ::= .llen .inTab "v" ;; .loop "j" "m" insBody
+def insS : Stm := cm{ m := len inTab[v]; for j < m do insBody }
 
 theorem nodup_getElem_notin_take {l : List Nat} (hnd : l.Nodup) {j : Nat} (hj : j < l.length) :
     l[j] ∉ l.take j := by
@@ -366,12 +365,12 @@ def entOK (t : Core) (v e : Nat) : Bool :=
   sH t v == 1 || (t.nodes.getX v).children.contains e || (t.nodes.getX e).first != NIL
 
 /-- `q := ` entry `e` is a drain entry on side `sd` (locals `v h e sd`). -/
-def selE : Exp := ((("h" =ₑ 1) ||ₑ ("r" <ₑ "m")) ||ₑ (!ₑ (.rd (.n .first) "e" =ₑ 0))) &&ₑ ("f" &&ₑ ("x" =ₑ "sd"))
-def selS : Stm :=
-  (findP .children).call [.var "v", .var "e"] ["r"] ;;
-  "m" ::= .llen .children "v" ;;
-  (lookupP .side).call [.var "v", .var "e"] ["f", "x"] ;;
-  "q" ::= selE
+def selE : Exp := cme{ ((h = 1 || r < m) || N[e].first ≠ 0) && (f && x = sd) }
+def selS : Stm := cm{
+  r ← ‹findP .children›(v, e)
+  m := len children[v]
+  (f, x) ← ‹lookupP .side›(v, e)
+  q := ‹selE› }
 
 /-- What `selS` reads agrees with Level F's state `t`. -/
 structure ReadOK (St t : Core) (v : Nat) (side : List (Nat × Side)) : Prop where
@@ -490,16 +489,16 @@ theorem ReadOK.put_table {St t : Core} {v w : Nat} {side : List (Nat × Side)} (
   exact ⟨by rw [hg v (Ne.symm hw)]; exact hR.tab, by rw [hg v (Ne.symm hw)]; exact hR.kids,
     by rw [hg v (Ne.symm hw)]; exact hR.side, fun u => by rw [hf]; exact hR.first u⟩
 
-def cntBody : Stm := "e" ::= .lrd .table false "v" "j" ;; selS ;; .ite "q" ("cnt" ::= "cnt" + 1) .skip
-def bldBody : Stm :=
-  "e" ::= .lrd .table false "v" "j" ;; selS ;;
-  .ite "q" ("idx" ::= "idx" + 1 ;; .lgrow .table "w" "e" ("idx" * "st")) .skip
+def cntBody : Stm := cm{ e := table[v][j].fst; selS; if q then cnt := cnt + 1 }
+def bldBody : Stm := cm{
+  e := table[v][j].fst; selS
+  if q then { idx := idx + 1; append table[w] (e, idx * st) } }
 /-- **The table of a new node `w`**: the drain entries of side `sd`, evenly labelled. -/
-def tabS : Stm :=
-  "nt" ::= .llen .table "v" ;;
-  "cnt" ::= 0 ;; .loop "j" "nt" cntBody ;;
-  "st" ::= .bin .shl 1 (.prm .beta) / ("cnt" + 1) ;;
-  "idx" ::= 0 ;; .loop "j" "nt" bldBody
+def tabS : Stm := cm{
+  nt := len table[v]
+  cnt := 0; for j < nt do cntBody
+  st := (1 <<< P.beta) / (cnt + 1)
+  idx := 0; for j < nt do bldBody }
 
 theorem length_evT (st : Nat) (l : List Nat) : (evT st l).length = l.length := by simp [evT]
 
@@ -770,7 +769,7 @@ theorem ReadOK.put_inTab {St t : Core} {v w : Nat} {side : List (Nat × Side)} (
     by rw [hg v (Ne.symm hw)]; exact hR.side, fun u => by rw [hf]; exact hR.first u⟩
 
 /-- A new node `w` takes `v`'s tables and its share of `v`'s entries (side `sd`). -/
-def newTabS : Stm := "a" ::= .var "v" ;; copyS .inTab ;; tabS
+def newTabS : Stm := cm{ a := v; ‹copyS .inTab›; tabS }
 
 theorem newTabS_ok {κ : Caps} {St t : Core} {L : Loc} {v w : Nat} {side : List (Nat × Side)} {sd : Side}
     (hR : ReadOK St t v side) (hP : St.P = t.P) (hw0 : (St.nodes.getX w).table = [])
@@ -814,8 +813,9 @@ theorem newTabS_ok {κ : Caps} {St t : Core} {L : Loc} {v w : Nat} {side : List 
   · intro r h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13
     rw [hF3 r h4 h5 h3 h6 h7 h8 h9 h10 h11 h12 h13, hfr2 r h1 h2 h3]
 
-def stage3S : Stm :=
-  "w" ::= .var "v1" ;; "sd" ::= 0 ;; newTabS ;; "w" ::= .var "v2" ;; "sd" ::= 1 ;; newTabS
+def stage3S : Stm := cm{
+  w := v1; sd := 0; newTabS
+  w := v2; sd := 1; newTabS }
 
 theorem stage3_state (t : Core) (v : Nat) (side : List (Nat × Side)) (hv : v < t.nodes.size) :
     LK.put (LK.put (LK.put (LK.put (phiS v side (sd2 t v)) t.nodes.size
@@ -907,10 +907,10 @@ theorem stage3S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
 
 /-! ### Stage 4: the entries learn their new tables -/
 
-def atBody : Stm :=
-  "e" ::= .lrd .table false "w" "j" ;;
-  .ite ("h" ≤ₑ 1) (.lgrow .cin "e" "w" 0) (.lgrow .inTab "e" "w" 0)
-def atS : Stm := "nt" ::= .llen .table "w" ;; .loop "j" "nt" atBody
+def atBody : Stm := cm{
+  e := table[w][j].fst
+  if h ≤ 1 then append cin[e] (w, 0) else append inTab[e] (w, 0) }
+def atS : Stm := cm{ nt := len table[w]; for j < nt do atBody }
 
 theorem addTableS_table (h w e : Nat) (s : Core) (u : Nat) :
     ((addTableS h w e s).nodes.getX u).table = (s.nodes.getX u).table := by
@@ -1075,7 +1075,7 @@ theorem sd4_inTables {t : Core} {v e : Nat} {side : List (Nat × Side)} (he : e 
 
 theorem sd4_cin (t : Core) (v : Nat) (side : List (Nat × Side)) : (phiS v side (sd4 t v side)).cin = t.cin := rfl
 
-def stage4S : Stm := "w" ::= .var "v1" ;; atS ;; "w" ::= .var "v2" ;; atS
+def stage4S : Stm := cm{ w := v1; atS; w := v2; atS }
 
 theorem sd4_table_N (t : Core) (v : Nat) (side : List (Nat × Side)) (hv : v < t.nodes.size) :
     ((phiS v side (sd4 t v side)).nodes.getX t.nodes.size).table = evenTable t.P.beta (sLeft t v side) := by
@@ -1150,16 +1150,16 @@ theorem stage4S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
 
 /-! ### Stages 5, 6: the children of `v1`, `v2` -/
 
-def chSel : Exp := "f" &&ₑ ("x" =ₑ "sd")
-def setParS : Stm := .ite ("h" =ₑ 1) (.wr (.a .lpar) "e" "u") (.wr (.n .livePar) "e" "u")
-def chBody : Stm :=
-  "e" ::= .lrd .children false "v" "j" ;;
-  (lookupP .side).call [.var "v", .var "e"] ["f", "x"] ;;
-  .ite chSel (setParS ;; .lgrow .children "u" "e" 0 ;; wtS ;; "ws" ::= "ws" + "w") .skip
+def chSel : Exp := cme{ f && x = sd }
+def setParS : Stm := cm{ if h = 1 then lpar[e] := u else N[e].livePar := u }
+def chBody : Stm := cm{
+  e := children[v][j].fst
+  (f, x) ← ‹lookupP .side›(v, e)
+  if ‹chSel› then { setParS; append children[u] (e, 0); wtS; ws := ws + w } }
 /-- **The children of a new node `u`**: `v`'s children on side `sd`, with their parent and weight. -/
-def chS : Stm :=
-  "ws" ::= 0 ;; "nk" ::= .llen .children "v" ;; .loop "j" "nk" chBody ;;
-  .wr (.n .weight) "u" "ws" ;; .wr (.n .livePar) "u" (.rd (.n .livePar) "v") ;; .wr (.n .overflow) "u" "v"
+def chS : Stm := cm{
+  ws := 0; nk := len children[v]; for j < nk do chBody
+  N[u].weight := ws; N[u].livePar := N[v].livePar; N[u].overflow := v }
 
 /-- What `chS` produces (Level F's `sd8` / `sd10` step). -/
 def chRes (h u v lp wsum : Nat) (ch : List Nat) (St : Core) : Core :=
@@ -1544,8 +1544,9 @@ theorem sd10_eq (t : Core) (v : Nat) (side : List (Nat × Side)) :
     sd10 t v side = chRes (sH t v) (t.nodes.size + 1) v (t.nodes.getX v).livePar
       (((sCh2 t v side).map (sWt t v)).sum) (sCh2 t v side) (sd8 t v side) := rfl
 
-def stage56S : Stm :=
-  "u" ::= .var "v1" ;; "sd" ::= 0 ;; chS ;; "u" ::= .var "v2" ;; "sd" ::= 1 ;; chS
+def stage56S : Stm := cm{
+  u := v1; sd := 0; chS
+  u := v2; sd := 1; chS }
 
 theorem stage56S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat × Side)}
     (hv : v < t.nodes.size) (hvk : sH t v ≠ 1 → v ∉ (t.nodes.getX v).children)
@@ -1654,11 +1655,11 @@ theorem findIdx_pair0' (l : List Nat) (x : Nat) :
     (l.map fun e => (e, 0)).findIdx (·.1 == x) = l.findIdx (· == x) := by
   rw [List.findIdx_map]; rfl
 
-def stage7S : Stm :=
-  "p" ::= .rd (.n .livePar) "v" ;;
-  (findP .children).call [.var "p", .var "v"] ["r"] ;;
-  .lwr .children false "p" "r" "v1" ;;
-  (insertIdxP .children).call [.var "p", "r" + 1, .var "v2", 0] []
+def stage7S : Stm := cm{
+  p := N[v].livePar
+  r ← ‹findP .children›(p, v)
+  children[p][r].fst := v1
+  call ‹insertIdxP .children›(p, r + 1, v2, 0) }
 
 /-- Level F after the parent's children (`s11` of `sdS`). -/
 def sd11 (t : Core) (v : Nat) (side : List (Nat × Side)) : Core :=
@@ -1789,9 +1790,9 @@ theorem stage7S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
 
 /-! ### Stage 8: `v` becomes a ghost -/
 
-def stage8S : Stm :=
-  .wr (.n .draining) "v" 1 ;; .wr (.n .t1) "v" "v1" ;; .wr (.n .t2) "v" "v2" ;; .wr (.n .livePar) "v" 0 ;;
-  .lclear .children "v"
+def stage8S : Stm := cm{
+  N[v].draining := 1; N[v].t1 := v1; N[v].t2 := v2; N[v].livePar := 0
+  clear children[v] }
 
 /-- What `v` becomes. -/
 def ghostF (N : Nat) (side : List (Nat × Side)) (n : Node) : Node :=
@@ -1833,14 +1834,14 @@ theorem stage8S_ok {κ : Caps} {t : Core} {L : Loc} {v : Nat} {side : List (Nat 
 
 /-! ### `startDrain` -/
 
-def sdCond : Exp := (1 <ₑ "h") &&ₑ ("k" =ₑ 0)
-def sdMain : Stm :=
-  .ite ("k" <ₑ "nk") ("b" ::= .lrd .children false "v" "k") ("b" ::= 0) ;;
-  drainSideS ;; newNodesS ;; insS ;; stage3S ;; stage4S ;; stage56S ;; stage7S ;; stage8S
+def sdCond : Exp := cme{ 1 < h && k = 0 }
+def sdMain : Stm := cm{
+  if k < nk then b := children[v][k].fst else b := 0
+  drainSideS; newNodesS; insS; stage3S; stage4S; stage56S; stage7S; stage8S }
 /-- **`startDrain v`** at Level M (local `v`). -/
-def startDrainS : Stm :=
-  "h" ::= .rd (.n .height) "v" ;; "nk" ::= .llen .children "v" ;;
-  .ite ("nk" <ₑ 2) .skip (drainCutS ;; .ite sdCond .skip sdMain)
+def startDrainS : Stm := cm{
+  h := N[v].height; nk := len children[v]
+  if nk < 2 then skip else { drainCutS; if ‹sdCond› then skip else sdMain } }
 
 /-- The cost bound of `startDrain`, in the lengths of the lists it walks. -/
 def sdCost (K T I S B P : Nat) : Nat :=

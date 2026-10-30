@@ -21,18 +21,17 @@ local notation "upd" => OM.Machine.State.upd
 /-- A core in fresh memory: every array empty (all cells read 0). -/
 def freshC (P : Params) : Core := { P := P, E := #[], Gs := #[], C := #[], nodes := #[] }
 
-def initEltS : Stm :=
-  .push .E "t" ;; .push .E "t" ;;
-  .weF .grp 1 1 ;; .weF .lab 1 (.bin .shl 1 (.prm .Be - 1)) ;; .weF .dead 1 1
-def initGrpS : Stm :=
-  .push .G "t" ;; .push .G "t" ;;
-  .wgF .chk 1 1 ;; .wgF .lab 1 (.bin .shl 1 (.prm .Bg - 1)) ;; .wgF .first 1 1 ;; .wgF .last 1 1 ;;
-  .wgF .size 1 1
-def initChkS : Stm :=
-  .push .C "t" ;; .push .C "t" ;; .wcF .first 1 1 ;; .wcF .last 1 1 ;; .wcF .size 1 1
-def initScS : Stm :=
-  .push .N "t" ;; .wr (.s .firstGroup) 0 1 ;; .wr (.s .firstChunk) 0 1 ;; .wr (.s .head) 0 1 ;; .wr (.s .tail) 0 1 ;;
-  .wr (.s .count) 0 1
+def initEltS : Stm := cm{
+  t := new E; t := new E
+  E[1].grp := 1; E[1].lab := 1 <<< (P.Be - 1); E[1].dead := 1 }
+def initGrpS : Stm := cm{
+  t := new G; t := new G
+  G[1].chk := 1; G[1].lab := 1 <<< (P.Bg - 1); G[1].first := 1; G[1].last := 1
+  G[1].size := 1 }
+def initChkS : Stm := cm{ t := new C; t := new C; C[1].first := 1; C[1].last := 1; C[1].size := 1 }
+def initScS : Stm := cm{
+  t := new N; S.firstGroup := 1; S.firstChunk := 1; S.head := 1; S.tail := 1
+  S.count := 1 }
 /-- `set (initState P)`, from fresh memory. -/
 def initStateS : Stm := initEltS ;; initGrpS ;; initChkS ;; initScS
 
@@ -158,25 +157,25 @@ theorem initStateS_ok {κ : Caps} {P : Params} {L : Loc} (hBe : 1 ≤ P.B_e) (hB
 
 /-! ### `initStep` -/
 
-def isLink : Stm :=
-  .ite ("h" =ₑ 1) (.lclear .cin "c" ;; .lgrow .cin "c" "v" 0 ;; .wr (.a .lpar) "c" "v")
-    (.lclear .inTab "bl" ;; .lgrow .inTab "bl" "v" 0 ;; .wr (.n .livePar) "bl" "v")
-def isNode : Stm :=
-  .push .N "v" ;; .wr (.n .height) "v" "h" ;; .lgrow .children "v" "bl" 0 ;; .lgrow .table "v" "bl" "ctr" ;;
-  .wr (.n .weight) "v" 1 ;; .wr (.n .first) "v" "c" ;; .wr (.n .last) "v" "c"
-def isUp : Stm := .prepSet ("h" + 1) "v" ("tg" + "ctr" * .bin .shl 1 (("h" - 1) * .prm .beta)) ;; .prepPath "h" "v"
-def isBuild : Stm := "ctr" ::= .bin .shl 1 (.prm .beta - 1) ;; isNode ;; isLink ;; isUp ;; "done" ::= 0
-def isFinish : Stm := .wcF .tag "c" "tg" ;; .prepCommit ;; "done" ::= 1
-def isPre : Stm :=
-  "c" ::= .opt .prepChunk ;; "h" ::= .opt .prepH ;; "bl" ::= .opt .prepBelow ;; "tg" ::= .opt .prepTag ;;
-  .ite ("h" =ₑ 1) (.lclear .cin "c") .skip
+def isLink : Stm := cm{
+  if h = 1 then { clear cin[c]; append cin[c] (v, 0); lpar[c] := v }
+  else { clear inTab[bl]; append inTab[bl] (v, 0); N[bl].livePar := v } }
+def isNode : Stm := cm{
+  v := new N; N[v].height := h; append children[v] (bl, 0); append table[v] (bl, ctr)
+  N[v].weight := 1; N[v].first := c; N[v].last := c }
+def isUp : Stm := cm{ prepSet(h + 1, v, tg + ctr * (1 <<< ((h - 1) * P.beta))); prepPath(h, v) }
+def isBuild : Stm := cm{ ctr := 1 <<< (P.beta - 1); isNode; isLink; isUp; done := 0 }
+def isFinish : Stm := cm{ C[c].tag := tg; prepCommit; done := 1 }
+def isPre : Stm := cm{
+  c := O.prepChunk; h := O.prepH; bl := O.prepBelow; tg := O.prepTag
+  if h = 1 then clear cin[c] }
 
 /-- `done := initStep`. -/
 def initStepP : Proc where
   name := "initStep"
   params := []
   rets := ["done"]
-  body := .ite (.opt .prepOn) (isPre ;; .ite ("h" ≤ₑ .prm .H) isBuild isFinish) ("done" ::= 1)
+  body := cm{ if O.prepOn then { isPre; if h ≤ P.H then isBuild else isFinish } else done := 1 }
 
 theorem initStepP_none {κ : Caps} {s : Core} {L : Loc} (hp : s.prep = none) :
     ∃ L' c, evalF κ initStepP.body s L = .ok s L' c ∧ L' "done" = 1 ∧ c ≤ 10 := by
@@ -523,8 +522,8 @@ def initF : Nat → PUnit → CM (ForInStep PUnit) := fun _ _ => do
   let b ← initStep
   if b = true then pure (ForInStep.done PUnit.unit) else pure (ForInStep.yield PUnit.unit)
 
-def initLoopBody : Stm := .ite ("dn" =ₑ 0) (initStepP.call [] ["d"] ;; .ite "d" ("dn" ::= 1) .skip) .skip
-def initLoopS : Stm := "dn" ::= 0 ;; .loop "ii" (.prm .H + 1) initLoopBody
+def initLoopBody : Stm := cm{ if dn = 0 then { d ← initStepP(); if d then dn := 1 } }
+def initLoopS : Stm := cm{ dn := 0; for ii < P.H + 1 do initLoopBody }
 
 theorem initLoopS_agree (κ : Caps) (s : Core) (L : Loc) {D : Nat} (I : Nat → Core → Prop) (h0 : I 0 s)
     (hstep : ∀ j t, I j t → j < s.P.H + 1 → ∃ b t', initStep.run t = .ok b t' ∧ (b = false → I (j + 1) t') ∧
@@ -597,8 +596,9 @@ theorem initLoopS_agree (κ : Caps) (s : Core) (L : Loc) {D : Nat} (I : Nat → 
 /-! ### `initCore` -/
 
 /-- `initCore lz` (local `lz`), from fresh memory. -/
-def initCoreS : Stm :=
-  initStateS ;; .prepInit 1 1 ;; .ite "lz" (.wr (.s .notReady) 0 1) (initLoopS ;; .wr (.s .notReady) 0 0)
+def initCoreS : Stm := cm{
+  initStateS; prepInit(1, 1)
+  if lz then S.notReady := 1 else { initLoopS; S.notReady := 0 } }
 
 /-- The state after `prepInit 1 1` on `initState P`. -/
 def prepStart (P : Params) (r : Bool) : Core :=
@@ -677,9 +677,9 @@ def prepP : Proc where
   name := "prepareStep"
   params := []
   rets := ["r"]
-  body :=
-    .ite (.rd (.s .notReady) 0) (initStepP.call [] ["d"] ;; .ite "d" (.wr (.s .notReady) 0 0) .skip) .skip ;;
-    "r" ::= !ₑ (.rd (.s .notReady) 0)
+  body := cm{
+    if ‹.rd (.s .notReady) 0› then { d ← initStepP(); if d then S.notReady := 0 }
+    r := !‹.rd (.s .notReady) 0› }
 
 theorem prepP_agree {κ : Caps} {s : Core} {L : Loc} {D : Nat} (hA : s.ready = false → ISAgree κ s D)
     (hrd : ∀ b s1, initStep.run s = .ok b s1 → s1.ready = s.ready)

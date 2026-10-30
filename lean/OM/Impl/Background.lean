@@ -23,9 +23,9 @@ def csP : Proc where
   name := "chunkSize"
   params := ["c"]
   rets := []
-  body :=
-    "old" ::= .cF .size "c" ;; "new" ::= "old" + 1 ;; .wcF .size "c" "new" ;;
-    .ite (.cF .st "c" =ₑ 0) (pqAdjustP.call ["c", "old", "new"] []) .skip
+  body := cm{
+    old := C[c].size; new := old + 1; C[c].size := new
+    if C[c].st = 0 then call pqAdjustP(c, old, new) }
 
 theorem csP_agree {κ : Caps} {s : Core} {L : Loc} {c : Nat} (hc : L "c" = c) (hcs : c < s.C.size)
     (hcT : c < κ.tbl .C) (hq : PQCaps κ s) (hcC : c < Ccap κ) (hnB : (s.C.getX c).size + 1 < Bcap κ)
@@ -85,15 +85,15 @@ def dcP : Proc := { name := "driveChunk", params := ["x"], rets := [], body := d
 def resP : Proc := { name := "reservation", params := [], rets := [], body := reservationS }
 
 /-- `startGroupSplit g` when group `g` is quiet and full. -/
-def bgSplitC : Exp := (.gF .st "g" =ₑ 0) &&ₑ (.prm .G ≤ₑ .gF .size "g")
+def bgSplitC : Exp := cme{ G[g].st = 0 && P.G ≤ G[g].size }
 
 /-- `background y` (local `y`). -/
-def backgroundS : Stm :=
-  "g" ::= .eF .grp "y" ;; "c" ::= .gF .chk "g" ;; csP.call [.var "c"] [] ;;
-  "g" ::= .eF .grp "y" ;; .ite bgSplitC (sgsP.call [.var "g"] []) .skip ;;
-  "g" ::= .eF .grp "y" ;; dgP.call [.var "g"] [] ;;
-  "g" ::= .eF .grp "y" ;; "x" ::= .gF .chk "g" ;; dcP.call [.var "x"] [] ;;
-  resP.call [] []
+def backgroundS : Stm := cm{
+  g := E[y].grp; c := G[g].chk; call csP(c)
+  g := E[y].grp; if ‹bgSplitC› then call sgsP(g)
+  g := E[y].grp; call dgP(g)
+  g := E[y].grp; x := G[g].chk; call dcP(x)
+  call resP() }
 
 /-- The group of `y` and its chunk in state `t`. -/
 abbrev gOf (t : Core) (y : Nat) : Nat := (t.E.getX y).grp
@@ -224,7 +224,7 @@ def insertAfterP : Proc where
   name := "insertAfter"
   params := ["x", "h"]
   rets := ["y"]
-  body := .catch (insertElemP.call [.var "x", .var "h"] ["y"]) .bug ;; .catch (bgP.call [.var "y"] []) .bug
+  body := cm{ try y ← insertElemP(x, h) catch bug; try call bgP(y) catch bug }
 
 theorem insertAfterP_agree {κ : Caps} {s s1 s2 : Core} {L : Loc} {x hh y D : Nat} (hx : L "x" = x) (hl : L "h" = hh)
     (hxE : x < s.E.size) (hgG : (s.E.getX x).grp < s.Gs.size)

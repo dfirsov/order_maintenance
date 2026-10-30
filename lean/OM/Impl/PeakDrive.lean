@@ -21,8 +21,9 @@ open OM.Machine (Reg BinOp UnOp State)
 variable {K KH W : Nat} {κ : Caps}
 
 /-- The drive loop: up to `k` steps of `q` on local `g`, stopping when one returns 0. -/
-def driveLoop (q : Proc) (g : Reg) (k : PF) : Stm :=
-  "dn" ::= 0 ;; .loop "jj" (.prm k) (.ite ("dn" =ₑ 0) (q.call [.var g] ["ok"] ;; .ite ("ok" =ₑ 0) ("dn" ::= 1) .skip) .skip)
+def driveLoop (q : Proc) (g : Reg) (k : PF) : Stm := cm{
+  dn := 0
+  for jj < ‹.prm k› do if dn = 0 then { ok ← q(‹g›); if ok = 0 then dn := 1 } }
 
 theorem driveGroupFromS_eq : driveGroupFromS = driveLoop groupSplitStepP "g" .KG := rfl
 theorem driveChunkFromS_eq : driveChunkFromS = driveLoop chunkSplitStepP "x" .KC := rfl

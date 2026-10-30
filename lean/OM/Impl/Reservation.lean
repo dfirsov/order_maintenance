@@ -42,13 +42,14 @@ theorem reservation_eq (k : Nat) (s : Core) :
 def jobP : Proc := { name := "jobStep", params := [], rets := [], body := jobStepS }
 def splitP : Proc := { name := "splitChunkStart", params := ["x"], rets := [], body := splitChunkStartS }
 
-def resBody : Stm :=
-  .ite ("dn" =ₑ 0)
-    (.ite (.opt .jobOn) (jobP.call [] [])
-      (pqEmptyP.call [] ["em"] ;; .ite "em" ("dn" ::= 1) (pqPopMaxP.call [] ["x"] ;; splitP.call [.var "x"] [])))
-    .skip
+def resBody : Stm := cm{
+  if dn = 0 then {
+    if O.jobOn then call jobP()
+    else {
+      em ← pqEmptyP()
+      if em then dn := 1 else { x ← pqPopMaxP(); call splitP(x) } } } }
 /-- `reservation K_R`. -/
-def reservationS : Stm := "dn" ::= 0 ;; .loop "ri" (.prm .KR) resBody
+def reservationS : Stm := cm{ dn := 0; for ri < P.KR do resBody }
 
 /-- A Level M round that agrees with a Level F one (`stop`: Level F's round ended the loop). -/
 def ResAgree (κ : Caps) (t t' : Core) (stop : Bool) (D : Nat) : Prop :=

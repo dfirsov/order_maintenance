@@ -59,10 +59,10 @@ theorem put_side_encS (s : Core) (v : Nat) (l : List (Nat × Side)) :
   cases k <;> simp [LK.put]
 
 /-- One round of `sidesOf`: entry `j` of `v`'s table takes the current side (`right` from `b` on). -/
-def sideBody : Stm :=
-  "e" ::= .lrd .table false "v" "j" ;;
-  .ite ("e" =ₑ "b") ("sd" ::= 1) .skip ;;
-  (assocSetP .side).call [.var "v", .var "e", .var "sd"] []
+def sideBody : Stm := cm{
+  e := table[v][j].fst
+  if e = b then sd := 1
+  call ‹assocSetP .side›(v, e, sd) }
 
 /-- `sidesOf` over the first `j` entries. -/
 abbrev preSides (o : List Nat) (b j : Nat) : List (Nat × Side) × Side := (o.take j).foldl (sideStep b) ([], .left)
@@ -213,15 +213,14 @@ theorem fixSides_step (ns : Array Node) (p : Nat → Bool) (o : List Nat) (side0
   · simp [h, fixSides]
 
 /-- One round of `fixSides`: an entry that is a ghost takes the side of its first target. -/
-def fixC : Exp := (("r" <ₑ "m") ||ₑ (!ₑ (.rd (.n .first) "e" =ₑ 0))) &&ₑ .rd (.n .draining) "e"
-def fixBody : Stm :=
-  "e" ::= .lrd .table false "v" "j" ;;
-  (findP .children).call [.var "v", .var "e"] ["r"] ;;
-  "m" ::= .llen .children "v" ;;
-  .ite fixC
-    ((lookupP .side).call [.var "v", .rd (.n .t1) "e"] ["f", "x"] ;;
-     .ite "f" ((assocSetP .side).call [.var "v", .var "e", .var "x"] []) .fail)
-    .skip
+def fixC : Exp := cme{ (r < m || N[e].first ≠ 0) && N[e].draining }
+def fixBody : Stm := cm{
+  e := table[v][j].fst
+  r ← ‹findP .children›(v, e)
+  m := len children[v]
+  if ‹fixC› then {
+    (f, x) ← ‹lookupP .side›(v, N[e].t1)
+    if f then call ‹assocSetP .side›(v, e, x) else fail } }
 
 /-- The entries of `drainEntries` above height 1. -/
 def entP (ns : Array Node) (V : Node) (e : Nat) : Bool := V.children.contains e || (ns.getX e).first != NIL
@@ -395,10 +394,10 @@ theorem fixLoop_ok {κ : Caps} {s : Core} {L : Loc} {v : Nat} {side0 side : List
 /-! ### The side list -/
 
 /-- **`startDrain`'s side list**, built in `v`'s side list (boundary `b`). -/
-def drainSideS : Stm :=
-  .lclear .side "v" ;; "sd" ::= 0 ;; "n" ::= .llen .table "v" ;;
-  .loop "j" "n" sideBody ;;
-  .ite (1 <ₑ .rd (.n .height) "v") (.loop "j" "n" fixBody) .skip
+def drainSideS : Stm := cm{
+  clear side[v]; sd := 0; n := len table[v]
+  for j < n do sideBody
+  if 1 < N[v].height then for j < n do fixBody }
 
 theorem drainSideS_ok {κ : Caps} {s : Core} {L : Loc} {v b : Nat} {side : List (Nat × Side)}
     (hv : L "v" = v) (hb : L "b" = b) (hvs : v < s.nodes.size) (hvN : v < κ.tbl .N)

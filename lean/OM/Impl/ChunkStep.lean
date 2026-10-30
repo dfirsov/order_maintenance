@@ -24,13 +24,12 @@ theorem pqEnterIfAbove_noop {σ : Core} {c : Nat} (h : (σ.C.getX c).size ≤ σ
   unfold pqEnterIfAbove
   simp [OM.Proof.run_getC_bind, OM.Proof.run_getP_bind, Nat.not_lt.mpr h]
 
-def cquietE (y : Reg) : Exp := (.cF .st y =ₑ 1) &&ₑ (.cF .src y =ₑ "x")
+def cquietE (y : Reg) : Exp := cme{ C[‹y›].st = 1 && C[‹y›].src = x }
 def cquietS (y : Reg) : Stm :=
-  .ite (cquietE y) (.wcF .st y 0 ;; .wcF .src y 0 ;; pqEnterIfAboveP.call [.var y] []) .skip
+  cm{ if ‹cquietE y› then { C[‹y›].st := 0; C[‹y›].src := 0; call pqEnterIfAboveP(‹y›) } }
 
 /-- `removeChunk x`: `x` is dead, its overflow siblings quiet (and offered to the queue). -/
-def removeChunkS : Stm :=
-  .wcF .st "x" 3 ;; "xl" ::= .cF .l "x" ;; "xr" ::= .cF .r "x" ;; cquietS "xl" ;; cquietS "xr"
+def removeChunkS : Stm := cm{ C[x].st := 3; xl := C[x].l; xr := C[x].r; ‹cquietS "xl"›; ‹cquietS "xr"› }
 
 theorem cquietS_ok {κ : Caps} {S0 : Core} {L : Loc} {y : Reg} {j x : Nat} (hy : L y = j) (hx : L "x" = x)
     (hst : (S0.C.getX j).st = .overflow) (hsrc : (S0.C.getX j).src = x) (hsz : (S0.C.getX j).size ≤ S0.P.theta)
@@ -101,17 +100,16 @@ theorem removeChunkS_agree (κ : Caps) (s : Core) (L : Loc) {x : Nat} (hx : L "x
 /-- The unit held in locals: `[u0]`, or `[u0, u1, u2]` when `uk = 3`. -/
 def unitOf (L : Loc) : List Nat := if L "uk" = 1 then [L "u0"] else [L "u0", L "u1", L "u2"]
 
-def unitLE : Exp := "lf" &&ₑ (.gF .l "sr" =ₑ "g0")
-def unitRE : Exp := (!ₑ "lf") &&ₑ (.gF .r "sr" =ₑ "g0")
+def unitLE : Exp := cme{ lf && G[sr].l = g0 }
+def unitRE : Exp := cme{ !lf && G[sr].r = g0 }
 /-- `unitCand x (lf = 1)` into `uk, u0, u1, u2` (locals `x lf`). -/
-def unitS : Stm :=
-  .ite "lf" ("g0" ::= .cF .first "x") ("g0" ::= .cF .last "x") ;;
-  "uk" ::= 1 ;; "u0" ::= "g0" ;;
-  .ite (.gF .st "g0" =ₑ 1)
-    ("sr" ::= .gF .src "g0" ;;
-     .ite unitLE ("uk" ::= 3 ;; "u0" ::= "g0" ;; "u1" ::= "sr" ;; "u2" ::= .gF .r "sr")
-       (.ite unitRE ("uk" ::= 3 ;; "u0" ::= .gF .l "sr" ;; "u1" ::= "sr" ;; "u2" ::= "g0") .skip))
-    .skip
+def unitS : Stm := cm{
+  if lf then g0 := C[x].first else g0 := C[x].last
+  uk := 1; u0 := g0
+  if G[g0].st = 1 then {
+    sr := G[g0].src
+    if ‹unitLE› then { uk := 3; u0 := g0; u1 := sr; u2 := G[sr].r }
+    else if ‹unitRE› then { uk := 3; u0 := G[sr].l; u1 := sr; u2 := g0 } } }
 
 theorem unitCand_eq (s : Core) (x : Nat) (left : Bool) :
     unitCand s x left =
@@ -285,7 +283,7 @@ theorem pushFrontLabs_zero {c D : Nat} {nxt : Option Nat} {s s' : Core} {labs : 
 /-- The labels held in locals: `[l0]`, or `[l0, l1, l2]` when `uk = 3`. -/
 def labsOf (L : Loc) : List Nat := if L "uk" = 1 then [L "l0"] else [L "l0", L "l1", L "l2"]
 
-def centreG : Exp := .bin .shl 1 (Exp.monus (.prm .Bg) 1)
+def centreG : Exp := cme{ 1 <<< (P.Bg ∸ 1) }
 
 theorem centreG_ev {κ : Caps} {S0 : Core} {L : Loc} : centreG.ev κ S0 L = some (1 <<< (S0.P.B_g - 1)) := by
   have hm := Exp.ev_monus κ S0 L (a := .prm .Bg) (b := (1 : Exp)) (x := S0.P.B_g) (y := 1) (by simp [Exp.ev, PF.get]) rfl
@@ -293,17 +291,17 @@ theorem centreG_ev {κ : Caps} {S0 : Core} {L : Loc} : centreG.ev κ S0 L = some
   rw [hm]; simp [OM.Machine.BinOp.eval, Nat.shiftLeft_eq]
 
 /-- `pushBackLabs` after the last group of chunk `y` (locals `y uk`). -/
-def labLS : Stm :=
-  "D" ::= .prm .Dg ;; "B" ::= .prm .Bg ;;
-  .ite (.cF .first "y" =ₑ 0) ("l0" ::= centreG) ("a" ::= .gF .lab (.cF .last "y") ;; afterS ;; "l0" ::= "lab") ;;
-  .ite ("uk" =ₑ 3) ("a" ::= "l0" ;; afterS ;; "l1" ::= "lab" ;; "a" ::= "l1" ;; afterS ;; "l2" ::= "lab") .skip
+def labLS : Stm := cm{
+  D := P.Dg; B := P.Bg
+  if C[y].first = 0 then l0 := ‹centreG› else { a := G[C[y].last].lab; afterS; l0 := lab }
+  if uk = 3 then { a := l0; afterS; l1 := lab; a := l1; afterS; l2 := lab } }
 
 /-- `pushFrontLabs` before the first group of chunk `y` (locals `y uk`). -/
-def labRS : Stm :=
-  "D" ::= .prm .Dg ;;
-  .ite (.cF .first "y" =ₑ 0) ("m" ::= centreG) ("b" ::= .gF .lab (.cF .first "y") ;; beforeS ;; "m" ::= "lab") ;;
-  .ite ("uk" =ₑ 3) ("l2" ::= "m" ;; "b" ::= "m" ;; beforeS ;; "l1" ::= "lab" ;; "b" ::= "l1" ;; beforeS ;; "l0" ::= "lab")
-    ("l0" ::= "m")
+def labRS : Stm := cm{
+  D := P.Dg
+  if C[y].first = 0 then m := ‹centreG› else { b := G[C[y].first].lab; beforeS; m := lab }
+  if uk = 3 then { l2 := m; b := m; beforeS; l1 := lab; b := l1; beforeS; l0 := lab }
+  else l0 := m }
 
 theorem labLS_ok {κ : Caps} {s : Core} {L : Loc} {y k : Nat} {labs : List Nat} (hy : L "y" = y)
     (hk : (L "uk" = 1 ∧ k = 1) ∨ (L "uk" = 3 ∧ k = 3)) (hyT : y < κ.tbl .C) (hlT : (s.C.getX y).last < κ.tbl .G)
@@ -474,8 +472,8 @@ theorem labRS_ok {κ : Caps} {s : Core} {L : Loc} {y k : Nat} {labs : List Nat} 
 /-! ### Moving a unit's groups -/
 
 /-- The moved groups join chunk `y` with their labels. -/
-def mgPair (xg xl : Reg) : Stm := .wgF .chk xg "y" ;; .wgF .lab xg xl
-def mgGS : Stm := mgPair "u0" "l0" ;; .ite ("uk" =ₑ 3) (mgPair "u1" "l1" ;; mgPair "u2" "l2") .skip
+def mgPair (xg xl : Reg) : Stm := cm{ G[‹xg›].chk := y; G[‹xg›].lab := ‹xl› }
+def mgGS : Stm := cm{ ‹mgPair "u0" "l0"›; if uk = 3 then { ‹mgPair "u1" "l1"›; ‹mgPair "u2" "l2"› } }
 
 /-- The groups `u` join chunk `y` with labels `labs` (Level F's `Gs` update in `moveGroupsLeft/Right`). -/
 def moveGs (y : Nat) (u labs : List Nat) (A : Array Group) : Array Group :=
@@ -518,9 +516,9 @@ theorem mgGS_ok {κ : Caps} {S0 : Core} {L : Loc} {y : Nat} (hy : L "y" = y) (hk
     rw [hfin]
     exact ⟨_, evalF_seq_ok2 e1 (evalF_ite_t hc one_ne_zero (evalF_seq_ok2 e2 e3)), by simp [Exp.cost]⟩
 
-def ulS : Stm := .ite ("uk" =ₑ 1) ("ul" ::= "u0") ("ul" ::= "u2")
-def mgLx : Stm := .ite (.cF .last "x" =ₑ "ul") (.wcF .first "x" 0 ;; .wcF .last "x" 0) (.wcF .first "x" (.gF .next "ul"))
-def mgLy : Stm := .ite (.cF .first "y" =ₑ 0) (.wcF .first "y" "u0") .skip ;; .wcF .last "y" "ul"
+def ulS : Stm := cm{ if uk = 1 then ul := u0 else ul := u2 }
+def mgLx : Stm := cm{ if C[x].last = ul then { C[x].first := 0; C[x].last := 0 } else C[x].first := G[ul].next }
+def mgLy : Stm := cm{ if C[y].first = 0 then C[y].first := u0; C[y].last := ul }
 /-- `moveGroupsLeft x y unit labels` (locals `x y uk u0 u1 u2 l0 l1 l2`). -/
 def mgLS : Stm := ulS ;; mgLx ;; mgLy ;; mgGS
 
@@ -619,8 +617,8 @@ theorem mgLS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (h
   rw [hfin] at e4
   refine ⟨L1, _, evalF_seq_ok2 e1 (evalF_seq_ok2 e2 (evalF_seq_ok2 e3 e4)), by omega, h1⟩
 
-def mgRx : Stm := .ite (.cF .first "x" =ₑ "u0") (.wcF .first "x" 0 ;; .wcF .last "x" 0) (.wcF .last "x" (.gF .prev "u0"))
-def mgRy : Stm := .ite (.cF .first "y" =ₑ 0) (.wcF .last "y" "ul") .skip ;; .wcF .first "y" "u0"
+def mgRx : Stm := cm{ if C[x].first = u0 then { C[x].first := 0; C[x].last := 0 } else C[x].last := G[u0].prev }
+def mgRy : Stm := cm{ if C[y].first = 0 then C[y].last := ul; C[y].first := u0 }
 /-- `moveGroupsRight x y unit labels` (locals `x y uk u0 u1 u2 l0 l1 l2`). -/
 def mgRS : Stm := ulS ;; mgRx ;; mgRy ;; mgGS
 
@@ -718,8 +716,8 @@ theorem mgRS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (h
 /-! ### Sizes after a move -/
 
 /-- `moveSizes x y unit` (locals `x y uk u0 u1 u2`). -/
-def msMv : Stm := "mv" ::= .gF .size "u0" ;; .ite ("uk" =ₑ 3) ("mv" ::= "mv" + .gF .size "u1" + .gF .size "u2") .skip
-def msS : Stm := msMv ;; .wcF .size "x" (Exp.monus (.cF .size "x") "mv") ;; .wcF .size "y" (.cF .size "y" + "mv")
+def msMv : Stm := cm{ mv := G[u0].size; if uk = 3 then mv := mv + G[u1].size + G[u2].size }
+def msS : Stm := cm{ msMv; C[x].size := C[x].size ∸ mv; C[y].size := C[y].size + mv }
 
 theorem msS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (hy : L "y" = y)
     (hk : L "uk" = 1 ∨ L "uk" = 3) (hxs : x < s.C.size) (hys : y < s.C.size) (hC : s.C.size ≤ κ.tbl .C)
@@ -774,13 +772,14 @@ theorem msS_ok {κ : Caps} {s : Core} {L : Loc} {x y : Nat} (hx : L "x" = x) (hy
 
 /-! ### `chunkSplitStep` -/
 
-def cssDirE : Exp := .cF .size (.cF .l "x") ≤ₑ .cF .size (.cF .r "x")
-def cssL : Stm := "y" ::= .cF .l "x" ;; labLS ;; mgLS
-def cssR : Stm := "y" ::= .cF .r "x" ;; labRS ;; mgRS
-def cssMove : Stm := "lf" ::= cssDirE ;; unitS ;; .ite "lf" cssL cssR ;; msS
+def cssDirE : Exp := cme{ C[C[x].l].size ≤ C[C[x].r].size }
+def cssL : Stm := cm{ y := C[x].l; labLS; mgLS }
+def cssR : Stm := cm{ y := C[x].r; labRS; mgRS }
+def cssMove : Stm := cm{ lf := ‹cssDirE›; unitS; if lf then cssL else cssR; msS }
 /-- `ok := chunkSplitStep x` (local `x`): one unit moves to the lighter sibling, or the empty `x` is removed. -/
-def chunkSplitStepS : Stm :=
-  "xf" ::= .cF .first "x" ;; .ite ("xf" =ₑ 0) (removeChunkS ;; "ok" ::= 0) (cssMove ;; "ok" ::= 1)
+def chunkSplitStepS : Stm := cm{
+  xf := C[x].first
+  if xf = 0 then { removeChunkS; ok := 0 } else { cssMove; ok := 1 } }
 
 theorem moveGroupsLeft_C_size (s : Core) (x y : Nat) (u labs : List Nat) :
     (moveGroupsLeft s x y u labs).C.size = s.C.size := by simp [moveGroupsLeft]
@@ -979,10 +978,9 @@ theorem chunkSplitStepS_remove (κ : Caps) (s : Core) (L : Loc) {x : Nat} (hx : 
 /-! ### The drive loop -/
 
 def chunkSplitStepP : Proc := { name := "chunkSplitStep", params := ["x"], rets := ["ok"], body := chunkSplitStepS }
-def cdriveBody : Stm :=
-  .ite ("dn" =ₑ 0) (chunkSplitStepP.call [.var "x"] ["ok"] ;; .ite ("ok" =ₑ 0) ("dn" ::= 1) .skip) .skip
+def cdriveBody : Stm := cm{ if dn = 0 then { ok ← chunkSplitStepP(x); if ok = 0 then dn := 1 } }
 /-- `driveChunkFrom g`: up to `K_C` split steps, stopping once `g` is removed. -/
-def driveChunkFromS : Stm := "dn" ::= 0 ;; .loop "jj" (.prm .KC) cdriveBody
+def driveChunkFromS : Stm := cm{ dn := 0; for jj < P.KC do cdriveBody }
 
 /-- A Level M split step that agrees with a Level F one (`b` = Level F's result). -/
 def CStepAgree (κ : Caps) (p : Nat) (t t' : Core) (b : Bool) : Prop :=
@@ -1095,10 +1093,10 @@ theorem driveChunkFromS_agree (κ : Caps) (s : Core) (L : Loc) {p : Nat} (hg : L
 
 def cdriveP : Proc := { name := "driveChunkFrom", params := ["x"], rets := [], body := driveChunkFromS }
 /-- `driveChunk g`: drive the split `g` belongs to, if any (local `g`). -/
-def driveChunkS : Stm :=
-  "st" ::= .cF .st "x" ;;
-  .ite ("st" =ₑ 2) (cdriveP.call [.var "x"] [])
-    (.ite ("st" =ₑ 1) (cdriveP.call [.cF .src "x"] []) .skip)
+def driveChunkS : Stm := cm{
+  st := C[x].st
+  if st = 2 then call cdriveP(x)
+  else if st = 1 then call cdriveP(C[x].src) }
 
 /-- The drive of the split rooted at `q` agrees at Level M, ending in `t'`. -/
 def CDriveAgree (κ : Caps) (q : Nat) (s t' : Core) : Prop :=

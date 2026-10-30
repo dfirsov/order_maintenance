@@ -1,4 +1,5 @@
 import OM.Impl.Elem
+import OM.Impl.CM
 import OM.Impl.StartDrain
 import OM.Proof.Correct.GroupSplit
 
@@ -37,24 +38,24 @@ theorem evalF_wrS_ok {κ : Caps} {s : Core} {L : Loc} {k : SF} {e : Exp} {w : Na
 
 /-! ### `linkGroupPair` -/
 
-def lgpA0 : Stm :=
-  .wgF .lab "gl" "labL" ;; .wgF .st "gl" 1 ;; .wgF .src "gl" "g" ;; .wgF .prev "gl" "gp" ;; .wgF .next "gl" "g"
-def lgpA2 : Stm :=
-  .wgF .lab "gr" "labR" ;; .wgF .st "gr" 1 ;; .wgF .src "gr" "g" ;; .wgF .prev "gr" "g" ;; .wgF .next "gr" "gn"
-def lgpG : Stm :=
-  .wgF .prev "g" "gl" ;; .wgF .next "g" "gr" ;; .wgF .st "g" 2 ;; .wgF .l "g" "gl" ;; .wgF .r "g" "gr"
+def lgpA0 : Stm := cm{
+  G[gl].lab := labL; G[gl].st := 1; G[gl].src := g; G[gl].prev := gp; G[gl].next := g }
+def lgpA2 : Stm := cm{
+  G[gr].lab := labR; G[gr].st := 1; G[gr].src := g; G[gr].prev := g; G[gr].next := gn }
+def lgpG : Stm := cm{
+  G[g].prev := gl; G[g].next := gr; G[g].st := 2; G[g].l := gl; G[g].r := gr }
 
 /-- `linkGroupPair`: link `gl`, `gr` around `g` (locals `g gl gr labL labR`). -/
-def linkGroupPairS : Stm :=
-  "gp" ::= .gF .prev "g" ;; "gn" ::= .gF .next "g" ;; "c" ::= .gF .chk "g" ;;
-  lgpA0 ;;
-  .ite (!ₑ ("gp" =ₑ 0)) (.wgF .next "gp" "gl") .skip ;;
-  lgpA2 ;;
-  .ite (!ₑ ("gn" =ₑ 0)) (.wgF .prev "gn" "gr") .skip ;;
-  .ite (.cF .first "c" =ₑ "g") (.wcF .first "c" "gl") .skip ;;
-  lgpG ;;
-  .ite (.cF .last "c" =ₑ "g") (.wcF .last "c" "gr") .skip ;;
-  .ite ("gp" =ₑ 0) (.wsc .firstGroup "gl") .skip
+def linkGroupPairS : Stm := cm{
+  gp := G[g].prev; gn := G[g].next; c := G[g].chk
+  lgpA0
+  if gp ≠ 0 then G[gp].next := gl
+  lgpA2
+  if gn ≠ 0 then G[gn].prev := gr
+  if C[c].first = g then C[c].first := gl
+  lgpG
+  if C[c].last = g then C[c].last := gr
+  if gp = 0 then S.firstGroup := gl }
 
 /-- Five writes to one group. -/
 theorem five_wrG {κ : Caps} {s : Core} {L : Loc} {x : Reg} {j : Nat} {k1 k2 k3 k4 k5 : GF} {e1 e2 e3 e4 e5 : Exp}
@@ -200,19 +201,20 @@ theorem linkGroupPairS_agree (κ : Caps) (σ : Core) (L : Loc) {g gl gr labL lab
 
 /-! ### `unlinkGroup` -/
 
-def ulCE : Exp := ("cf" =ₑ "g") &&ₑ ("cl" =ₑ "g")
-def ulG : Stm := .wgF .dead "g" 1 ;; .wgF .next "g" 0 ;; .wgF .prev "g" 0
+def ulCE : Exp := cme{ cf = g && cl = g }
+def ulG : Stm := cm{ G[g].dead := 1; G[g].next := 0; G[g].prev := 0 }
 /-- `unlinkGroup`: unlink `g` from the group list and its chunk, and free it (local `g`). -/
-def unlinkGroupS : Stm :=
-  "gp" ::= .gF .prev "g" ;; "gn" ::= .gF .next "g" ;; "c" ::= .gF .chk "g" ;;
-  .ite (!ₑ ("gp" =ₑ 0)) (.wgF .next "gp" "gn") .skip ;;
-  .ite (!ₑ ("gn" =ₑ 0)) (.wgF .prev "gn" "gp") .skip ;;
-  ulG ;;
-  "cf" ::= .cF .first "c" ;; "cl" ::= .cF .last "c" ;;
-  .ite ulCE (.wcF .first "c" 0 ;; .wcF .last "c" 0)
-    (.ite ("cf" =ₑ "g") (.wcF .first "c" "gn") (.ite ("cl" =ₑ "g") (.wcF .last "c" "gp") .skip)) ;;
-  .ite ("gp" =ₑ 0) (.wsc .firstGroup "gn") .skip ;;
-  .lgrow .freeG 0 "g" 0
+def unlinkGroupS : Stm := cm{
+  gp := G[g].prev; gn := G[g].next; c := G[g].chk
+  if gp ≠ 0 then G[gp].next := gn
+  if gn ≠ 0 then G[gn].prev := gp
+  ulG
+  cf := C[c].first; cl := C[c].last
+  if ‹ulCE› then { C[c].first := 0; C[c].last := 0 }
+  else if cf = g then C[c].first := gn
+  else if cl = g then C[c].last := gp
+  if gp = 0 then S.firstGroup := gn
+  append freeG[0] (g, 0) }
 
 theorem unlinkGroupS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g)
     (hgG : g < σ.Gs.size) (hpG : (σ.Gs.getX g).prev < σ.Gs.size) (hnG : (σ.Gs.getX g).next < σ.Gs.size)
@@ -353,18 +355,18 @@ theorem evalF_wrE_ok {κ : Caps} {s : Core} {L : Loc} {k : EF} {i e : Exp} {j w 
   simp [evalF, hi, he, Fld.set, hj, hk]
 
 def mvGS (first : Bool) : Stm :=
-  if first then .ite ("f" =ₑ "l") (.wgF .first "g" 0 ;; .wgF .last "g" 0) (.wgF .first "g" "en")
-  else .ite ("f" =ₑ "l") (.wgF .first "g" 0 ;; .wgF .last "g" 0) (.wgF .last "g" "en")
+  if first then cm{ if f = l then { G[g].first := 0; G[g].last := 0 } else G[g].first := en }
+  else cm{ if f = l then { G[g].first := 0; G[g].last := 0 } else G[g].last := en }
 def mvDS (first : Bool) : Stm :=
-  if first then .ite (.gF .first "d" =ₑ 0) (.wgF .first "d" "e") .skip ;; .wgF .last "d" "e"
-  else .ite (.gF .first "d" =ₑ 0) (.wgF .last "d" "e") .skip ;; .wgF .first "d" "e"
-def mvES : Stm := .weF .grp "e" "d" ;; .weF .lab "e" "lab"
+  if first then cm{ if G[d].first = 0 then G[d].first := e; G[d].last := e }
+  else cm{ if G[d].first = 0 then G[d].last := e; G[d].first := e }
+def mvES : Stm := cm{ E[e].grp := d; E[e].lab := lab }
 
 /-- Move element `e` from group `g` to group `d` with label `lab`: the first of `g` to the end of `d`
 (`first`), or the last of `g` to the front of `d` (locals `g d e lab`). -/
-def moveS (first : Bool) : Stm :=
-  "f" ::= .gF .first "g" ;; "l" ::= .gF .last "g" ;; "en" ::= .eF (if first then .next else .prev) "e" ;;
-  mvGS first ;; mvDS first ;; mvES
+def moveS (first : Bool) : Stm := cm{
+  f := G[g].first; l := G[g].last; en := E[e].‹if first then .next else .prev›
+  ‹mvGS first›; ‹mvDS first›; mvES }
 
 theorem moveS_agree (κ : Caps) (σ : Core) (L : Loc) (first : Bool) {g d e lab : Nat} (hg : L "g" = g)
     (hd : L "d" = d) (he : L "e" = e) (hl : L "lab" = lab) (hgG : g < σ.Gs.size) (hdG : d < σ.Gs.size)
@@ -490,12 +492,13 @@ theorem guard_run_ne {α : Type} {msg : String} {s s' : Core} {v : α} : (OM.Mod
   simp [OM.Model.guard]
 
 /-- `lab := between a b` (locals `a b`). -/
-def betweenS : Stm := .ite ("b" ≤ₑ "a" + 1) .fail ("lab" ::= ("a" + "b") / 2)
+def betweenS : Stm := cm{ if b ≤ a + 1 then fail else lab := (a + b) / 2 }
 /-- `lab := after a D B` (locals `a D B`). -/
-def afterS : Stm :=
-  "v" ::= "a" + "D" ;; .ite ((.bin .shl 1 "B" ≤ₑ "v") ||ₑ ("v" ≤ₑ "a")) .fail ("lab" ::= "v")
+def afterS : Stm := cm{
+  v := a + D
+  if 1 <<< B ≤ v || v ≤ a then fail else lab := v }
 /-- `lab := before b D` (locals `b D`). -/
-def beforeS : Stm := .ite (("b" <ₑ "D") ||ₑ ("D" =ₑ 0)) .fail ("lab" ::= "b" - "D")
+def beforeS : Stm := cm{ if b < D || D = 0 then fail else lab := b - D }
 
 theorem between_inv {a b : Nat} {why : String} {s s' : Core} {v : Nat} (h : (between a b why).run s = .ok v s') :
     s' = s ∧ a + 1 < b ∧ v = (a + b) / 2 := by
@@ -542,18 +545,16 @@ theorem beforeS_ok {κ : Caps} {s : Core} {L : Loc} {b D : Nat} (hb : L "b" = b)
 /-! ### `labBefore`, `labAfter` -/
 
 /-- `lab := labBefore g` (local `g`). -/
-def labBeforeS : Stm :=
-  "c" ::= .gF .chk "g" ;;
-  .ite (.cF .first "c" =ₑ "g")
-    ("b" ::= .gF .lab "g" ;; "D" ::= .prm .Dg ;; beforeS)
-    ("a" ::= .gF .lab (.gF .prev "g") ;; "b" ::= .gF .lab "g" ;; betweenS)
+def labBeforeS : Stm := cm{
+  c := G[g].chk
+  if C[c].first = g then { b := G[g].lab; D := P.Dg; beforeS }
+  else { a := G[G[g].prev].lab; b := G[g].lab; betweenS } }
 
 /-- `lab := labAfter g` (local `g`). -/
-def labAfterS : Stm :=
-  "c" ::= .gF .chk "g" ;;
-  .ite (.cF .last "c" =ₑ "g")
-    ("a" ::= .gF .lab "g" ;; "D" ::= .prm .Dg ;; "B" ::= .prm .Bg ;; afterS)
-    ("a" ::= .gF .lab "g" ;; "b" ::= .gF .lab (.gF .next "g") ;; betweenS)
+def labAfterS : Stm := cm{
+  c := G[g].chk
+  if C[c].last = g then { a := G[g].lab; D := P.Dg; B := P.Bg; afterS }
+  else { a := G[g].lab; b := G[G[g].next].lab; betweenS } }
 
 theorem labBeforeS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g) (hgT : g < κ.tbl .G)
     (hcT : (σ.Gs.getX g).chk < κ.tbl .C) (hpT : (σ.Gs.getX g).prev < κ.tbl .G) {v : Nat} {σ' : Core}
@@ -647,21 +648,19 @@ theorem labAfterS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" 
 
 /-! ### `newGroup` -/
 
-def rgA : Stm :=
-  .wr (.g .next) (.var "gn") 0 ;; .wr (.g .prev) (.var "gn") 0 ;; .wr (.g .first) (.var "gn") 0 ;;
-  .wr (.g .last) (.var "gn") 0 ;; .wr (.g .chk) (.var "gn") "c"
-def rgB : Stm :=
-  .wr (.g .lab) (.var "gn") 0 ;; .wr (.g .size) (.var "gn") 0 ;; .wr (.g .st) (.var "gn") 0 ;;
-  .wr (.g .src) (.var "gn") 0 ;; .wr (.g .l) (.var "gn") 0
-def rgC : Stm := .wr (.g .r) (.var "gn") 0 ;; .wr (.g .dead) (.var "gn") 0
+def rgA : Stm := cm{
+  G[gn].next := 0; G[gn].prev := 0; G[gn].first := 0; G[gn].last := 0; G[gn].chk := c }
+def rgB : Stm := cm{
+  G[gn].lab := 0; G[gn].size := 0; G[gn].st := 0; G[gn].src := 0; G[gn].l := 0 }
+def rgC : Stm := cm{ G[gn].r := 0; G[gn].dead := 0 }
 /-- Reset group `gn` to `{ chk := c }` (every field written). -/
 def resetGS : Stm := rgA ;; rgB ;; rgC
 
 /-- `gn := newGroup c`: reuse the last freed group, or push a new one (local `c`). -/
-def newGroupS : Stm :=
-  "nf" ::= .llen .freeG 0 ;;
-  .ite ("nf" =ₑ 0) (.push .G "gn" ;; .wgF .chk "gn" "c")
-    ("gn" ::= .lrd .freeG false 0 ("nf" - 1) ;; .lshrink .freeG 0 ;; resetGS)
+def newGroupS : Stm := cm{
+  nf := len freeG[0]
+  if nf = 0 then { gn := new G; G[gn].chk := c }
+  else { gn := freeG[0][nf - 1].fst; pop freeG[0]; resetGS } }
 
 def rgF1 (c : Nat) (X : Group) : Group :=
   GF.set (GF.set (GF.set (GF.set (GF.set X 0 .next) 0 .prev) 0 .first) 0 .last) c .chk
@@ -779,10 +778,11 @@ def labAfterP : Proc := { name := "labAfter", params := ["g"], rets := ["lab"], 
 def newGroupP : Proc := { name := "newGroup", params := ["c"], rets := ["gn"], body := newGroupS }
 
 /-- `startGroupSplit g` (local `g`; the guard is Level F's, and holds on every run that succeeds). -/
-def startGroupSplitS : Stm :=
-  labBeforeP.call [.var "g"] ["labL"] ;; labAfterP.call [.var "g"] ["labR"] ;;
-  "c" ::= .gF .chk "g" ;; newGroupP.call [.var "c"] ["gl"] ;; newGroupP.call [.var "c"] ["gr"] ;;
-  linkGroupPairS
+def startGroupSplitS : Stm := cm{
+  labL ← labBeforeP(g); labR ← labAfterP(g)
+  c := G[g].chk
+  gl ← newGroupP(c); gr ← newGroupP(c)
+  linkGroupPairS }
 
 theorem startGroupSplitS_agree (κ : Caps) (σ : Core) (L : Loc) {g : Nat} (hg : L "g" = g)
     (hG2 : σ.Gs.size + 2 ≤ κ.tbl .G) (hC : σ.C.size ≤ κ.tbl .C)
